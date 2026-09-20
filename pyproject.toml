@@ -4,8 +4,8 @@ version = "0.2.0"
 description = "IDIOS - personal cognitive and learning operating system (local-first)"
 requires-python = ">=3.10"
 dependencies = [
-    "pydantic>=2.6",
-    "rich>=13.7",
+    "pydantic>=2.13.5",
+    "rich>=15.0.0",
     "tomli>=2.0; python_version < '3.11'",
 ]
 
