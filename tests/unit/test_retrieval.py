@@ -117,7 +117,7 @@ def test_no_ai_imports():
     banned = {"idios.decision", "idios.models", "anthropic", "openai", "transformers"}
     src = Path("src/idios/retrieval")
     for py in src.glob("*.py"):
-        tree = ast.parse(py.read_text())
+        tree = ast.parse(py.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 names = ([a.name for a in node.names] if isinstance(node, ast.Import)
