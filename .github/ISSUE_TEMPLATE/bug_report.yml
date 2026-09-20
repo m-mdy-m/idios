@@ -1,0 +1,101 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: run `idios status` and paste the output below.
+        Check that your Python is ≥ 3.10 and your virtualenv is activated.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Clear description of what went wrong.
+      placeholder: "idios decide --goal 'X' crashed with ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal sequence of commands that reliably triggers the bug.
+      placeholder: |
+        1. `./scripts/bootstrap.sh`
+        2. `source .venv/bin/activate`
+        3. `idios decide --goal "..." --task-state NEW`
+        4. Error appears
+    validations:
+      required: true
+
+  - type: textarea
+    id: status_output
+    attributes:
+      label: "`idios status` output"
+      description: Paste the full output of `idios status`.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_output
+    attributes:
+      label: Error output / traceback
+      description: Full traceback or error message.
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: python_version
+    attributes:
+      label: Python version
+      options:
+        - "3.10"
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - Other (describe in notes)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config (sanitise secrets)
+      description: |
+        Paste any non-default values from `configs/local.toml`
+        or environment variables you set. Remove API keys.
+      render: toml
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Anything else that might help reproduce or fix this.
+    validations:
+      required: false
