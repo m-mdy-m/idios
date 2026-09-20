@@ -29,14 +29,14 @@ jobs:
 
     steps:
       - name: Download release assets
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.whl"
           out-file-path: dist/
 
       - name: Download sdist
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.tar.gz"
@@ -61,14 +61,14 @@ jobs:
 
     steps:
       - name: Download wheel from release
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.whl"
           out-file-path: dist/
 
       - name: Download sdist from release
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.tar.gz"
@@ -90,14 +90,14 @@ jobs:
 
     steps:
       - name: Download wheel from release
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.whl"
           out-file-path: dist/
 
       - name: Download sdist from release
-        uses: robinraju/release-downloader@v1.11
+        uses: robinraju/release-downloader@v1.13
         with:
           releaseId: ${{ github.event.release.id }}
           fileName: "*.tar.gz"
