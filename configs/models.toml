@@ -1,0 +1,39 @@
+[models.router]
+role = "router"
+backend = "rule_based"
+notes = "Deterministic routing; no LLM call."
+
+[models.fast_general]
+role = "fast_general"
+backend = "local_llm"
+model_id = "TBD-4b-instruct-quantized"
+max_context_tokens = 8192
+
+[models.reasoning]
+role = "reasoning"
+backend = "local_llm"
+model_id = "TBD-7b-or-8b-quantized"
+max_context_tokens = 8192
+enabled = false
+
+[models.coder]
+role = "coder"
+backend = "local_llm"
+model_id = "TBD-coder-quantized"
+max_context_tokens = 8192
+enabled = false
+
+[models.embedding]
+role = "embedding"
+backend = "local_embedding"
+model_id = "TBD-small-multilingual-embedding"
+
+[models.reranker]
+role = "reranker"
+backend = "local_reranker"
+model_id = "TBD"
+enabled = false
+
+[models.verifier]
+role = "verifier"
+backend = "rules"

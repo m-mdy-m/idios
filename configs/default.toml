@@ -1,0 +1,26 @@
+[app]
+name = "idios"
+environment = "default"
+
+[hardware]
+gpu_vram_gb = 4
+cpu_threads = 12
+allow_gpu = true
+
+[decision_engine]
+backend = "local"
+
+[jev]
+endpoint = ""
+api_key_env = "IDIOS_JEV_API_KEY"
+timeout_seconds = 10
+
+[storage]
+backend = "json_file"
+path = "data/state/state.json"
+
+[budgets]
+max_model_calls_per_task = 6
+max_retrieval_calls_per_task = 4
+max_tool_calls_per_task = 8
+token_budget_per_task = 8000

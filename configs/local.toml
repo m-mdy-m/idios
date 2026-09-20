@@ -1,0 +1,11 @@
+# Machine-specific overrides — this is a template; copy the keys you
+# actually want to change locally. local.toml wins over default.toml
+# on any key present in both. Do not put secrets here — use a real
+# .env (gitignored) and the IDIOS_JEV_API_KEY-style env vars instead.
+
+[decision_engine]
+backend = "local"
+
+[hardware]
+gpu_vram_gb = 4
+cpu_threads = 12
