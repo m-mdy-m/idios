@@ -1,0 +1,29 @@
+[project]
+name = "idios"
+version = "0.2.0"
+description = "IDIOS - personal cognitive and learning operating system (local-first)"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6",
+    "rich>=13.7",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+idios = "idios.cli.main:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths  = ["tests"]
