@@ -53,8 +53,6 @@ sample decision: action=retrieve confidence=0.9
 
 ## Installation
 
-See [docs/INSTALLATION.md](docs/INSTALLATION.md) for full details.
-
 **Quick path (development):**
 
 ```bash
