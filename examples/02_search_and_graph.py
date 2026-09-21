@@ -26,9 +26,9 @@ storage = JsonFileStorageProvider(storage_file)
 graph = KnowledgeGraph(storage)
 
 # Add concept nodes
-graph.add_node("linear-algebra",  node_type=NodeType.DOMAIN,
+graph.add_node("linear-algebra",  node_type=NodeType.TOPIC,
                description="Vectors, matrices, eigenvalues")
-graph.add_node("calculus",        node_type=NodeType.DOMAIN,
+graph.add_node("calculus",        node_type=NodeType.TOPIC,
                description="Derivatives, integrals, limits")
 graph.add_node("backpropagation", node_type=NodeType.CONCEPT,
                description="Gradient computation via chain rule")
@@ -58,12 +58,18 @@ print("\n=== Learning path: linear-algebra → transformer ===")
 path = graph.learning_path("linear-algebra", "transformer")
 if path:
     for step in path:
-        print(f"  {step.from_node} --[{step.edge_type.value}]--> {step.to_node}")
+        if step.edge_type is None:
+            print(f"  {step.node}")
+        else:
+            print(f"  --[{step.edge_type.value}]--> {step.node}")
 else:
     print("  no direct path found")
 
 print("\n=== Missing prerequisites (I know: calculus) ===")
-missing = graph.missing_prerequisites("transformer", known={"calculus"})
+missing = graph.missing_prerequisites(
+    "transformer",
+    {"calculus"},
+)
 for m in missing:
     print(f"  {m.name}")
 
