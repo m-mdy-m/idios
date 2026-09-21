@@ -100,7 +100,7 @@ jobs:
         run: echo "artifact-name=dist-${{ needs.validate.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.artifact-name }}
           path: dist/
