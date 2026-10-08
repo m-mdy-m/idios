@@ -3,5 +3,14 @@ __pycache__/
 .venv/
 .pytest_cache/
 *.egg-info/
-data/
+*.db
 .env
+
+# build output
+build/
+dist/
+
+# local data and archives (never commit a user's learning data)
+data/
+*.rar
+*.zip
