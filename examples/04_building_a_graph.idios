@@ -1,0 +1,15 @@
+# 04 · Connect ideas: typed relations and the graph
+goal: Learn Assembly
+concept: CPU
+# `as` picks the relation type. Unknown names become concepts.
+link CPU to ALU as contains
+link CPU to Register as contains
+link Register to Memory as contrasts_with
+link Assembly to CPU as uses
+link Register to Machine Word
+# Same link twice is harmless.
+link CPU to ALU as contains
+:graph CPU
+:graph
+:show Register
+:concepts

@@ -1,0 +1,19 @@
+# 05 · When IDIOS is unsure it asks instead of guessing
+source: Programming from the Ground Up
+Why is memory slower than registers?
+# No "because", no prefix: IDIOS cannot tell a note from an answer, so it asks.
+# Choose 2 = answer to the current question.
+registers are important
+2
+# Starts like a question but has no "?", so it asks again. Choose 2 = note.
+how pointers work in assembly
+2
+# Ask two questions, then answer the OLDER one by its id.
+Why do we need a stack?
+What does the call instruction do?
+answer q2: To store return addresses and local variables.
+:questions
+# Deleting always asks first. Answer n to keep it.
+:delete q1
+n
+:questions all

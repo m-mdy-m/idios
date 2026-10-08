@@ -1,0 +1,17 @@
+# 01 · First session: from nothing to a searchable concept
+# Start with what you want to learn and what you are reading.
+goal: Learn Assembly
+book: Programming from the Ground Up
+chapter 2
+# A question ends with ?. IDIOS saves it and remembers where you were.
+What is a register?
+# This reads like an answer, so it goes to the open question.
+A small storage location inside the CPU.
+note: Registers are extremely fast.
+highlight: Registers can be accessed much faster than memory.
+# Right after a question, naming a concept links the two.
+concept: CPU Register
+link CPU Register to Memory
+:questions all
+:search register
+:status

@@ -1,0 +1,17 @@
+# 02 · A paper, with a URL, an author, tags and quotes
+paper: Attention Is All You Need
+url: https://arxiv.org/abs/1706.03762
+author: Ashish Vaswani
+tag: transformers, attention
+category: Machine Learning
+# Papers have no chapters. Use sections and pages.
+section 3.2
+page 4
+highlight: An attention function maps a query and key-value pairs to an output.
+quote: "Attention is all you need."
+note: Self-attention relates every position to every other position.
+concept: Self-Attention
+# A topic files the current concept under it.
+topic: Deep Learning
+:show Attention Is All You Need
+:shelf

@@ -1,0 +1,14 @@
+# 03 · Watching a video: use time instead of chapter
+goal: Understand how Git works
+video: Git Internals (lecture)
+time 12:30
+note: A commit is a snapshot, not a diff.
+time 31:05
+How does git store a snapshot?
+Because it stores blobs and trees keyed by their hash.
+highlight: Objects are stored under the SHA-1 of their contents.
+quote: "Everything is a content-addressed object."
+:highlights
+:quotes
+:notes
+:questions all
