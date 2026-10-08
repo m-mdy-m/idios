@@ -147,7 +147,7 @@ psx fix --dry-run    # preview anything missing
 make psx             # same as psx check --fail-on error
 ```
 
-CI runs it on every push, and `tests/test_experience.py` verifies that every file `psx.yml` expects exists.
+Run `make psx` before opening a PR; `tests/test_experience.py` also verifies that every file `psx.yml` expects exists.
 
 ## Development
 

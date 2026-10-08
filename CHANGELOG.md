@@ -47,9 +47,8 @@ instead of a decision engine with an LLM client and a JSON state file.
   (ADRs, SQLite via the standard library, the deterministic parser) with a
   template, plus `SKILL.md` and `AGENTS.md`.
 - Project health: LICENSE (MIT), SECURITY, CODE_OF_CONDUCT, SUPPORT, ROADMAP,
-  CODEOWNERS and a pull-request template; `psx.yml` defines the rules and
-  `psx check` runs in CI, where `tests/test_experience.py` also verifies that
-  every file those rules expect exists.
+  CODEOWNERS and a pull-request template; `psx.yml` defines the rules, and
+  `tests/test_experience.py` verifies that every file those rules expect exists.
 - Tooling: `Makefile` (`setup`, `run`, `test`, `lint`, `check`, `psx`,
   `examples`, `build`, `clean`), `scripts/setup.sh`, `scripts/test.sh`,
   `scripts/build.sh`, `scripts/clean.sh`, `.pre-commit-config.yaml`,
