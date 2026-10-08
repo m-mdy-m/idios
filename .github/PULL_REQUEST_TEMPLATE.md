@@ -19,14 +19,14 @@ Closes #
 ## Checklist
 
 ### Correctness
-- [ ] Logic is covered by at least one unit test in `tests/unit/`
+- [ ] Logic is covered by at least one test in `tests/`
 - [ ] New tests pass locally: `pytest -q`
 - [ ] Existing tests still pass
 
 ### Documentation
 - [ ] Public API changes are reflected in docstrings
 - [ ] `CHANGELOG.md` has an entry under `[Unreleased]`
-- [ ] `docs/decisions.md` updated if this closes an open decision
+- [ ] `docs/adr/` updated if this closes an open decision
 
 ## Testing notes
 

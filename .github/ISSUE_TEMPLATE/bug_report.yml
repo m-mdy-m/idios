@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing: run `idios status` and paste the output below.
+        Before filing: start `idios` and paste the output of `:status` below.
         Check that your Python is ≥ 3.10 and your virtualenv is activated.
 
   - type: textarea
@@ -13,7 +13,7 @@ body:
     attributes:
       label: What happened?
       description: Clear description of what went wrong.
-      placeholder: "idios decide --goal 'X' crashed with ..."
+      placeholder: "typing `highlight: ...` crashed with ..."
     validations:
       required: true
 
@@ -33,7 +33,7 @@ body:
       placeholder: |
         1. `./scripts/bootstrap.sh`
         2. `source .venv/bin/activate`
-        3. `idios decide --goal "..." --task-state NEW`
+        3. type `...` in the shell
         4. Error appears
     validations:
       required: true
@@ -41,8 +41,8 @@ body:
   - type: textarea
     id: status_output
     attributes:
-      label: "`idios status` output"
-      description: Paste the full output of `idios status`.
+      label: "`:status` output"
+      description: Paste the full output of `:status`.
       render: shell
     validations:
       required: true
@@ -86,7 +86,7 @@ body:
     attributes:
       label: Relevant config (sanitise secrets)
       description: |
-        Paste any non-default values from `configs/local.toml`
+        Mention if you set IDIOS_HOME or other environment variables
         or environment variables you set. Remove API keys.
       render: toml
     validations:
