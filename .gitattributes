@@ -1,0 +1,27 @@
+# Normalise line endings on checkin; keep binaries intact.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets must never be diffed or line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Lockfiles are generated; keep diffs minimal.
+package-lock.json -diff
+pnpm-lock.yaml -diff
+yarn.lock -diff
+go.sum -diff

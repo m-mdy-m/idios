@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap a local dev environment for IDIOS.
+# Create .venv and install idios with dev tools.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PYTHON_BIN="${PYTHON_BIN:-python3}"
