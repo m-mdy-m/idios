@@ -1,0 +1,72 @@
+# psx: checks the *shape* of this project. Run `psx check` (read-only) or `psx fix`.
+# Rules not listed here are off. See https://github.com/m-mdy-m/psx
+version: 1
+
+project:
+  type: python
+  kind: cli
+
+rules:
+  # General
+  readme: error
+  license: warning
+  gitignore: warning
+  gitattributes: info
+  changelog: info
+  env_example: warning
+  package_manager: error   # pyproject.toml
+  lockfile: false          # zero runtime dependencies, nothing to lock
+
+  # Structure
+  src_folder: warning
+  tests_folder: error
+  docs_folder: info
+  scripts_folder: info
+  makefile: info
+
+  # Documentation
+  contributing: info
+  security: info
+  code_of_conduct: info
+  support: info
+  adr: info
+  architecture: info
+  roadmap: info
+  pull_request_template: info
+  issue_templates: info
+  api_docs: false          # a CLI, no network API
+  openapi: false
+  runbook: false
+
+  # CI/CD
+  ci_config: info
+  release_workflow: info
+  dependency_updates: warning
+  workflow_ci: info
+  workflow_release: info
+  workflow_codeql: warning
+  workflow_secret_scan: warning
+  workflow_docker: false
+
+  # Quality
+  editorconfig: info
+  pre_commit: info
+  code_owners: info
+  node_version: false
+
+  # DevOps: not a service
+  dockerfile: false
+  dockerignore: false
+  docker_compose: false
+  kubernetes: false
+  nginx: false
+  funding: false
+
+ignore:
+  - .git/
+  - .venv/
+  - build/
+  - dist/
+  - "*.egg-info/"
+  - __pycache__/
+  - .pytest_cache/

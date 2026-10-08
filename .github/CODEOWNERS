@@ -1,0 +1,18 @@
+# Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners
+*                   @m-mdy-m
+
+# Documentation
+/docs/              @m-mdy-m
+*.md                @m-mdy-m
+
+# CI/CD
+/.github/           @m-mdy-m
+/.gitlab-ci.yml     @m-mdy-m
+
+# Configuration
+/*.yml              @m-mdy-m
+/*.yaml             @m-mdy-m
+/*.json             @m-mdy-m
