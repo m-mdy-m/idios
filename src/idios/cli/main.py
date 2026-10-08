@@ -1,218 +1,98 @@
-"""IDIOS CLI entrypoint.
+"""Command line entry point.
 
-Composition root: the ONLY file that imports concrete backends.
-All other modules depend on protocols/interfaces only.
-
-Commands
-────────
-  idios status          Config + engine health check
-  idios decide          Run one DecisionState (rule-based)
-  idios learn           Interactive Learning REPL  ← new
-  idios search <query>  Quick search from terminal  ← new
-  idios learn-demo      Demo run (zero-AI, existing)
+``idios`` opens the interactive learning environment, which is the main
+interface. The few subcommands below are conveniences for use from scripts
+and other shells; everything they do is also possible inside the shell.
 """
 from __future__ import annotations
 
 import argparse
-import os
+import sys
 from pathlib import Path
+from typing import Optional, Sequence
 
-from idios.config.loader import AppConfig, load_app_config, load_models_config
-from idios.decision.local import LocalDecisionEngine
-from idios.domain.errors import JEVNotConfiguredError
-from idios.domain.state import DecisionState, TaskState
-from idios.models.registry import ModelRegistry
-from idios.storage.base import JsonFileStorageProvider
-from idios.telemetry.logging import get_logger
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+from idios import __version__
+from idios.domain.errors import IdiosError
+from idios.services.app import App
+from idios.shell import render
+from idios.shell.io import ConsoleIO, ScriptIO
+from idios.shell.shell import Shell
 
 
-def _config_dir() -> Path:
-    override = os.environ.get("IDIOS_CONFIG_DIR")
-    return Path(override) if override else _repo_root() / "configs"
-
-
-def _build_core(app_config: AppConfig):
-    """Construct storage, graph, engine, retrieval — shared by all new commands."""
-    from idios.graph.engine import KnowledgeGraph
-    from idios.learning.engine import LearningEngine
-    from idios.retrieval.engine import RetrievalEngine
-
-    storage  = JsonFileStorageProvider(_repo_root() / app_config.storage.path)
-    graph    = KnowledgeGraph(storage)
-    engine   = LearningEngine(storage)
-    retrieval = RetrievalEngine(storage, graph=graph)
-    return storage, graph, engine, retrieval
-
-
-def build_decision_engine(config: AppConfig):
-    if config.decision_engine.backend == "jev":
-        from idios.decision.jev import JevConnectionSettings, JEVDecisionEngine
-        return JEVDecisionEngine(
-            JevConnectionSettings(
-                endpoint=config.jev.endpoint,
-                api_key_env=config.jev.api_key_env,
-                timeout_seconds=config.jev.timeout_seconds,
-            )
-        )
-    return LocalDecisionEngine()
-
-
-# ── status ─────────────────────────────────────────────────────────────────────
-
-def cmd_status(args: argparse.Namespace) -> int:
-    logger     = get_logger()
-    config_dir = _config_dir()
-    app_config = load_app_config(config_dir)
-    models_cfg = load_models_config(config_dir)
-    registry   = ModelRegistry.from_config(models_cfg)
-    storage    = JsonFileStorageProvider(_repo_root() / app_config.storage.path)
-    dec_engine = build_decision_engine(app_config)
-
-    print(f"idios status — environment: {app_config.app.environment}")
-    print(f"decision engine backend: {app_config.decision_engine.backend} ({type(dec_engine).__name__})")
-    print(f"model roles configured: {[r.value for r in registry.roles()]}")
-    print(f"storage: {app_config.storage.backend} → {app_config.storage.path}")
-
-    # learning stats
-    from idios.graph.engine import KnowledgeGraph
-    from idios.retrieval.engine import RetrievalEngine
-    graph    = KnowledgeGraph(storage)
-    retrieval = RetrievalEngine(storage, graph=graph)
-    idx      = retrieval.index_stats()
-    print(f"goals: {idx['goals']}  questions: {idx['questions']}  "
-          f"evidence: {idx['evidence']}  concepts: {idx['concepts']}")
-    print(f"graph: {idx['graph_nodes']} nodes  {idx['graph_edges']} edges")
-
-    storage.set("last_status_check", {"ok": True})
-
-    try:
-        result = dec_engine.decide(
-            DecisionState(goal="smoke test", current_task_state=TaskState.NEW)
-        )
-        print(f"sample decision: action={result.action.value} confidence={result.confidence}")
-    except JEVNotConfiguredError as exc:
-        print(f"decision engine not usable yet: {exc}")
-        logger.info("jev_not_configured")
-        return 1
-    return 0
-
-
-# ── decide ─────────────────────────────────────────────────────────────────────
-
-def cmd_decide(args: argparse.Namespace) -> int:
-    app_config = load_app_config(_config_dir())
-    engine     = build_decision_engine(app_config)
-
-    state = DecisionState(
-        goal=args.goal,
-        current_project=args.project,
-        current_task_state=TaskState(args.task_state),
-        weak_concepts=args.weak_concept or [],
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="idios",
+        description="IDIOS: a local-first personal learning environment. "
+                    "Run with no arguments to start learning.",
     )
+    parser.add_argument("--version", action="version", version=f"idios {__version__}")
+    parser.add_argument("--home", type=Path, help="data folder to use instead of ~/.idios")
+    sub = parser.add_subparsers(dest="command")
 
-    print(f"goal: {state.goal}")
-    if state.current_project:
-        print(f"project: {state.current_project}")
-    if state.weak_concepts:
-        print(f"weak concepts: {', '.join(state.weak_concepts)}")
-    print(f"task state: {state.current_task_state.value}\n")
+    search = sub.add_parser("search", help="search everything you have recorded")
+    search.add_argument("query", nargs="+")
 
+    show = sub.add_parser("show", help="show a source, concept, question or goal")
+    show.add_argument("what", nargs="+", help="a name or an id such as q3")
+
+    sub.add_parser("shelf", help="list your registered sources")
+
+    run = sub.add_parser("run", help="play a script of inputs, like the files in examples/")
+    run.add_argument("file", type=Path)
+
+    export = sub.add_parser("export", help="write your knowledge to a file")
+    export.add_argument("--format", "-f", default="markdown", choices=["markdown", "md", "json"])
+    export.add_argument("--output", "-o", type=Path, help="where to write (default: ~/.idios/exports)")
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
     try:
-        result = engine.decide(state)
-    except JEVNotConfiguredError as exc:
-        print(f"decision engine not usable yet: {exc}")
+        app = App(args.home)
+    except OSError as err:
+        print(f"Could not open the IDIOS data folder.\n\n{err}", file=sys.stderr)
         return 1
-
-    print(f"-> action: {result.action.value}  (confidence: {result.confidence})")
-    if result.reason_codes:
-        print(f"   reason: {', '.join(result.reason_codes)}")
-    if result.fallback_action:
-        print(f"   fallback: {result.fallback_action.value}")
-    return 0
-
-
-# ── learn (interactive REPL) ───────────────────────────────────────────────────
-
-def cmd_learn(args: argparse.Namespace) -> int:
-    from idios.cli.interactive import LearningREPL
-
-    app_config              = load_app_config(_config_dir())
-    storage, graph, engine, retrieval = _build_core(app_config)
-
-    repl = LearningREPL(engine, graph, retrieval, storage)
-    repl.run()
-    return 0
+    try:
+        return _dispatch(app, args)
+    except IdiosError as err:
+        print(err.render(), file=sys.stderr)
+        return 1
+    except BrokenPipeError:  # e.g. `idios search x | head`
+        return 0
+    finally:
+        app.close()
 
 
-# ── search (one-shot from terminal) ───────────────────────────────────────────
-
-def cmd_search(args: argparse.Namespace) -> int:
-    app_config              = load_app_config(_config_dir())
-    storage, graph, _, retrieval = _build_core(app_config)
-
-    query   = " ".join(args.query)
-    results = retrieval.search(query, top_k=args.top_k)
-
-    if not results:
-        print(f"No results for: {query}")
+def _dispatch(app: App, args: argparse.Namespace) -> int:
+    if args.command is None:
+        io = ConsoleIO(app.home / "history")
+        try:
+            Shell(app, io, interactive=sys.stdin.isatty()).run()
+        finally:
+            io.close()
         return 0
 
-    from idios.retrieval.models import KIND_ICONS
-    print(f"\nSearch: {query!r}  ({len(results)} hits)\n")
-    for r in results:
-        icon = KIND_ICONS.get(r.kind, "·")
-        print(f"  {icon}  [{r.kind.value:<10}]  {r.snippet[:75]}  ({r.score:.2f})")
+    if args.command == "run":
+        try:
+            lines = args.file.read_text(encoding="utf-8").splitlines()
+        except OSError as err:
+            raise IdiosError(f"Could not read {args.file}.", hint=str(err)) from err
+        Shell(app, ScriptIO(lines), interactive=False).run()
+        return 0
 
+    io = ConsoleIO()
+    shell = Shell(app, io, interactive=False)
+    if args.command == "search":
+        shell.handle(":search " + " ".join(args.query))
+    elif args.command == "show":
+        shell.handle(":show " + " ".join(args.what))
+    elif args.command == "shelf":
+        shell.handle(":shelf")
+    elif args.command == "export":
+        path = app.exporter.export(args.format, args.output)
+        print(f"{render.OK} Exported to {path}")
     return 0
-
-
-# ── learn-demo ─────────────────────────────────────────────────────────────────
-
-def cmd_learn_demo(args: argparse.Namespace) -> int:
-    from idios.learning.demo import run_demo
-    storage_path = _repo_root() / "data" / "state" / "learning-demo.json"
-    run_demo(storage_path)
-    return 0
-
-
-# ── parser ─────────────────────────────────────────────────────────────────────
-
-def main(argv: list[str] | None = None) -> int:
-    parser     = argparse.ArgumentParser(prog="idios")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    # status
-    sp = subparsers.add_parser("status", help="Show config + engine health.")
-    sp.set_defaults(func=cmd_status)
-
-    # decide
-    dp = subparsers.add_parser("decide", help="Run one DecisionState.")
-    dp.add_argument("--goal",         required=True)
-    dp.add_argument("--project",      default=None)
-    dp.add_argument("--task-state",   default="NEW", choices=[s.value for s in TaskState])
-    dp.add_argument("--weak-concept", action="append", default=None)
-    dp.set_defaults(func=cmd_decide)
-
-    # learn  (interactive REPL)
-    lp = subparsers.add_parser("learn", help="Interactive learning REPL.")
-    lp.set_defaults(func=cmd_learn)
-
-    # search
-    srp = subparsers.add_parser("search", help="Search the knowledge base.")
-    srp.add_argument("query", nargs="+", help="Search terms.")
-    srp.add_argument("--top-k", type=int, default=10)
-    srp.set_defaults(func=cmd_search)
-
-    # learn-demo
-    ldp = subparsers.add_parser("learn-demo", help="Demo run (zero AI).")
-    ldp.set_defaults(func=cmd_learn_demo)
-
-    args = parser.parse_args(argv)
-    return args.func(args)
 
 
 if __name__ == "__main__":
