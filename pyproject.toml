@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "idios"
 version = "0.2.0"
 description = "IDIOS: a local-first personal learning environment"

@@ -50,11 +50,20 @@ jobs:
       - name: Run tests
         # Tests must pass with no model, no network, no API key.
         run: pytest -q --tb=short
-        env:
-          IDIOS_CONFIG_DIR: configs
 
       - name: Verify architecture rules
-        # Checks that the Learning Core has no AI/model imports.
-        run: pytest tests/unit/test_learning_engine.py::test_learning_core_has_no_ai_imports -v
-        env:
-          IDIOS_CONFIG_DIR: configs
+        # No AI/network imports, no SQL outside storage, no third-party runtime deps.
+        run: pytest tests/test_architecture.py -v
+  psx:
+    name: Project shape (psx)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psx
+        run: curl -sSL https://raw.githubusercontent.com/m-mdy-m/psx/main/scripts/install.sh | bash
+
+      - name: Check README, tests, docs, CI, license, ...
+        # Read-only. Rules and severities live in psx.yml.
+        run: psx check --fail-on error

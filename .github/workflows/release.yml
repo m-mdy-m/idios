@@ -66,8 +66,6 @@ jobs:
 
       - name: Run tests
         run: pytest -q --tb=short
-        env:
-          IDIOS_CONFIG_DIR: configs
 
   # ── Job 3: build sdist + wheel ────────────────────────────────────────────
   build:
