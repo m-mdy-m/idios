@@ -1,54 +1,28 @@
-"""Typed errors for IDIOS (section 25 of the master design).
+"""Errors that are meant to be shown to the user.
 
-Every failure mode here must surface explicitly. Nothing in this
-codebase should catch one of these and quietly return a fabricated
-answer instead.
+Every IdiosError carries a human-readable message and an optional hint.
+The shell prints them as-is; internals never leak into normal use.
 """
+from __future__ import annotations
 
 
 class IdiosError(Exception):
-    """Base class for all IDIOS-specific errors."""
+    """A problem the user can understand and fix."""
+
+    def __init__(self, message: str, hint: str = "") -> None:
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+
+    def render(self) -> str:
+        if self.hint:
+            return f"{self.message}\n\nTry:\n  {self.hint}"
+        return self.message
 
 
-class ModelUnavailableError(IdiosError):
+class NotFound(IdiosError):
     pass
 
 
-class GPUUnavailableError(IdiosError):
+class Invalid(IdiosError):
     pass
-
-
-class RetrievalEmptyError(IdiosError):
-    pass
-
-
-class ToolFailureError(IdiosError):
-    def __init__(self, tool_name: str, detail: str):
-        super().__init__(f"tool '{tool_name}' failed: {detail}")
-        self.tool_name = tool_name
-        self.detail = detail
-
-
-class MalformedOutputError(IdiosError):
-    pass
-
-
-class LowConfidenceError(IdiosError):
-    def __init__(self, confidence: float, threshold: float):
-        super().__init__(f"confidence {confidence:.2f} below threshold {threshold:.2f}")
-        self.confidence = confidence
-        self.threshold = threshold
-
-
-class VerificationFailureError(IdiosError):
-    pass
-
-
-class StaleProjectStateError(IdiosError):
-    pass
-
-
-class JEVNotConfiguredError(IdiosError):
-    """Raised when the JEV backend is selected but no endpoint/credentials
-    exist yet. IDIOS must never silently pretend a remote JEV call
-    succeeded."""
