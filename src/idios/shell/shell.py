@@ -95,17 +95,23 @@ class Shell:
         self.say(style.dim("Saved. See you next time."))
 
     def _first_run_intro(self) -> None:
-        """Show the banner once, to a brand-new user at a real terminal."""
+        """Interactive starts show the logo; a brand-new user gets the full welcome once.
+
+        Set IDIOS_NO_LOGO=1 to skip the logo on later starts.
+        """
         flags = self.app.store.context
-        if flags.flag("intro_seen"):
-            return
-        flags.set_flag("intro_seen")
-        if not self.interactive or not self.app.context.ctx.is_empty():
-            return  # scripts and people who already have data never see it
-        self.io.clear()
-        self.say(intro.banner())
-        self.io.read(style.dim("  Press Enter to begin… "))
-        self.io.clear()
+        first = not flags.flag("intro_seen")
+        if first:
+            flags.set_flag("intro_seen")
+        if not self.interactive:
+            return  # scripts and pipes never see it
+        if first and self.app.context.ctx.is_empty():
+            self.io.clear()
+            self.say(intro.banner())
+            self.io.read(style.dim("  Press Enter to begin… "))
+            self.io.clear()
+        elif not os.environ.get("IDIOS_NO_LOGO"):
+            self.say(intro.logo())
 
     def handle(self, line: str) -> bool:
         """Process one line. Returns False when the user asked to quit."""

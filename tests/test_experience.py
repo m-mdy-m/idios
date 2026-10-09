@@ -207,12 +207,21 @@ def test_intro_is_shown_once_to_a_new_interactive_user(home):
     assert "A personal cognitive and learning operating system." in first
     second = run_shell(home, [":quit"], interactive=True)
     assert "A personal cognitive" not in second and "Press Enter" not in second
+    assert "|____/" in second and "learn · connect · recall" in second   # logo on every start
+
+
+def test_logo_is_shown_to_existing_users_and_can_be_turned_off(home, tmp_path, monkeypatch):
+    run_shell(tmp_path / "old", ["goal: X"])
+    assert "|____/" in run_shell(tmp_path / "old", ["y", ":quit"], interactive=True)
+    monkeypatch.setenv("IDIOS_NO_LOGO", "1")
+    assert "|____/" not in run_shell(tmp_path / "old", ["y", ":quit"], interactive=True)
 
 
 def test_intro_is_skipped_for_scripts_and_existing_users(home, tmp_path):
     assert "A personal cognitive" not in run_shell(home, [":quit"])           # non-interactive
     run_shell(tmp_path / "old", ["goal: X"])                                  # has data, never saw intro
     assert "A personal cognitive" not in run_shell(tmp_path / "old", ["y", ":quit"], interactive=True)
+    assert "|____/" not in run_shell(home, [":quit"])
 
 
 def test_intro_can_be_replayed(home):

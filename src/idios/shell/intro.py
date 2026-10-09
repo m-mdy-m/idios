@@ -35,11 +35,18 @@ def art(word: str = "IDIOS") -> list[str]:
     return ["".join(_LETTERS[c][row] for c in word).rstrip() for row in range(5)]
 
 
+def logo() -> str:
+    """The ASCII logo and a one-line tagline: shown on every interactive start."""
+    rows = [style.paint(row, color, "bold") for row, color in zip(art(), _ROW_COLORS)]
+    tag = style.dim(f"learn · connect · recall   v{__version__}")
+    return "\n".join(["", *("  " + r for r in rows), "  " + tag, ""])
+
+
 def banner() -> str:
     rows = [style.paint(row, color, "bold") for row, color in zip(art(), _ROW_COLORS)]
     out = ["", *("  " + r for r in rows), ""]
     out.append("  " + style.bold("A personal cognitive and learning operating system."))
-    out.append("  " + style.dim(f"v{__version__}"))
+    out.append("  " + style.dim(f"v{__version__} · your notes live in ~/.idios on this machine"))
     out += [
         "",
         "  " + style.label("How it works"),

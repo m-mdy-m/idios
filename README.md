@@ -135,7 +135,7 @@ idios --home /tmp/try run …                 # use a throwaway data folder
 
 ## Examples
 
-[`examples/`](examples/README.md) has runnable sessions: a first session, a paper, a video course, building a graph, what happens when IDIOS is unsure, and the Python API.
+[`examples/`](examples/README.md) has runnable sessions: a first session, a paper, a video course, building a graph, what happens when IDIOS is unsure, the Python API, and the evening loop.
 
 ```bash
 ./examples/run.sh --all     # or: make examples
