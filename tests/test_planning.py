@@ -436,3 +436,17 @@ def test_tasks_are_searchable_exportable_and_deletable(home):
     app.learning.delete(task)
     assert app.store.tasks.count() == 1
     app.close()
+
+
+def test_wsl_notifications_use_windows_powershell():
+    from idios.services import notify
+    which = lambda name: "/x/" + name if name == "powershell.exe" else None  # noqa: E731
+    cmd = notify.command_for("t", "b", platform="linux", which=which, wsl=True)
+    assert cmd and cmd[0] == "powershell.exe"
+    assert notify.command_for("t", "b", platform="linux", which=lambda n: None, wsl=True) is None
+
+
+def test_session_env_points_cron_at_the_desktop_session():
+    from idios.services import notify
+    env = notify.session_env({"PATH": "/bin"})
+    assert env["DISPLAY"] == ":0" and env["PATH"] == "/bin"
