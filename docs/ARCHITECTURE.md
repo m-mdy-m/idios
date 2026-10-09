@@ -19,7 +19,7 @@ cli          argparse entry point; `idios` with no arguments opens the shell
 
 ## Rules (enforced by `tests/test_architecture.py`)
 
-- No AI, embedding or network imports; no runtime dependencies.
+- No third-party runtime dependencies (standard library only).
 - SQL only in `storage/` (and the export dump).
 - `domain/`, `services/`, `storage/` never print or read input.
 
@@ -29,4 +29,3 @@ Entities have stable ULID-style ids and a never-reused display number (`q3`, `c1
 Mentions (`refs`), tags and typed relations live in separate tables on purpose: a tag is not
 a relation and a category is not a relation.
 
-Decisions are recorded in [docs/adr](adr/README.md).

@@ -31,7 +31,7 @@ body:
       label: Steps to reproduce
       description: Minimal sequence of commands that reliably triggers the bug.
       placeholder: |
-        1. `./scripts/bootstrap.sh`
+        1. `./scripts/setup.sh`
         2. `source .venv/bin/activate`
         3. type `...` in the shell
         4. Error appears
@@ -87,7 +87,7 @@ body:
       label: Relevant config (sanitise secrets)
       description: |
         Mention if you set IDIOS_HOME or other environment variables
-        or environment variables you set. Remove API keys.
+        or environment variables you set.
       render: toml
     validations:
       required: false

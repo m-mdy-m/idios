@@ -1,6 +1,6 @@
 # IDIOS
 
-> A local-first personal learning environment. You read; IDIOS keeps what you learn.
+> A terminal notebook for learning. You read; IDIOS keeps your questions, answers, notes, highlights and ideas, and connects them.
 
 ```text
 $ idios
@@ -30,7 +30,7 @@ Continue? [Y/n]
 ✓ Relation created
 ```
 
-No AI, no API keys, no network, no dependencies. Standard-library Python and one SQLite file.
+Everything is stored in one SQLite file on your machine.
 
 ## Install
 
@@ -57,7 +57,7 @@ Just type. IDIOS recognises a few explicit forms and files everything under your
 | `author: …` `category: …` `tag: a, b` `topic: …` | metadata for the current source / concept |
 | `answer q3: …` | an answer to an older question |
 
-Anything it can't classify safely is **asked, never guessed**:
+When a line could mean more than one thing, IDIOS asks:
 
 ```text
 > registers are important
@@ -69,6 +69,8 @@ What should I save this as?
 ```
 
 Relation types: `related_to` `depends_on` `uses` `contains` `part_of` `explains` `contrasts_with` `prerequisite_of`.
+
+Full reference with examples: [docs/COMMANDS.md](docs/COMMANDS.md).
 
 ### Directives
 
@@ -133,13 +135,13 @@ cli → shell (parser · render · io) → services → domain
 - `domain/` typed dataclasses, ULID-style ids, user-facing errors
 - `storage/` schema (`PRAGMA user_version`) and repositories — the only SQL
 - `services/` context & sessions, learning, knowledge & graph, sources & shelf, BM25 search, views, export
-- `shell/` deterministic parser, interpreter loop, text rendering
+- `shell/` input parser, interpreter loop, text rendering
 
 Rules from `AGENTS.md` are enforced by `tests/test_architecture.py`.
 
 ## Project health with psx
 
-The shape of this repository (README, license, tests, CI, security policy, ADRs, …) is checked by [psx](https://github.com/m-mdy-m/psx). Rules live in [`psx.yml`](psx.yml).
+The shape of this repository (README, license, tests, CI, security policy, …) is checked by [psx](https://github.com/m-mdy-m/psx). Rules live in [`psx.yml`](psx.yml).
 
 ```bash
 psx check            # read-only report
@@ -147,13 +149,13 @@ psx fix --dry-run    # preview anything missing
 make psx             # same as psx check --fail-on error
 ```
 
-Run `make psx` before opening a PR; `tests/test_experience.py` also verifies that every file `psx.yml` expects exists.
+CI runs it on every push, and `tests/test_experience.py` verifies that every file `psx.yml` expects exists.
 
 ## Development
 
 ```bash
 make setup && source .venv/bin/activate
-make check           # lint + tests, offline
+make check           # lint + tests
 make help            # all targets
 ```
 

@@ -4,7 +4,7 @@
 
 ## Motivation
 
-<!-- Why is this the right approach? Link to a relevant issue or decision if one exists. -->
+<!-- Why is this the right approach? Link to a relevant issue if there is one. -->
 
 Closes #
 
@@ -12,21 +12,21 @@ Closes #
 
 - [ ] Bug fix (non-breaking)
 - [ ] New feature (non-breaking)
-- [ ] Breaking change (incompatible API or storage format change)
+- [ ] Breaking change (incompatible change to commands or the database)
 - [ ] Refactor / internal cleanup (no behaviour change)
 - [ ] Documentation only
 
 ## Checklist
 
 ### Correctness
-- [ ] Logic is covered by at least one test in `tests/`
+- [ ] Logic is covered by at least one unit test in `tests/`
 - [ ] New tests pass locally: `pytest -q`
 - [ ] Existing tests still pass
 
 ### Documentation
 - [ ] Public API changes are reflected in docstrings
 - [ ] `CHANGELOG.md` has an entry under `[Unreleased]`
-- [ ] `docs/adr/` updated if this closes an open decision
+- [ ] `docs/COMMANDS.md` updated if commands changed
 
 ## Testing notes
 

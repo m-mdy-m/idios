@@ -1,4 +1,4 @@
-# idios: a local-first personal learning environment
+# idios: a terminal notebook for learning
 #
 # Common entry points. Run `make help` to list targets.
 
@@ -18,7 +18,7 @@ setup: ## Create .venv and install idios with dev tools
 run: ## Start the interactive learning shell
 	$(PYTHON) -m idios
 
-test: ## Run the test suite (offline)
+test: ## Run the test suite
 	./scripts/test.sh
 
 lint: ## Syntax-check every module

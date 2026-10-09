@@ -1,4 +1,4 @@
-"""Deterministic input parser. No AI, no scoring: a handful of explicit rules.
+"""Input parser: a handful of explicit rules, no scoring.
 
 ``parse(line)`` turns one line of user input into an ``Intent``. It knows
 nothing about context or the database, so it is trivial to test. Anything

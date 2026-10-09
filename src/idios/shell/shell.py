@@ -1,8 +1,8 @@
 """The interactive learning environment.
 
-The shell is a thin interpreter: parse a line (deterministically), call an
-application service, print a short confirmation. Business rules live in the
-services; text layout lives in ``render``.
+The shell is a thin interpreter: parse a line, call an application service,
+print a short confirmation. Business rules live in the services; text layout
+lives in ``render``.
 """
 from __future__ import annotations
 

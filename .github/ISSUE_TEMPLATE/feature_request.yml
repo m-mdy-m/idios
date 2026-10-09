@@ -5,18 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Idios is deliberately minimal. Before proposing, ask:
-        does this require a network call or an LLM call in the default config?
-        If so, it must be strictly opt-in (gated behind a config key or flag).
+        IDIOS is small on purpose. Before proposing, ask: does this help someone learn?
 
   - type: textarea
     id: problem
     attributes:
       label: What problem are you solving?
-      description: |
-        Describe the gap. Not "add feature X" — describe the situation
-        where idios currently falls short and why it matters.
-      placeholder: "When I have 200 concepts in the graph, `idios search` returns too many unrelated results because ..."
+      description: Describe the situation where IDIOS falls short today, not just "add feature X".
+      placeholder: "When I have 200 concepts, `:search` returns too many unrelated results because ..."
     validations:
       required: true
 
@@ -24,9 +20,10 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: |
-        What would you build? Be specific: which module, which command,
-        what the output looks like, what config key enables it.
+      description: What would you type, and what would you see? Which command or input form?
+      placeholder: |
+        > :review old
+        ...
     validations:
       required: true
 
@@ -34,44 +31,24 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: What other approaches did you think about? Why did you reject them?
     validations:
       required: false
-
-  - type: checkboxes
-    id: constraints
-    attributes:
-      label: Constraint checklist
-      description: Confirm the proposal fits idios's design principles.
-      options:
-        - label: >
-            Works offline by default (no network, no API key required
-            for default behaviour)
-          required: true
-        - label: >
-            The Learning Core (`learning/`, `graph/`, `retrieval/`) is
-            not polluted with decision or model imports
-          required: true
-        - label: >
-            New public surface has unit tests that pass without any
-            model or network
-          required: false
 
   - type: dropdown
     id: area
     attributes:
-      label: Which part of the system does this touch?
+      label: Which part does this touch?
       multiple: true
       options:
-        - CLI (new command or flag)
-        - Decision engine
-        - Knowledge graph
-        - Retrieval / search
-        - Learning engine
+        - Shell input (new form or command)
+        - Questions and answers
+        - Notes, highlights, quotes
+        - Sources and shelf
+        - Concepts and graph
+        - Planning and reminders
+        - Search
+        - Export
         - Storage
-        - Model registry
-        - Configuration
-        - Telemetry / logging
         - Documentation
         - CI / tooling
     validations:
@@ -81,6 +58,5 @@ body:
     id: notes
     attributes:
       label: Additional context
-      description: Mockups, references, prior art, related issues.
     validations:
       required: false

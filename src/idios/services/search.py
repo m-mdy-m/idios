@@ -1,4 +1,4 @@
-"""Local, deterministic search: BM25 over everything the user has recorded.
+"""Local search: BM25 over everything the user has recorded.
 
 The index is rebuilt from the database for each query. A personal knowledge
 base is small, so this stays fast and can never go stale.

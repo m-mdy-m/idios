@@ -28,13 +28,13 @@ rules:
   contributing: info
   security: info
   code_of_conduct: info
-  support: info
-  adr: info
+  support: false           # no separate support file
+  adr: false               # no ADR folder
   architecture: info
-  roadmap: info
+  roadmap: false           # tracked in issues
   pull_request_template: info
   issue_templates: info
-  api_docs: false          # a CLI, no network API
+  api_docs: false          # a CLI, no HTTP API
   openapi: false
   runbook: false
 

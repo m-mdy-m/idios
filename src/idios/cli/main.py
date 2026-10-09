@@ -22,8 +22,8 @@ from idios.shell.shell import Shell
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="idios",
-        description="IDIOS: a local-first personal learning environment. "
-                    "Run with no arguments to start learning.",
+        description="IDIOS: a terminal notebook for learning. "
+                    "Run with no arguments to start.",
     )
     parser.add_argument("--version", action="version", version=f"idios {__version__}")
     parser.add_argument("--home", type=Path, help="data folder to use instead of ~/.idios")
