@@ -25,6 +25,7 @@ class StatusView:
     highlights: int
     quotes: int
     notes: int
+    open_tasks: int = 0
 
 
 @dataclass
@@ -81,7 +82,9 @@ class GoalView:
 
 class ViewService:
     def __init__(self, store: Store, context: ContextService,
-                 knowledge: KnowledgeService, sources: SourceService) -> None:
+                 knowledge: KnowledgeService, sources: SourceService,
+                 plan_open=None) -> None:
+        self.plan_open = plan_open  # callable returning today's open tasks
         self.store = store
         self.context = context
         self.knowledge = knowledge
@@ -100,6 +103,7 @@ class ViewService:
             highlights=s.highlights.count(),
             quotes=s.quotes.count(),
             notes=s.notes.count(),
+            open_tasks=len(self.plan_open()) if self.plan_open else 0,
         )
 
     # -- source ----------------------------------------------------------

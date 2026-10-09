@@ -25,6 +25,12 @@ class QuestionStatus(str, Enum):
     ANSWERED = "answered"
 
 
+class TaskStatus(str, Enum):
+    OPEN = "open"
+    DONE = "done"
+    SKIPPED = "skipped"
+
+
 # Relation types. Deliberately small; this is a lightweight graph.
 RELATION_TYPES = (
     "related_to",
@@ -52,6 +58,7 @@ ENTITY_TYPES: dict[str, tuple[str, str, str, str]] = {
     "topic": ("topics", "topic", "t", "Topic"),
     "category": ("categories", "category", "k", "Category"),
     "tag": ("tags", "tag", "tg", "Tag"),
+    "task": ("tasks", "task", "tk", "Task"),
 }
 
 
@@ -224,6 +231,26 @@ class Category(Entity):
 class Tag(Entity):
     entity_type = "tag"
     name: str
+
+
+@dataclass(kw_only=True)
+class Task(Entity):
+    """Something to do on a given day, or something done (``did:``).
+
+    ``due_date`` is a local calendar date, ``YYYY-MM-DD``.
+    """
+
+    entity_type = "task"
+    text: str
+    due_date: str
+    status: TaskStatus = TaskStatus.OPEN
+    done_at: Optional[str] = None
+    goal_id: Optional[str] = None
+    source_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.status = TaskStatus(self.status)
 
 
 @dataclass(kw_only=True)

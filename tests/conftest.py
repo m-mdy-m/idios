@@ -17,9 +17,12 @@ def app(home):
     a.close()
 
 
-def run_shell(home, lines, interactive=False):
-    """Run a whole IDIOS session against ``home`` and return the transcript."""
-    app = App(home)
+def run_shell(home, lines, interactive=False, clock=None):
+    """Run a whole IDIOS session against ``home`` and return the transcript.
+
+    ``clock`` fixes "now" (a callable returning a datetime) for planning tests.
+    """
+    app = App(home, clock=clock) if clock else App(home)
     io = ScriptedIO(lines)
     try:
         Shell(app, io, interactive=interactive).run()

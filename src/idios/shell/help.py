@@ -28,12 +28,17 @@ OVERVIEW = """\
   source: Programming from the Ground Up
   chapter 2        page 14
 
+# Plan your days
+  did: Finished the exercises  ~ what you did today
+  plan: Read chapter 3  ~ for tomorrow
+  :plan   :review   :schedule
+
 # Look things up
   :search register     :status     :show CPU Register
   :questions  :concepts  :sources  :shelf  :graph
 
 # More help, with examples
-  :help learn  sources  context  concepts  search  manage  examples
+  :help learn  sources  context  concepts  plan  search  manage  examples
   clear  ~ clear the screen
   :intro  ~ replay the welcome banner
 
@@ -149,6 +154,36 @@ CPU
 > topic: Systems Programming
 ~ files the current concept under a topic
 """,
+    "plan": """\
+# The evening loop
+~ Tell IDIOS what you did tonight, plan tomorrow, and let it check in with you.
+> did: Finished chapter 2 exercises
+✓ Done saved · tk1
+  Today · Thu 8 Oct
+> plan: Read chapter 3
+✓ Planned · tk2
+  Tomorrow · Fri 9 Oct
+> plan monday: Review stack frames
+✓ Planned · tk3
+  Mon 12 Oct
+~ Days: today, tomorrow (the default), monday…sunday, 2026-10-12, +3d
+
+# See and update it
+> :plan
+> done tk2  tk4         ~ mark done
+> skip tk3
+> did yesterday: Read the paper
+
+# Reminder at the end of the day
+> :schedule 21:00       ~ choose the review time
+> :schedule install     ~ asks first, then adds a job to cron / Task Scheduler
+> :schedule test        ~ sends a test notification
+~ At that time the job runs `idios remind` and you get a desktop notification.
+~ Next time you open IDIOS it offers the review:
+> :review
+  done? [y]es · [n]ot yet → tomorrow · [s]kip:
+~ The result is saved as a note, and unfinished items move to tomorrow.
+""",
     "search": """\
 # Search everything you have recorded
 > :search register
@@ -210,8 +245,9 @@ Delete Question q3? This also removes 1 answer. [y/N]
 TOPICS["example"] = TOPICS["examples"]
 TOPICS["sessions"] = TOPICS["context"]
 TOPICS["graph"] = TOPICS["concepts"]
+TOPICS["schedule"] = TOPICS["review"] = TOPICS["tasks"] = TOPICS["plan"]
 TOPICS["source"] = TOPICS["sources"]
-TOPIC_NAMES = ["learn", "sources", "context", "concepts", "search", "manage", "examples"]
+TOPIC_NAMES = ["learn", "sources", "context", "concepts", "plan", "search", "manage", "examples"]
 
 _TICKS = re.compile(r"`([^`]+)`")
 _DIRECTIVE = re.compile(r"(?<![\w`:])(:[a-z]+)")
@@ -243,7 +279,7 @@ def render(markup: str) -> str:
         if line.startswith("# "):
             out.append(style.heading(line[2:]))
         elif stripped.startswith("~ "):
-            out.append(indent + style.dim(stripped[2:]))
+            out.append(indent + style.dim(_TICKS.sub(r"\1", stripped[2:])))
         elif line.startswith("> "):
             body, _, aside = line[2:].partition("  ~ ")
             body, aside = body.rstrip(), _TICKS.sub(r"\1", aside)

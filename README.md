@@ -75,7 +75,7 @@ Full reference with examples: [docs/COMMANDS.md](docs/COMMANDS.md).
 ### Directives
 
 ```text
-:help  :status  :search <query>  :sources  :questions [all]  :concepts
+:help  :status  :plan  :review  :schedule  :search <query>  :sources  :questions [all]  :concepts
 :highlights  :quotes  :notes  :goals  :graph [concept]  :shelf
 :show <name or id>  :delete <id>  :forget  clear  :intro  :quit
 ```
@@ -86,9 +86,26 @@ Full reference with examples: [docs/COMMANDS.md](docs/COMMANDS.md).
 
 `url: https://…` and `path: ~/Shelf/book.pdf` set where the current source lives.
 
+### The evening loop (did / plan / remind / review)
+
+Tell IDIOS at night what you did, plan tomorrow, and let it ask you the next evening what got done.
+
+```text
+> did: Finished chapter 2 exercises      ~ done today
+> plan: Read chapter 3                   ~ tomorrow (default)
+> plan monday: Review stack frames       ~ today, tomorrow, monday…sunday, 2026-10-12, +3d
+> :plan                                  ~ today and tomorrow
+> done tk2 tk4   /   skip tk3
+> :schedule 21:00                        ~ review time
+> :schedule install                      ~ asks first, then adds a cron / Task Scheduler job
+> :review                                ~ done? [y]es · [n]ot yet → tomorrow · [s]kip
+```
+
+At the review time the OS job runs `idios remind` and you get a desktop notification (or stdout if none is available). When you next open IDIOS interactively it offers the review, saves the result as a note and moves unfinished items to tomorrow. Nothing is installed without your confirmation; `idios schedule install --dry-run` shows the exact line. Outside the shell: `idios plan`, `idios review`, `idios remind`, `idios schedule status|install|remove|test`.
+
 ### First run and clearing the screen
 
-The very first time you start `idios` at a terminal it shows a welcome banner (ASCII logo, what it is, three things to try) and waits for Enter. It appears once; `:intro` replays it.
+The very first time you start `idios` at a terminal it shows a welcome banner (ASCII logo, what it is, three things to try) and waits for Enter. It appears once; `:intro` replays it. Every later interactive start shows the logo with a one-line tagline (`IDIOS_NO_LOGO=1` hides it).
 
 `clear` (or `cls`, `:clear`, or Ctrl-L) wipes the screen and redraws your goal/source/location. It changes no data. To forget the current concept and question instead, use `:forget`.
 
@@ -98,7 +115,7 @@ The very first time you start `idios` at a terminal it shows a welcome banner (A
 
 ```text
 :help learn   :help sources   :help context   :help concepts
-:help search  :help manage    :help examples
+:help plan    :help search  :help manage    :help examples
 ```
 
 ### Colour

@@ -24,7 +24,7 @@ _WORD = re.compile(r"\w+", re.UNICODE)
 
 #: a tie between two results is broken by this order (most useful first)
 _TYPE_ORDER = ["concept", "question", "answer", "note", "highlight", "quote",
-               "source", "goal", "topic", "person", "tag", "category"]
+               "source", "task", "goal", "topic", "person", "tag", "category"]
 
 
 def stem(word: str) -> str:
@@ -145,6 +145,8 @@ class SearchService:
             docs.append(Doc("person", p.id, p.ref, p.name))
         for t in s.tags.all():
             docs.append(Doc("tag", t.id, t.ref, t.name))
+        for task in s.tasks.all():
+            docs.append(Doc("task", task.id, task.ref, task.text, context=task.due_date))
         for t in s.topics.all():
             docs.append(Doc("topic", t.id, t.ref, t.name))
         return docs

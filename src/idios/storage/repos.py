@@ -13,7 +13,7 @@ from typing import Any, Generic, Optional, Sequence, TypeVar
 from idios.domain.ids import now
 from idios.domain.models import (
     Answer, Category, Concept, Context, Entity, Goal, Highlight, Note, Person,
-    Question, Quote, Relation, Session, Source, Tag, Topic,
+    Question, Quote, Relation, Session, Source, Tag, Task, Topic,
 )
 
 T = TypeVar("T", bound=Entity)
@@ -157,6 +157,20 @@ class CategoryRepo(NamedRepo[Category]):
 
 class TagRepo(NamedRepo[Tag]):
     table, model = "tags", Tag
+
+
+class TaskRepo(Repo[Task]):
+    table, model = "tasks", Task
+
+    def on(self, day: str) -> list[Task]:
+        return self.find("due_date = ?", (day,), order="seq")
+
+    def open_through(self, day: str) -> list[Task]:
+        """Open tasks due on or before ``day`` (today's plan plus anything overdue)."""
+        return self.find("status = 'open' AND due_date <= ?", (day,), order="due_date, seq")
+
+    def between(self, first: str, last: str) -> list[Task]:
+        return self.find("due_date >= ? AND due_date <= ?", (first, last), order="due_date, seq")
 
 
 class Links:
@@ -307,6 +321,18 @@ class ContextStore:
         with self.conn:
             self.conn.execute("INSERT OR IGNORE INTO context VALUES (?, '1')", (f"flag:{name}",))
 
+    def setting(self, name: str, default: str = "") -> str:
+        row = self.conn.execute("SELECT value FROM context WHERE key = ?",
+                                (f"setting:{name}",)).fetchone()
+        return row[0] if row else default
+
+    def set_setting(self, name: str, value: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO context VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (f"setting:{name}", value))
+
     def load(self) -> Context:
         rows = self.conn.execute("SELECT key, value FROM context").fetchall()
         data = {r[0]: r[1] for r in rows if r[0] in self.KEYS}
@@ -344,6 +370,7 @@ class Store:
         self.topics = TopicRepo(conn)
         self.categories = CategoryRepo(conn)
         self.tags = TagRepo(conn)
+        self.tasks = TaskRepo(conn)
         self.links = Links(conn)
         self.context = ContextStore(conn)
         self.by_type: dict[str, Repo] = {
@@ -353,6 +380,7 @@ class Store:
             "highlight": self.highlights, "quote": self.quotes,
             "concept": self.concepts, "topic": self.topics,
             "category": self.categories, "tag": self.tags,
+            "task": self.tasks,
         }
 
     def close(self) -> None:

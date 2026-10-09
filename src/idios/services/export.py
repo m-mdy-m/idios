@@ -72,6 +72,11 @@ class ExportService:
             for a in s.answers.find("question_id = ?", (q.id,)):
                 out.append(f"    - {a.text}")
 
+        out += ["", "## Plan", ""]
+        for task in s.tasks.find(order="due_date, seq"):
+            mark = {"done": "x", "skipped": "-"}.get(task.status.value, " ")
+            out.append(f"- [{mark}] {task.due_date} {task.text}")
+
         out += ["", "## Notes", ""]
         out += [f"- {n.text}" for n in s.notes.all()] or ["_none_"]
 

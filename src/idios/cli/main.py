@@ -37,6 +37,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("shelf", help="list your registered sources")
 
+    sub.add_parser("plan", help="show what you planned: overdue, today and the week ahead")
+    sub.add_parser("review", help="settle today's open tasks: done, tomorrow, or skip")
+    sub.add_parser("remind", help="send today's reminder (this is what the scheduler runs)")
+
+    sched = sub.add_parser("schedule", help="set up the daily reminder with your OS scheduler")
+    sched.add_argument("action", nargs="?", default="status", choices=["status", "install", "remove", "test"])
+    sched.add_argument("--at", metavar="HH:MM", help="review time, 24-hour (default 21:00)")
+    sched.add_argument("--dry-run", action="store_true", help="show what would be installed")
+    sched.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+
     run = sub.add_parser("run", help="play a script of inputs, like the files in examples/")
     run.add_argument("file", type=Path)
 
@@ -73,6 +83,18 @@ def _dispatch(app: App, args: argparse.Namespace) -> int:
             io.close()
         return 0
 
+    if args.command == "remind":
+        return _remind(app)
+    if args.command == "schedule":
+        return _schedule(app, args)
+    if args.command == "review":
+        shell = Shell(app, ConsoleIO(), interactive=sys.stdin.isatty())
+        shell.handle(":review")
+        return 0
+    if args.command == "plan":
+        Shell(app, ConsoleIO(), interactive=False).handle(":plan")
+        return 0
+
     if args.command == "run":
         try:
             lines = args.file.read_text(encoding="utf-8").splitlines()
@@ -92,6 +114,45 @@ def _dispatch(app: App, args: argparse.Namespace) -> int:
     elif args.command == "export":
         path = app.exporter.export(args.format, args.output)
         print(f"{render.OK} Exported to {path}")
+    return 0
+
+
+def _remind(app: App) -> int:
+    """Run by the OS scheduler. Silent when there is nothing open."""
+    reminder = app.plan.reminder()
+    if reminder is None:
+        return 0
+    title, body = reminder
+    if not app.notify(title, body):  # no notification tool: stdout (cron mails it)
+        print(f"{title}\n{body}")
+    return 0
+
+
+def _schedule(app: App, args: argparse.Namespace) -> int:
+    plan, sched = app.plan, app.scheduler
+    if args.at:
+        plan.set_review_time(args.at)
+    command = app.reminder_command()
+    if args.action == "install":
+        line = sched.preview(plan.review_time, command)
+        if args.dry_run:
+            print(line)
+            return 0
+        if not args.yes:
+            print(f"This adds a daily job at {plan.review_time}:\n  {line}")
+            if input("Install it? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("Nothing was installed.")
+                return 0
+        print(f"{render.OK} Reminder on · {sched.install(plan.review_time, command)}")
+    elif args.action == "remove":
+        print(f"{render.OK} Reminder removed" if sched.remove() else "No reminder was installed.")
+    elif args.action == "test":
+        ok = app.notify("IDIOS", "This is how your daily reminder will look.")
+        print(f"{render.OK} Notification sent" if ok else "No notification tool found on this computer.")
+    else:
+        st = sched.status()
+        print(render.schedule_status(plan.review_time, st.installed, st.time or "", st.detail,
+                                     sched.preview(plan.review_time, command)))
     return 0
 
 

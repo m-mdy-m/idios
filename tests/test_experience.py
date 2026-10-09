@@ -81,7 +81,7 @@ def test_errors_are_red_with_a_hint(home, colour):
 # -- help ----------------------------------------------------------------
 def test_overview_is_short_and_shows_examples():
     text = help_text.topic()
-    assert len(text.splitlines()) <= 32
+    assert len(text.splitlines()) <= 36
     for needle in ("Why do registers matter?", "note: ...", "link CPU Register to Memory",
                    "goal: Learn Assembly", ":search register", ":help learn", ":quit"):
         assert needle in text

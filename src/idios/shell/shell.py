@@ -7,14 +7,18 @@ lives in ``render``.
 from __future__ import annotations
 
 import os
+import re
+from datetime import date, timedelta
 from typing import Callable, Optional
 
 from idios.domain.errors import Invalid, IdiosError
 from idios.domain.models import Entity, SourceType
 from idios.services.app import App
+from idios.services.plan import Review
 from idios.services.lookup import lookup
 from idios.shell import intro, render
 from idios.shell.io import IO
+from idios.services.dates import label as day_label, parse_when
 from idios.shell.parser import Intent, parse
 from idios.shell.style import style
 
@@ -46,6 +50,10 @@ class Shell:
             "delete": self._delete,
             "clear": self._clear_screen, "cls": self._clear_screen,
             "forget": self._forget,
+            "plan": self._plan_view, "review": lambda _: self._review(),
+            "done": lambda a: self._task_mark(Intent("task_mark", a, "done")),
+            "skip": lambda a: self._task_mark(Intent("task_mark", a, "skip")),
+            "schedule": self._schedule,
             "intro": self._intro,
         }
         self._handlers: dict[str, Callable[[Intent], None]] = {
@@ -54,6 +62,7 @@ class Shell:
             "note": self._note, "highlight": self._highlight, "quote": self._quote,
             "concept": self._concept, "topic": self._topic,
             "category": self._category, "tag": self._tag, "author": self._author, "reference": self._reference,
+            "did": self._did, "plan": self._plan, "task_mark": self._task_mark,
             "goal": self._goal, "source": self._source, "new_source": self._new_source,
             "source_add": self._source_add, "location": self._location,
             "link": self._link,
@@ -72,6 +81,8 @@ class Shell:
                 ctx.reset()
         self.say(self._header())
         ctx.start_session()
+        if self.interactive:
+            self._plan_checkin()
         while True:
             try:
                 line = self.io.read(render.prompt())
@@ -80,6 +91,7 @@ class Shell:
                 continue
             if line is None or not self.handle(line):
                 break
+        self._goodbye_hint()
         self.say(style.dim("Saved. See you next time."))
 
     def _first_run_intro(self) -> None:
@@ -309,6 +321,139 @@ class Shell:
         source = self._need_source("author")
         people = self.app.sources.add_authors(source, i.text)
         self.say(f"{render.OK} Author added: {', '.join(p.name for p in people)}")
+
+    # ------------------------------------------------------------- planning
+    def _did(self, i: Intent) -> None:
+        plan = self.app.plan
+        day = parse_when(i.arg, plan.today()) if i.arg else None
+        task = plan.did(i.text, day)
+        self.say(f"{render.OK} Done saved · {task.ref}\n  {day_label(date.fromisoformat(task.due_date), plan.today())}")
+
+    def _plan(self, i: Intent) -> None:
+        plan = self.app.plan
+        day = parse_when(i.arg, plan.today()) if i.arg else None
+        task = plan.add(i.text, day)
+        self.say(f"{render.OK} Planned · {task.ref}\n  "
+                 f"{day_label(date.fromisoformat(task.due_date), plan.today())}")
+
+    def _plan_view(self, _: str) -> None:
+        plan = self.app.plan
+        view = plan.view()
+        self.say(render.plan_view(view.overdue, view.days, plan.today(), plan.review_time))
+
+    def _task_mark(self, i: Intent) -> None:
+        refs = [r for r in re.split(r"[\s,]+", i.text) if r]
+        if not refs:
+            raise Invalid("Which task?", hint="done tk1 tk2      skip tk3      (see :plan)")
+        tasks = []
+        for ref in refs:  # resolve all first so a typo changes nothing
+            found = lookup(self.app.store, ref)
+            if found is None or found.entity_type != "task":
+                raise Invalid(f"I couldn't find a task called {ref}.", hint=":plan")
+            tasks.append(found)
+        for task in tasks:
+            (self.app.plan.complete if i.arg == "done" else self.app.plan.skip)(task)  # type: ignore[arg-type]
+        word = "done" if i.arg == "done" else "skipped"
+        self.say("\n".join(f"{render.OK} Marked {word}: {render.shorten(t.text, 60)}" for t in tasks))  # type: ignore[attr-defined]
+
+    def _review(self) -> None:
+        """Go through what is still open for today and settle each item."""
+        plan = self.app.plan
+        tasks = plan.open_now()
+        if not tasks:
+            self.say(style.dim("Nothing open for today.") + f"  Done so far: {len(plan.done_today())}.")
+            return
+        self.say(style.heading("Review") + style.dim(f"  {len(tasks)} open"))
+        done, carried, skipped = [], [], []
+        tomorrow = plan.today() + timedelta(days=1)
+        for task in tasks:
+            answer = self._ask_task(task)
+            if answer is None:
+                break  # input ended: leave the rest untouched
+            if answer == "l":
+                continue
+            if answer == "y":
+                plan.complete(task); done.append(task)
+            elif answer == "n":
+                plan.move(task, tomorrow); carried.append(task)
+            else:
+                plan.skip(task); skipped.append(task)
+        review = Review(done, carried, skipped)
+        if review.total == 0:
+            return
+        plan.save_review(review)
+        self.say(render.review_summary(done, carried, skipped, plan.tomorrow_count()))
+        self.say(f"\n{render.OK} Review saved as a note")
+
+    def _ask_task(self, task) -> Optional[str]:
+        self.say(f"\n{render.task_row(task, show_day=True)}")
+        for _ in range(3):
+            reply = self.io.read(style.dim("  done? ") + style.command("[y]") + style.dim("es · ")
+                                 + style.command("[n]") + style.dim("ot yet → tomorrow · ")
+                                 + style.command("[s]") + style.dim("kip: "))
+            if reply is None:
+                return None
+            r = reply.strip().lower()
+            if r in ("y", "yes", "d", "done"):
+                return "y"
+            if r in ("n", "no", "not yet", "later", "t", "tomorrow"):
+                return "n"
+            if r in ("s", "skip"):
+                return "s"
+            self.say("Please answer y, n or s.")
+        return "l"  # no usable answer: leave it open and move on
+
+    def _schedule(self, arg: str) -> None:
+        plan, sched, word = self.app.plan, self.app.scheduler, arg.strip().lower()
+        command = self.app.reminder_command()
+        if word in ("install", "on"):
+            line = sched.preview(plan.review_time, command)
+            if not self._confirm(f"Add a daily job at {plan.review_time}?\n  {line}\n", default=False):
+                self.say("Nothing was installed.")
+                return
+            self.say(f"{render.OK} Reminder on · {sched.install(plan.review_time, command)}")
+        elif word in ("remove", "off"):
+            removed = sched.remove()
+            self.say(f"{render.OK} Reminder removed" if removed else "No reminder was installed.")
+        elif word == "test":
+            if self.app.notify("IDIOS", "This is how your daily reminder will look."):
+                self.say(f"{render.OK} Notification sent")
+            else:
+                self.say("This computer has no notification tool, so IDIOS will print the reminder instead.")
+        elif word:
+            at = plan.set_review_time(word)
+            note = "  (run :schedule install again to move the job)" if sched.status().installed else ""
+            self.say(f"{render.OK} Review time set to {at}{note}")
+        else:
+            st = sched.status()
+            self.say(render.schedule_status(plan.review_time, st.installed, st.time or "", st.detail,
+                                            sched.preview(plan.review_time, command)))
+
+    def _plan_checkin(self) -> None:
+        """On launch: offer a review when tasks are overdue or the day's review time has passed."""
+        plan = self.app.plan
+        due = plan.checkin_due()
+        if due:
+            n = len(due)
+            self.say(style.warn(f"Plan check-in: {n} thing{'s' if n != 1 else ''} still open."))
+            for t in due[:5]:
+                self.say("  " + render.task_row(t, show_day=True))
+            if self._confirm("Review now?", default=True):
+                self._review()
+                self.say("")
+        elif plan.open_count_today():
+            self.say(style.dim(f"Today's plan: {plan.open_count_today()} open · :plan"))
+
+    def _goodbye_hint(self) -> None:
+        """Once, after planning tomorrow: mention the reminder if it is not set up."""
+        store = self.app.store.context
+        if not self.interactive or store.flag("schedule_hint") or not self.app.plan.tomorrow_count():
+            return
+        if self.app.scheduler.status().installed:
+            return
+        store.set_flag("schedule_hint")
+        self.say(style.dim(f"Tomorrow: {self.app.plan.tomorrow_count()} planned. Want a reminder at "
+                           f"{self.app.plan.review_time}? ") + style.command(":schedule"))
 
     def _reference(self, i: Intent) -> None:
         source = self._need_source("reference")

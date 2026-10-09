@@ -9,7 +9,10 @@ from __future__ import annotations
 import re
 from typing import Optional, Sequence
 
-from idios.domain.models import Question, SourceType
+from datetime import date
+
+from idios.domain.models import Question, SourceType, Task
+from idios.services.dates import label as day_label
 from idios.services.search import Hit, stem, tokenize
 from idios.services.sources import UNSORTED
 from idios.services.views import (
@@ -116,6 +119,8 @@ def status(v: StatusView) -> str:
     out += block("Location", v.location or none)
     if v.concept:
         out += block("Concept", style.kind("concept", v.concept))
+    if v.open_tasks:
+        out += block("Open for today", v.open_tasks)
     out += block("Open questions", v.open_questions)
     out += block("Concepts", v.concepts)
     out += block("Notes", v.notes)
@@ -286,4 +291,71 @@ def graph(lines: Sequence[str]) -> str:
                        f"{style.kind('concept', name)}")
         else:
             out.append(style.kind("concept", line, True) if line else line)
+    return "\n".join(out)
+
+
+# -- planning ---------------------------------------------------------------
+_GLYPH = {"done": ("✓", "bgreen"), "open": ("○", "byellow"), "skipped": ("–", "dim")}
+
+
+def task_row(task: Task, show_day: bool = False) -> str:
+    glyph, color = _GLYPH[task.status.value]
+    text = shorten(task.text, 70)
+    if task.status.value == "done":
+        text = style.dim(text)
+    elif task.status.value == "skipped":
+        text = style.dim(text + "  (skipped)")
+    else:
+        text = style.kind("task", text)
+    day = style.dim(f"  · {task.due_date}") if show_day else ""
+    return f"{_pad(task.ref)} {style.paint(glyph, color, 'bold')} {text}{day}"
+
+
+def plan_view(overdue: Sequence[Task], days: Sequence[tuple[date, Sequence[Task]]],
+              today: date, review_time: str) -> str:
+    if not overdue and not days:
+        return (f"{heading('Plan')}\n{style.dim('Nothing planned. Try:')}  "
+                f"{style.command('plan: Read chapter 3')}  "
+                f"{style.dim('(tomorrow)  or')}  {style.command('did: Finished the exercises')}")
+    out = [heading("Plan")]
+    if overdue:
+        out += ["", style.warn("Overdue")] + [task_row(t, show_day=True) for t in overdue]
+    for day, tasks in days:
+        title = day_label(day, today)
+        out += ["", style.label(title) if day != today else style.accent(title)]
+        out += [task_row(t) for t in tasks]
+    out += ["", style.dim(f"Review at {review_time}.  done tk1 · skip tk2 · :review")]
+    return "\n".join(out)
+
+
+def review_summary(done: Sequence[Task], carried: Sequence[Task], skipped: Sequence[Task],
+                   tomorrow: int) -> str:
+    total = len(done) + len(carried) + len(skipped)
+    out = [heading("Today's review")]
+    out.append(f"{style.number(len(done))} of {total} done" if total else style.dim("Nothing to review."))
+    for t in done:
+        out.append(f"  {style.ok('✓')} {style.dim(shorten(t.text, 70))}")
+    for t in carried:
+        out.append(f"  {style.warn('→')} {shorten(t.text, 70)}  {style.dim('moved to tomorrow')}")
+    for t in skipped:
+        out.append(f"  {style.dim('– ' + shorten(t.text, 70))}")
+    if tomorrow:
+        out += ["", style.dim(f"Tomorrow: {tomorrow} planned.  :plan")]
+    return "\n".join(out)
+
+
+def schedule_status(review_time: str, installed: bool, installed_time: str,
+                    detail: str, line: str) -> str:
+    if installed:
+        state = style.ok("on") + style.dim(f"  daily at {installed_time or review_time} ({detail})")
+    else:
+        state = style.warn("off") + style.dim("  no reminder is scheduled")
+    out = [heading("Daily reminder"), f"{style.label('Review time:')} {review_time}",
+           f"{style.label('Reminder:')} {state}"]
+    if not installed:
+        out += ["", "Turn it on:", f"  {style.command(':schedule install')}",
+                style.dim("  adds this line to your scheduler, only if you confirm:"),
+                style.dim(f"  {line}")]
+    else:
+        out += ["", style.dim("Change the time with  :schedule 20:30  then  :schedule install")]
     return "\n".join(out)

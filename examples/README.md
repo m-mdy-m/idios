@@ -17,6 +17,7 @@ idios --home /tmp/try run examples/01_first_session.idios
 | `04_building_a_graph.idios` | typed relations (`as contains`, `as uses`), `:graph`, concept view |
 | `05_when_unsure.idios` | ambiguity menus, `answer q2: …`, delete confirmation |
 | `06_python_api.py` | the same services used from Python |
+| `07_evening_loop.idios` | `did:`, `plan:`, `:plan`, `:review`, `:schedule`: the night-before and next-evening routine |
 
 ## What a session looks like
 

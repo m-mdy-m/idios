@@ -11,6 +11,8 @@ directive      ``:search register``       text=name, arg=rest
 note/highlight/quote/answer/concept/topic/category/tag/author
                ``note: ...``              text=payload
 goal/source    ``goal: X`` / ``source: X`` text=title (arg="bare" if no colon)
+did/plan       ``did: X`` / ``plan tomorrow: X``  text=X, arg=when ("" = default)
+task_mark      ``done tk1 tk2`` / ``skip tk3``     text=refs, arg=done|skip
 reference      ``url: https://...`` / ``path: ~/Shelf/x.pdf`` for the current source
 source_add     ``source add``
 new_source     ``book: X``                text=title, arg=source type
@@ -58,6 +60,10 @@ _LOCATION_WORDS = {"chapter": "chapter", "page": "page", "section": "section",
                    "time": "timestamp", "timestamp": "timestamp"}
 _BARE_QUIT = {"help", "quit", "exit", "status", "clear", "cls"}
 
+# did: ...   plan: ...   plan tomorrow: ...   did yesterday: ...
+_TASK_RE = re.compile(r"^(did|plan)(?:\s+(\S+?))?\s*:\s*(.*)$", re.IGNORECASE | re.DOTALL)
+# done tk1 tk2   skip tk3
+_MARK_RE = re.compile(r"^(done|skip)\s+((?:[a-z]{1,2}\d+[\s,]*)+)$", re.IGNORECASE)
 _PREFIX_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.*)$", re.DOTALL)
 _ANSWER_REF_RE = re.compile(r"^answer\s+([A-Za-z]{1,2}\d+)\s*:\s*(.*)$", re.IGNORECASE | re.DOTALL)
 _LINK_RE = re.compile(r"^link\s+(.+?)\s+to\s+(.+?)(?:\s+as\s+([A-Za-z_ \-]+))?$",
@@ -93,6 +99,13 @@ def parse(line: str) -> Intent:
     m = _ANSWER_REF_RE.match(text)
     if m:
         return Intent("answer", m.group(2).strip(), m.group(1))
+
+    m = _TASK_RE.match(text)
+    if m:
+        return Intent(m.group(1).lower(), m.group(3).strip(), (m.group(2) or "").strip())
+    m = _MARK_RE.match(text)
+    if m:
+        return Intent("task_mark", m.group(2).strip(), m.group(1).lower())
 
     m = _PREFIX_RE.match(text)
     if m:

@@ -13,7 +13,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _LOCATION = """
     chapter TEXT, page TEXT, section TEXT, timestamp TEXT,
@@ -137,10 +137,24 @@ SCHEMA_V1 = [
     "CREATE INDEX idx_relations_target ON relations(target_type, target_id);",
 ]
 
+SCHEMA_V2 = [
+    _entity("tasks", f"""
+        text TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        done_at TEXT,
+        goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+        source_id TEXT REFERENCES sources(id) ON DELETE SET NULL,
+        {_STAMPS}"""),
+    "CREATE INDEX idx_tasks_due ON tasks(due_date, status);",
+]
+
+MIGRATIONS = {1: SCHEMA_V1, 2: SCHEMA_V2}
+
 TABLES = [
     "categories", "topics", "tags", "people", "goals", "sources", "sessions",
     "questions", "answers", "notes", "highlights", "quotes", "concepts",
-    "source_authors", "concept_topics", "entity_tags", "refs", "relations",
+    "source_authors", "concept_topics", "entity_tags", "refs", "relations", "tasks",
 ]
 
 
@@ -164,10 +178,10 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply each missing schema step in order; existing data is never touched."""
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version >= SCHEMA_VERSION:
-        return
-    with conn:
-        for statement in SCHEMA_V1:
-            conn.execute(statement)
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    for target in range(version + 1, SCHEMA_VERSION + 1):
+        with conn:
+            for statement in MIGRATIONS[target]:
+                conn.execute(statement)
+            conn.execute(f"PRAGMA user_version = {target}")

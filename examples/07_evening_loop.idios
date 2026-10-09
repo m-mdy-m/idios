@@ -1,0 +1,25 @@
+# 07 · The evening loop: log tonight, plan tomorrow, get checked in on
+goal: Learn Assembly
+book: Programming from the Ground Up
+# At night, say what you did today. Each line is saved as done.
+did: Finished the chapter 2 exercises
+did: Read about the stack
+# Then plan tomorrow. Tomorrow is the default day.
+plan: Read chapter 3
+plan: Write notes on registers
+# Other days work too: monday, 2026-10-12, +3d ...
+plan monday: Review stack frames
+:plan
+# The next evening your OS scheduler runs `idios remind` (see :schedule) and sends a
+# desktop notification. When you open IDIOS it offers this review.
+# Here, "plan today" stands in for "what I planned yesterday".
+plan today: Read chapter 3 again
+plan today: Summarise the stack
+:review
+# y = done, n = not yet (moves to tomorrow), s = skip
+y
+n
+:plan
+# Everything is searchable, and the review was saved as a note.
+:search chapter
+:schedule

@@ -31,7 +31,7 @@ KIND_COLORS = {
     "source": "bblue", "goal": "bgreen", "question": "byellow", "answer": "green",
     "note": "blue", "highlight": "yellow", "quote": "cyan", "concept": "bmagenta",
     "topic": "magenta", "category": "magenta", "tag": "cyan", "person": "cyan",
-    "session": "dim",
+    "session": "dim", "task": "white",
 }
 
 
