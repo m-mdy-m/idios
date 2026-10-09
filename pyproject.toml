@@ -1,11 +1,11 @@
 [project]
 name = "idios"
-version = "0.3.0"
-description = "IDIOS: a local-first personal learning environment"
+version = "0.4.2"
+description = "IDIOS: a terminal notebook for learning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# No runtime dependencies on purpose: standard library only, works offline.
+# No runtime dependencies: standard library only.
 dependencies = []
 
 [project.optional-dependencies]

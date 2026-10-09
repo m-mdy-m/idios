@@ -1,3 +1,3 @@
-"""IDIOS: a local-first personal learning environment."""
+"""IDIOS: a terminal notebook for learning."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.2"
