@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Tests for URI activation validation, safe Toast XML escaping, notification-provider behavior and schedule data grouping/rendering.
 
 ### Changed
+- Replaced the MIT license with the Mozilla Public License 2.0 (MPL-2.0). Changes to MPL-covered files must remain available under MPL when distributed; larger works may combine IDIOS with differently licensed code. See `LICENSE` for the complete terms.
 - Refreshed the schedule window with a dark dashboard, colored status metrics, grouped task cards and improved spacing; supported Windows builds also receive a dark title-bar hint.
 - Documented notification installation and platform caveats while keeping third-party notification dependencies optional.
 ## [0.4.2]

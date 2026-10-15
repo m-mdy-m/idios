@@ -4,7 +4,7 @@ version = "0.4.3"
 description = "IDIOS: a terminal notebook for learning"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MPL-2.0"
 # No runtime dependencies: standard library only.
 dependencies = []
 
@@ -18,7 +18,7 @@ notifications = [
 idios = "idios.cli.main:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

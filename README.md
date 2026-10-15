@@ -185,4 +185,4 @@ make check           # lint + tests
 make help            # all targets
 ```
 
-MIT licensed.
+Licensed under the Mozilla Public License 2.0 (MPL-2.0). See [`LICENSE`](LICENSE) for the full terms.
