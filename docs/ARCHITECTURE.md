@@ -3,11 +3,13 @@
 IDIOS is a small personal tool with a deep internal model. Layers only call downward.
 
 ```text
-cli          argparse entry point; `idios` with no arguments opens the shell
- └─ shell    parser · interpreter loop · render · style (colour) · help · io
-     └─ services   context · learning · knowledge · sources · search · views · export
-         └─ domain       typed dataclasses, ids, user-facing errors
-         └─ storage      SQLite schema + repositories (the only SQL)
+cli
+ ├─ shell       parser · interpreter loop · render · help · io
+ ├─ services    context · learning · knowledge · sources · search · views · export
+ │   └─ notifications  activation URI · shared helpers · WinRT Toast · desktop providers
+ ├─ ui          optional Tkinter desktop surfaces + reusable dark theme
+ ├─ domain      typed dataclasses, ids, user-facing errors
+ └─ storage     SQLite schema and repositories — the only SQL
 ```
 
 ## Request flow
@@ -19,9 +21,11 @@ cli          argparse entry point; `idios` with no arguments opens the shell
 
 ## Rules (enforced by `tests/test_architecture.py`)
 
-- No third-party runtime dependencies (standard library only).
+- The base install has no third-party runtime dependencies; Linux/macOS can use the optional `.[notifications]` provider, while Windows Toast uses built-in WinRT/PowerShell.
 - SQL only in `storage/` (and the export dump).
 - `domain/`, `services/`, `storage/` never print or read input.
+- `services/notifications/windows.py` sends modern `ToastGeneric` notifications through WinRT, creates the required per-user Start Menu shortcut/AppUserModelID, and registers `idios:` for cold-click activation.
+- `services/notifications/activation.py` owns the deep-link contract, `windows.py` owns WinRT Toast setup, and `desktop.py` owns Linux/BSD/macOS providers. The clicked schedule is read-only and uses the same SQLite data as the CLI.
 
 ## Data
 

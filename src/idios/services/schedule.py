@@ -56,8 +56,10 @@ class ScheduleService:
     def preview(self, at: str, command: list[str]) -> str:
         at = parse_clock(at)
         if self.windows:
+            # Interactive-only tasks run in the logged-in desktop session, which
+            # is required for Windows notification Toasts to reach the user.
             return (f'schtasks /Create /SC DAILY /ST {at} /TN {TASK_NAME} '
-                    f'/TR "{subprocess.list2cmdline(command)}" /F')
+                    f'/TR "{subprocess.list2cmdline(command)}" /F /IT')
         return cron_line(at, command)
 
     # -- doing it ---------------------------------------------------------------
@@ -66,7 +68,7 @@ class ScheduleService:
         if self.windows:
             self._need("schtasks")
             self._check(self._run(["schtasks", "/Create", "/SC", "DAILY", "/ST", at, "/TN", TASK_NAME,
-                                   "/TR", subprocess.list2cmdline(command), "/F"],
+                                   "/TR", subprocess.list2cmdline(command), "/F", "/IT"],
                                   capture_output=True, text=True))
             return f"Task Scheduler: {TASK_NAME} daily at {at}"
         lines = [l for l in self._crontab() if TAG not in l]

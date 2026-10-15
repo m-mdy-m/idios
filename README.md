@@ -36,6 +36,7 @@ Everything is stored in one SQLite file on your machine.
 
 ```bash
 pip install .          # or: make setup for a dev environment
+pip install ".[notifications]"  # optional desktop provider for Linux/macOS
 idios
 ```
 
@@ -101,7 +102,15 @@ Tell IDIOS at night what you did, plan tomorrow, and let it ask you the next eve
 > :review                                ~ done? [y]es · [n]ot yet → tomorrow · [s]kip
 ```
 
-At the review time the OS job runs `idios remind` and you get a desktop notification (or stdout if none is available). When you next open IDIOS interactively it offers the review, saves the result as a note and moves unfinished items to tomorrow. Nothing is installed without your confirmation; `idios schedule install --dry-run` shows the exact line. Outside the shell: `idios plan`, `idios review`, `idios remind`, `idios schedule status|install|remove|test`.
+At the review time the OS job runs `idios remind` and sends a native desktop notification. Click it to open a dark, card-based schedule dashboard with overdue, today, completed, skipped and upcoming items, colored counters, the daily review time and linked goal/source context. The window is read-only.
+
+- **Windows 10:** IDIOS uses WinRT Toast notifications and registers a per-user `idios:` link so clicking the toast can open the schedule even after the reminder job exits. The Windows path uses built-in PowerShell/WinRT and does not need the optional provider extra. Task Scheduler runs the reminder only while you're logged in.
+- **Linux/BSD:** `desktop-notifier` is preferred when installed; `notify-send` is the fallback. From the source checkout, install `pip install ".[notifications]"` for the optional provider. `notify-send` may be supplied by `libnotify-bin`.
+- **macOS:** from the source checkout, install the optional provider with `pip install ".[notifications]"`; `terminal-notifier` can also provide click-to-open activation. Native Notification Center delivery depends on macOS notification permissions and a supported/signed Python build; see the [desktop-notifier macOS notes](https://github.com/samschott/desktop-notifier#notes-on-macos).
+- **Schedule window:** IDIOS uses a reusable dark Tkinter theme for its wordmark, cards, buttons, status chips and scrollable sections. Tkinter is included with the standard Windows Python installer and many Python builds; on minimal Linux installations you may need the OS package `python3-tk`.
+- **WSL:** interactive notifications need WSLg/DBus or another working desktop notification provider. Cron must be running, and WSL must be active at the scheduled time.
+
+If no interactive notification backend is available, IDIOS prints the reminder instead. When you next open IDIOS interactively it can offer the review, save the result as a note and move unfinished items to tomorrow. Nothing is installed without your confirmation; `idios schedule install --dry-run` shows the exact scheduler command. Outside the shell: `idios plan`, `idios review`, `idios remind`, `idios schedule status|install|remove|test`.
 
 ### First run and clearing the screen
 

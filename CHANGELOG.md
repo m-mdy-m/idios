@@ -2,6 +2,18 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.3]
+
+### Added
+- Windows desktop notifications using WinRT Toast and per-user `idios:` URI activation, so clicking a notification can open the schedule details after the reminder process exits.
+- Modular desktop-notification providers for Linux and macOS, with command-line fallbacks where supported. Click activation depends on the selected desktop backend and environment.
+- Read-only Tkinter schedule dashboard with overdue, today, completed, skipped and upcoming tasks, plus linked goal/source context.
+- Reusable dark UI components: IDIOS wordmark, color and typography tokens, cards, status pills, buttons and a scrollable layout.
+- Tests for URI activation validation, safe Toast XML escaping, notification-provider behavior and schedule data grouping/rendering.
+
+### Changed
+- Refreshed the schedule window with a dark dashboard, colored status metrics, grouped task cards and improved spacing; supported Windows builds also receive a dark title-bar hint.
+- Documented notification installation and platform caveats while keeping third-party notification dependencies optional.
 ## [0.4.2]
 
 ### Removed

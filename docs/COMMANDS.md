@@ -189,15 +189,15 @@ It adds **one line** to your crontab (Task Scheduler on Windows):
 ```text
 0 21 * * * /usr/bin/python3 -m idios remind # idios-reminder
 ```
-Every day at 21:00 the OS runs `idios remind`: it sends a desktop notification listing your open
-items, or prints text if no notifier exists, and stays silent if nothing is open. IDIOS itself runs no
-background process. The next time you open `idios` after that time it also offers the review.
+Every day at 21:00 the OS runs `idios remind`: it sends a desktop notification listing your open items, or prints text if no interactive backend exists, and stays silent if nothing is open. Clicking the notification opens a read-only schedule window with task dates, states, linked goal/source details and the review time.
 
-Notes:
-- **WSL:** cron only runs while its service is up (`sudo service cron start`), and WSL must be running at 21:00.
-  Notifications go to the Windows desktop through `powershell.exe` when available.
-- **Linux desktop:** needs `notify-send` (package `libnotify-bin`).
-- Check the line first with `idios schedule install --dry-run`; undo with `:schedule remove`.
+- **Windows 10:** WinRT Toast uses a per-user Start Menu shortcut with an AppUserModelID and the `idios:` protocol handler for click-to-open. The Task Scheduler job runs only while you are logged in; no Python notification extra is needed.
+- **Linux/BSD:** from the source checkout, install `pip install ".[notifications]"` for the optional `desktop-notifier` provider; `notify-send` (for example, package `libnotify-bin`) is the fallback.
+- **macOS:** the optional `desktop-notifier` provider supports click callbacks; `terminal-notifier` is another click-to-open option. Notification delivery depends on macOS permissions and a supported/signed Python build. See the [desktop-notifier macOS notes](https://github.com/samschott/desktop-notifier#notes-on-macos).
+- **Schedule window:** Tkinter is required. Minimal Linux installs may need the `python3-tk` OS package.
+- **WSL:** interactive notifications require WSLg/DBus or another available desktop provider; cron must be running and WSL active at the scheduled time.
+
+Install the job only after reviewing `idios schedule install --dry-run`; remove it with `:schedule remove`.
 
 ## Looking things up
 

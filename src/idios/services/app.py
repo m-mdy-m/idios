@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -31,7 +32,7 @@ class App:
         self.learning = LearningService(self.store, self.context)
         self.plan = PlanService(self.store, self.context, clock)
         self.scheduler = ScheduleService()
-        self.notify = notify.send
+        self.notify = partial(notify.send, home=self.home)
         self.search = SearchService(self.store)
         self.views = ViewService(self.store, self.context, self.knowledge, self.sources,
                                  plan_open=self.plan.open_now)

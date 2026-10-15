@@ -14,6 +14,7 @@ from typing import Optional, Sequence
 from idios import __version__
 from idios.domain.errors import IdiosError
 from idios.services.app import App
+from idios.services.notifications.activation import home_from_activation_uri
 from idios.shell import render
 from idios.shell.io import ConsoleIO, ScriptIO
 from idios.shell.shell import Shell
@@ -27,6 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"idios {__version__}")
     parser.add_argument("--home", type=Path, help="data folder to use instead of ~/.idios")
+    # Private activation argument used by OS notification handlers; argparse
+    # hides options with SUPPRESS from normal help output.
+    parser.add_argument("--_open-schedule", dest="activation_uri", help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command")
 
     search = sub.add_parser("search", help="search everything you have recorded")
@@ -58,8 +62,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.activation_uri:
+        args.command = "open-schedule"
+    home = args.home
+    if args.command == "open-schedule" and args.activation_uri:
+        try:
+            activation_home = home_from_activation_uri(args.activation_uri)
+        except ValueError as err:
+            print(f"Invalid IDIOS notification link: {err}", file=sys.stderr)
+            return 2
+        if home is None:
+            home = activation_home
     try:
-        app = App(args.home)
+        app = App(home)
     except OSError as err:
         print(f"Could not open the IDIOS data folder.\n\n{err}", file=sys.stderr)
         return 1
@@ -74,6 +89,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         app.close()
 
 
+
 def _dispatch(app: App, args: argparse.Namespace) -> int:
     if args.command is None:
         io = ConsoleIO(app.home / "history")
@@ -85,6 +101,13 @@ def _dispatch(app: App, args: argparse.Namespace) -> int:
 
     if args.command == "remind":
         return _remind(app)
+    if args.command == "open-schedule":
+        from idios.ui.schedule_dialog import show_schedule_dialog
+        if not show_schedule_dialog(app):
+            print("A desktop window could not be opened. Run `idios plan` in a terminal instead.",
+                  file=sys.stderr)
+            return 1
+        return 0
     if args.command == "schedule":
         return _schedule(app, args)
     if args.command == "review":
@@ -123,7 +146,9 @@ def _remind(app: App) -> int:
     if reminder is None:
         return 0
     title, body = reminder
-    if not app.notify(title, body):  # no notification tool: stdout (cron mails it)
+    from idios.ui.schedule_dialog import show_schedule_dialog
+    if not app.notify(title, body, on_click=lambda: show_schedule_dialog(app)):
+        # If no interactive desktop backend is available, cron can still mail the text.
         print(f"{title}\n{body}")
     return 0
 
@@ -147,8 +172,14 @@ def _schedule(app: App, args: argparse.Namespace) -> int:
     elif args.action == "remove":
         print(f"{render.OK} Reminder removed" if sched.remove() else "No reminder was installed.")
     elif args.action == "test":
-        ok = app.notify("IDIOS", "This is how your daily reminder will look.")
-        print(f"{render.OK} Notification sent" if ok else "No notification tool found on this computer.")
+        from idios.ui.schedule_dialog import show_schedule_dialog
+        ok = app.notify(
+            "IDIOS",
+            "Click this notification to open your learning schedule.",
+            on_click=lambda: show_schedule_dialog(app),
+        )
+        print(f"{render.OK} Notification sent" if ok else
+              "No interactive notification backend found. Install `idios[notifications]`.")
     else:
         st = sched.status()
         print(render.schedule_status(plan.review_time, st.installed, st.time or "", st.detail,
