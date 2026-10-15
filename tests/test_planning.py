@@ -246,11 +246,11 @@ def fake_which(*tools):
 
 
 def test_notification_commands_per_platform():
-    assert notify.command_for("T", "B", "linux", fake_which("notify-send"))[0] == "notify-send"
+    assert notify.command_for("T", "B", "linux", fake_which("notify-send"))[0] == "/usr/bin/notify-send"
     mac = notify.command_for('He said "hi"', "B", "darwin", fake_which("osascript"))
     assert mac[0] == "osascript" and '\\"hi\\"' in mac[2]
-    win = notify.command_for("It's", "B", "win32", fake_which("powershell"))
-    assert win[0] == "powershell" and "It''s" in win[3]
+    # win32 returns None; the modular send() uses WinRT Toast directly
+    assert notify.command_for("It's", "B", "win32", fake_which("powershell")) is None
     assert notify.command_for("T", "B", "linux", fake_which()) is None
 
 

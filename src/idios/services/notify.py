@@ -40,6 +40,10 @@ def command_for(
         # Windows dispatches Toast directly through the modular send() provider;
         # this helper only previews simple CLI fallback commands.
         return None
+    # WSL: show notification on the Windows desktop via PowerShell balloon tip
+    if platform.startswith("linux") and (is_wsl() if wsl is None else wsl) \
+            and which("powershell.exe"):
+        return _balloon(title, body, "powershell.exe")
     if platform == "darwin" and which("osascript"):
         def quote(value: str) -> str:
             return value.replace("\\", "\\\\").replace('"', '\\"')
@@ -49,3 +53,13 @@ def command_for(
         if exe:
             return [exe, "--app-name=IDIOS", title, body]
     return None
+
+
+def _balloon(title: str, body: str, exe: str) -> list[str]:
+    q = lambda s: s.replace("'", "''")  # noqa: E731
+    script = ("Add-Type -AssemblyName System.Windows.Forms;"
+              "$n = New-Object System.Windows.Forms.NotifyIcon;"
+              "$n.Icon = [System.Drawing.SystemIcons]::Information;$n.Visible = $true;"
+              f"$n.ShowBalloonTip(15000, '{q(title)}', '{q(body)}',"
+              "[System.Windows.Forms.ToolTipIcon]::Info);Start-Sleep -Seconds 15;$n.Dispose()")
+    return [exe, "-NoProfile", "-Command", script]

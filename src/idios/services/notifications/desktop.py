@@ -1,7 +1,6 @@
 """Desktop notification providers for Linux, BSD and macOS."""
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 import subprocess
@@ -15,6 +14,12 @@ from .common import clean, session_env
 Runner = Callable[..., object]
 
 
+def _get_asyncio():
+    """Lazy import to avoid Windows _overlapped issues at module load time."""
+    import asyncio
+    return asyncio
+
+
 def _run_desktop_notifier(
     title: str,
     body: str,
@@ -25,6 +30,8 @@ def _run_desktop_notifier(
         from desktop_notifier import DesktopNotifier
     except ImportError:
         return False
+
+    asyncio = _get_asyncio()
 
     if sys.platform == "darwin":
         # macOS notifications need CoreFoundation's run loop integrated with
