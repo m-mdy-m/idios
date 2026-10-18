@@ -1,0 +1,72 @@
+package ports
+
+import (
+	"context"
+	"idios/internal/domain"
+)
+
+type Store interface {
+	Close() error
+	Ping(context.Context) error
+
+	CreateRepository(context.Context, string, string) (domain.Repository, error)
+	GetRepository(context.Context, string) (domain.Repository, error)
+	ListRepositories(context.Context) ([]domain.Repository, error)
+	ListBranches(context.Context, string) ([]domain.Branch, error)
+	SetRepositorySetting(context.Context, string, string, string) error
+	GetRepositorySettings(context.Context, string) ([]domain.RepositorySetting, error)
+
+	CreateProject(context.Context, string, string) (domain.Project, error)
+	GetProject(context.Context, string) (domain.Project, error)
+	ListProjects(context.Context) ([]domain.Project, error)
+	AddIssueToProject(context.Context, string, string) error
+	ListProjectIssues(context.Context, string) ([]domain.Issue, error)
+
+	CreateIssue(context.Context, domain.Issue) (domain.Issue, error)
+	GetIssue(context.Context, string) (domain.Issue, error)
+	ListIssues(context.Context, string, string) ([]domain.Issue, error)
+	SetIssueStatus(context.Context, string, domain.IssueStatus) (domain.Issue, error)
+	StartIssue(context.Context, string) (domain.Issue, error)
+	ListBlockers(context.Context, string) ([]domain.Blocker, error)
+	ListIssueDependencies(context.Context, string) ([]domain.Issue, error)
+	AddDependency(context.Context, string, string) error
+	RemoveDependency(context.Context, string, string) error
+	ListDependencyEdges(context.Context) ([]domain.GraphEdge, error)
+
+	CreatePullRequest(context.Context, string, string, string) (domain.PullRequest, error)
+	GetPullRequest(context.Context, string) (domain.PullRequest, error)
+	ListPullRequests(context.Context, string, string) ([]domain.PullRequest, error)
+	ClosePullRequest(context.Context, string) (domain.PullRequest, error)
+	AcceptPullRequest(context.Context, string, string) (domain.PullRequest, domain.CompletionRecord, domain.Issue, error)
+	ListCompletions(context.Context, string) ([]domain.CompletionRecord, error)
+
+	CreateConcept(context.Context, string, string) (domain.Concept, error)
+	GetConcept(context.Context, string) (domain.Concept, error)
+	ListConcepts(context.Context) ([]domain.Concept, error)
+	CreateRelation(context.Context, string, string, string, string, string) (domain.Relation, error)
+	LinkIssueConcept(context.Context, string, string) error
+
+	CreateLabel(context.Context, string, string, string, string, string) (domain.Label, error)
+	ListLabels(context.Context, string) ([]domain.Label, error)
+	ListIssueLabels(context.Context) (map[string][]domain.Label, error)
+	AssignLabel(context.Context, string, string) error
+	CreateMilestone(context.Context, string, string, string, string, *string) (domain.Milestone, error)
+	ListMilestones(context.Context, string, string) ([]domain.Milestone, error)
+	ListIssueMilestones(context.Context) (map[string][]domain.Milestone, error)
+	AssignMilestone(context.Context, string, string) error
+
+	ListGraph(context.Context) (domain.Graph, error)
+	ListActivity(context.Context, string, string, int) ([]domain.ActivityEvent, error)
+	RecordActivity(context.Context, string, string, string, string) error
+
+	ImportLegacy(context.Context, string) (LegacyImportResult, error)
+}
+
+type LegacyImportResult struct {
+	Repository        string `json:"repository"`
+	ImportedTasks     int    `json:"imported_tasks"`
+	ImportedConcepts  int    `json:"imported_concepts"`
+	ImportedRelations int    `json:"imported_relations"`
+	ImportedDoneTasks int    `json:"imported_done_tasks_as_synthetic_completions"`
+	SkippedTasks      int    `json:"skipped_tasks"`
+}
