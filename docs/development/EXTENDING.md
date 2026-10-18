@@ -38,7 +38,7 @@ tests to cover core rules.
 
 - Add commands in `internal/cli/registry.go`, flags in the existing declarative flag structures,
   and machine/human output through `internal/render`.
-- Add TUI menu actions/screens in `internal/tui`. The TUI can format and navigate; it cannot repeat
+- Add TUI menu actions/screens in `tui`. The TUI can format and navigate; it cannot repeat
   validation, issue SQL or invoke the CLI process.
 - If a GUI might use the feature, consider whether the versioned JSON protocol needs a new field or
   stable command shape and add regression tests.

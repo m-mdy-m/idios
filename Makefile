@@ -2,7 +2,7 @@ GO ?= go
 PSX ?= psx
 BIN_DIR ?= dist
 CGO_ENABLED ?= 1
-GOFILES := $(shell find cmd internal -type f -name '*.go' -print)
+GOFILES := $(shell find cmd internal tui -type f -name '*.go' -print)
 
 .PHONY: all build tui test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 

@@ -77,7 +77,7 @@ jobs:
           mkdir -p release
           CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o "release/idios${{ matrix.exe }}" ./cmd/idios
           CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o "release/idios-tui${{ matrix.exe }}" ./cmd/idios-tui
-          cp README.md LICENSE docs/TUI.md release/
+          cp README.md LICENSE docs/user/GETTING_STARTED.md docs/user/WORKSPACE_GUIDE.md docs/user/SETTINGS.md release/
           tar -czf "idios-${{ github.ref_name }}-${{ matrix.asset }}.tar.gz" -C release .
       - name: Build binaries (Windows)
         if: runner.os == 'Windows'
@@ -90,7 +90,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -trimpath -ldflags='-s -w' -o 'release/idios-tui.exe' ./cmd/idios-tui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item README.md, LICENSE, docs/TUI.md release/
+          Copy-Item README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md release/
           Compress-Archive -Path release/* -DestinationPath "idios-${{ github.ref_name }}-${{ matrix.asset }}.zip" -Force
       - name: Upload release bundle
         uses: actions/upload-artifact@v4

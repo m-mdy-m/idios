@@ -92,6 +92,21 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 			domain.GraphEdge{Source: graphID("pull_request", c.PullRequestID), Target: graphID("completion", c.ID), Type: "produces_completion"})
 	}
 
+	// Notes only enter the graph when the user explicitly marks them as graph-visible.
+	notes, err := s.ListNotes(ctx)
+	if err != nil {
+		return g, err
+	}
+	for _, n := range notes {
+		if !n.GraphVisible {
+			continue
+		}
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("note", n.ID), Type: "note", Label: n.Title, Reference: "note:" + n.ID})
+		if n.LinkedEntityType != "" && n.LinkedEntityID != "" {
+			g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("note", n.ID), Target: graphID(n.LinkedEntityType, n.LinkedEntityID), Type: "note_about"})
+		}
+	}
+
 	labels, err := s.ListLabels(ctx, "")
 	if err != nil {
 		return g, err

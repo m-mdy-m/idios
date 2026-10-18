@@ -46,7 +46,7 @@ Workflow:
   4. idios pr accept --id CPU!1 --summary 'Core concepts reviewed'
 
 An Issue can become done only through an accepted PR. No real Git commit, file merge,
-or non-main branch operations are performed in v1. See docs/WORKFLOW.md.
+or non-main branch operations are performed in v1. See docs/user/WORKSPACE_GUIDE.md.
 `)
 }
 

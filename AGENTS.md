@@ -9,7 +9,7 @@ CompletionRecords, Labels, Milestones and a visible graph. V1 is a logical workf
 ```text
 cmd/idios ──────> internal/cli ──────┐
                                      ├──> internal/application ──> internal/domain
-cmd/idios-tui ──> internal/tui ──────┘              │
+cmd/idios-tui ──> tui ──────┘              │
                                                     v
                                              internal/ports
                                                     ^
@@ -76,7 +76,7 @@ real requirement justifies it.
 4. Add the Application use case and behavior tests.
 5. Expose it through CLI and/or TUI using the same Application method.
 6. Update graph projection if relevant and test node/edge semantics and depth.
-7. Update `docs/COMMANDS.md`, `docs/TUI.md`, `docs/WORKFLOW.md`, `docs/STORAGE.md` and the JSON
+7. Update `docs/user/CLI_REFERENCE.md`, `docs/development/TUI.md`, `docs/development/WORKFLOW.md`, `docs/development/STORAGE.md` and the JSON
    protocol if behavior/contracts change.
 
 ## Required local checks

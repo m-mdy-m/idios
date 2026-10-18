@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "startup": {
+    "show_intro": true
+  },
+  "debug": false,
+  "appearance": {
+    "theme": "midnight",
+    "density": "comfortable",
+    "colors": {}
+  },
+  "themes": {
+    "midnight": {
+      "background": "#0d1117",
+      "foreground": "#e6edf3",
+      "muted": "#8b949e",
+      "accent": "#bc8cff",
+      "accent_background": "#8957e5",
+      "surface": "#161b22",
+      "surface_alt": "#21262d",
+      "border": "#3d2f50",
+      "success": "#7ee787",
+      "success_background": "#173b2a",
+      "warning": "#e3b341",
+      "warning_background": "#3d3e00",
+      "danger": "#ff7b72",
+      "danger_background": "#3d1f24"
+    },
+    "paper": {
+      "background": "#fbf8f1",
+      "foreground": "#28251f",
+      "muted": "#756e61",
+      "accent": "#7655b8",
+      "accent_background": "#7655b8",
+      "surface": "#f0eadf",
+      "surface_alt": "#e6ddcf",
+      "border": "#c9bdab",
+      "success": "#28734f",
+      "success_background": "#d5eadf",
+      "warning": "#8a6412",
+      "warning_background": "#f2e5bd",
+      "danger": "#a33b35",
+      "danger_background": "#f3d8d4"
+    },
+    "forest": {
+      "background": "#0c1713",
+      "foreground": "#e0f0e8",
+      "muted": "#89a69a",
+      "accent": "#70d6aa",
+      "accent_background": "#1c7153",
+      "surface": "#13231c",
+      "surface_alt": "#1c3328",
+      "border": "#315545",
+      "success": "#82e0ab",
+      "success_background": "#183d2e",
+      "warning": "#e5c574",
+      "warning_background": "#463a1b",
+      "danger": "#ff9288",
+      "danger_background": "#492521"
+    }
+  },
+  "notifications": {
+    "enabled": true,
+    "poll_interval_minutes": 1
+  },
+  "keyboard": {
+    "new": "ctrl+n",
+    "search": "/",
+    "help": "?",
+    "overview": "1",
+    "repositories": "2",
+    "projects": "3",
+    "issues": "4",
+    "pull_requests": "5",
+    "graph": "g",
+    "concepts": "7",
+    "settings": "8",
+    "refresh": "r",
+    "quit": "q",
+    "notes": "ctrl+shift+n",
+    "quotes": "ctrl+shift+q",
+    "jobs": "ctrl+j",
+    "notifications": "ctrl+shift+m",
+    "logs": "ctrl+l",
+    "profile": "ctrl+p",
+    "edit_profile": "ctrl+shift+p",
+    "theme": "ctrl+t",
+    "density": "ctrl+shift+d",
+    "debug": "ctrl+shift+l",
+    "toggle_notifications": "ctrl+shift+i",
+    "intro": "ctrl+shift+o",
+    "poll_interval": "ctrl+shift+e",
+    "new_note": "ctrl+alt+n",
+    "new_quote": "ctrl+alt+q",
+    "new_job": "ctrl+alt+j",
+    "mark_notifications_read": "ctrl+alt+m",
+    "seed": "ctrl+d"
+  },
+  "REPOSITORY_TEMPLATE": {
+    "description": "# {{repository}}\n\n## Purpose\n\nDescribe what this repository is for and the outcome it supports.\n\n## Scope\n\n- In scope:\n- Out of scope:\n\n## Getting started\n\n1. Add the first concrete step needed to work in this repository.\n\n## Architecture and decisions\n\nRecord important design choices and their rationale. Link related Issues, Projects, and Concepts in IDIOS.\n"
+  },
+  "ISSUE_TEMPLATE": {
+    "default": "task",
+    "templates": {
+      "task": {
+        "name": "Task",
+        "title_prefix": "",
+        "body": "## Goal\n\nDescribe the concrete outcome this Issue should produce. Keep the scope small enough to complete and review.\n\n## Context\n\nWhy is this work needed? Add relevant background, constraints, links, or related Concepts.\n\n## Plan\n\n- [ ] First step\n- [ ] Second step\n- [ ] Verify the result\n\n## Acceptance criteria\n\n- [ ] The expected behavior or deliverable is clear and verifiable.\n- [ ] Relevant tests, examples, or documentation are updated.\n- [ ] Related Issues and dependencies are linked.\n\n## Dependencies and notes\n\nList required prerequisites, risks, or open questions. Use the blocking-dependency action for work that must finish first.\n"
+      },
+      "bug": {
+        "name": "Bug report",
+        "title_prefix": "[Bug]: ",
+        "body": "## Summary\n\nDescribe the unexpected behavior and its impact.\n\n## Expected behavior\n\nWhat should happen instead?\n\n## Actual behavior\n\nWhat happens now? Include an error message or relevant log excerpt when available.\n\n## Steps to reproduce\n\n1. Start from this state:\n2. Perform this action:\n3. Observe this result:\n\n## Environment\n\n- IDIOS version / commit:\n- Operating system and terminal:\n- Relevant configuration:\n\n## Acceptance criteria\n\n- [ ] The cause is understood and the fix addresses it.\n- [ ] A regression test covers the failure.\n- [ ] User-facing documentation is updated when behavior changes.\n"
+      },
+      "feature": {
+        "name": "Feature request",
+        "title_prefix": "[Feature]: ",
+        "body": "## Problem to solve\n\nWhat limitation or user need does this address? Describe the workflow that is difficult today.\n\n## Proposed solution\n\nDescribe the desired behavior from a user's perspective. Include an example interaction if useful.\n\n## Expected impact\n\nWho benefits, and how will the improvement be recognized?\n\n## Acceptance criteria\n\n- [ ] The main user flow is described and testable.\n- [ ] Keyboard-only operation is considered where applicable.\n- [ ] Configuration and accessibility implications are considered.\n- [ ] Documentation and tests are included in the implementation plan.\n\n## Alternatives and trade-offs\n\nList other approaches considered and any known risks or open questions.\n"
+      },
+      "research": {
+        "name": "Research / investigation",
+        "title_prefix": "[Research]: ",
+        "body": "## Question or hypothesis\n\nState the question to answer or the hypothesis to test.\n\n## Why it matters\n\nWhich decision or project depends on this research? Link related Issues or Concepts.\n\n## Investigation plan\n\n- [ ] Identify trustworthy sources or measurements.\n- [ ] Compare plausible approaches.\n- [ ] Record evidence and uncertainties.\n\n## Expected deliverable\n\nExamples: a decision record, benchmark, prototype, written explanation, or recommendation.\n\n## Findings\n\nFill this section with the evidence and conclusion when the investigation is complete.\n\n## Follow-up\n\nList the next action or Issues that should be created from the findings.\n"
+      }
+    }
+  },
+  "PULL_REQUEST_TEMPLATE": {
+    "title_prefix": "",
+    "body": "## Summary\n\nExplain what changed and why. Keep the summary focused on the outcome, not just a list of files.\n\n## Related Issue\n\nLink the Issue this Pull Request resolves (for example, `IDIOS#12`). Describe any partial or follow-up work.\n\n## Implementation details\n\n- Main changes:\n- Important design decisions:\n- Alternatives or trade-offs:\n\n## Verification\n\n- [ ] Relevant tests were added or updated.\n- [ ] Tests and checks were run; results are recorded below.\n- [ ] Error paths and boundary cases were considered.\n- [ ] User documentation and examples were updated when needed.\n\nCommands / results:\n\n```text\n# Add the checks you ran and their results.\n```\n\n## Risks and follow-up\n\nDescribe migration, compatibility, performance, or UX risks. List follow-up work that is intentionally out of scope.\n\n## Reviewer guide\n\nPoint reviewers to the most important files, behavior, or decisions to inspect.\n"
+  }
+}

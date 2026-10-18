@@ -109,3 +109,10 @@ func marshalPayload(v any) string {
 	}
 	return string(b)
 }
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}

@@ -1,14 +1,20 @@
-# Documentation
+# IDIOS documentation
 
-- [Architecture](ARCHITECTURE.md): layers, boundaries and invariants
-- [Commands](COMMANDS.md): every CLI command and launch options
-- [TUI](TUI.md): workspace navigation, Repository pages and Graph Explorer
-- [Storage](STORAGE.md): SQLite connections, transactions and migrations
-- [Workflow](WORKFLOW.md): Issue lifecycle, prerequisites, PRs and completions
-- [Extending](EXTENDING.md): the safe path for a new feature
-- [JSON protocol](JSON_PROTOCOL.md): the contract a GUI client uses
-- [Legacy migration](MIGRATION.md): importing an older IDIOS database
-- [Contributing](CONTRIBUTING.md)
-- [Security](../SECURITY.md)
+Choose a guide based on what you are trying to do.
 
-The engineering rules live in [AGENTS.md](../AGENTS.md).
+## User guides
+
+Start here if you want to use IDIOS rather than change its source code.
+
+- [User documentation index](user/README.md)
+- [Getting started](user/GETTING_STARTED.md)
+- [Workspace guide](user/WORKSPACE_GUIDE.md)
+- [Settings, themes and keyboard shortcuts](user/SETTINGS.md)
+- [Repository, Issue and Pull Request templates](user/ISSUE_AND_PR_TEMPLATES.md)
+- [CLI reference](user/CLI_REFERENCE.md)
+
+## Developer guides
+
+- [Developer documentation index](development/README.md)
+
+For project-wide policy, see the root [Code of Conduct](../CODE_OF_CONDUCT.md), [Contributing](../CONTRIBUTING.md), and [Security](../SECURITY.md) documents.

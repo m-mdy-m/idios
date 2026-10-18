@@ -1,103 +1,81 @@
-# IDIOS Engine 1.0.0 (Go)
+# IDIOS
 
-**IDIOS is a local-first personal work and knowledge graph.** It brings repositories, issues, cross-repository prerequisites, projects, concepts, labels, milestones, pull-request reviews and a visible graph into one lightweight application.
+**A local-first workspace for projects, issues, ideas and the relationships between them.**
 
-Version 1.0.0 is the first stable Go Engine release, implemented from the architecture agreed for IDIOS. The previous Python/SQLite application is not modified by this source tree. Its task records can be imported into a separate Engine database.
+IDIOS keeps your work in a local SQLite database and gives it structure: repositories own issues, sub-issues describe task breakdown, blocking dependencies explain what must happen first, projects group work across repositories, and concepts connect reusable knowledge. The terminal interface is keyboard-first, mouse-aware, and uses the same Go application engine as the CLI.
 
-## V1 scope
+## Start here
 
-- Independent Go packages for domain rules, application use cases, storage, CLI and TUI.
-- Local SQLite storage, schema versioning, transactions and activity events.
-- One `main` branch per Repository. The Branch model has room for future base/source branch relationships, but branch creation, checkout and merging are intentionally not enabled yet.
-- Issues and Sub-issues, cross-repository `depends_on` prerequisites, cycle protection, and readiness/blocker status.
-- A PR is required to finish an Issue. The PR contains the review/explanation; accepting it atomically creates a `CompletionRecord` on `main` and marks the Issue `done`.
-- This is a workflow record model, **not Git**: no commit hashes, file snapshots, source-code diffs or real merge are created.
-- Projects spanning repositories; Concepts; typed knowledge relations; global and Repository labels; Repository- and Project-scoped milestones; Repository settings; activity history.
-- A full-screen, mouse-aware TUI with persistent GitHub-inspired tabs, dashboard cards, clickable forms, Repository pages and a typed Graph Explorer. The CLI has a versioned JSON contract suitable for future GUI clients.
-- Read-only import of legacy IDIOS Concepts and Tasks.
+### Requirements
 
-## Requirements
+- Go **1.25 or newer**
+- A C compiler and CGO enabled for the SQLite driver (`gcc`/Clang on Unix-like systems; a supported C toolchain on Windows)
+- An interactive terminal for the full-screen UI
 
-- Go 1.25+
-- A C compiler (`gcc` or `clang`) on `PATH`. SQLite is bundled by
-  `github.com/mattn/go-sqlite3`, so no system SQLite library or headers are required.
-- `make` is used by the examples below; on Windows run `go build ./cmd/idios` (or
-  `./scripts/build.ps1`) and `go test ./...` directly.
-
-## Build and test
+### Run IDIOS from source
 
 ```sh
-make test
+# Open the command-line interface help
+go run ./cmd/idios --help
+
+# Launch the interactive terminal workspace
+go run ./cmd/idios-tui
+
+# Add a connected demo workspace to the current database
+go run ./cmd/idios seed demo
+```
+
+Or build both entry points:
+
+```sh
 make build
-./dist/idios help
+./dist/idios --help
 ./dist/idios-tui
 ```
 
-`make build` writes both binaries to `dist/`; `make smoke` runs the end-to-end
-cross-Repository workflow against `dist/idios`. To run checks directly:
+The default database is `~/.idios/idios-engine.sqlite3`. Set `IDIOS_DB` or pass `--db PATH` to choose a different database. The first TUI launch creates `~/.idios/config.json` with user preferences; set `IDIOS_CONFIG` to choose a different configuration file.
+
+## What you can do
+
+- **Overview:** edit your workspace profile and README, pin important repositories and issues, see active work, and review recent activity.
+- **Repositories:** each repository has a structured README-style overview, stats, recent Issues and Pull Requests, and repository-specific graph, labels, milestones, settings and activity. New repositories use a configurable overview scaffold.
+- **Issue templates:** start from `task`, `bug`, `feature` or `research` templates with detailed context, plan and acceptance criteria; edit the multiline body before creating the Issue.
+- **Pull Request templates:** new PR forms include a configurable summary, implementation, verification, risk and reviewer checklist.
+- **Issues and sub-issues:** break a task into smaller child issues. A child issue must share its parent's repository.
+- **Blocking dependencies:** connect issues with `depends_on`; an unfinished prerequisite prevents an issue from starting, including across repositories.
+- **Pull requests and completions:** explain the outcome, review and accept the logical pull request. Acceptance creates a completion record on `main` and marks the issue done.
+- **Projects:** group related issues from multiple repositories around one goal.
+- **Concepts and graph:** link reusable knowledge and inspect the different relationship types.
+- **Notes and quotes:** capture thoughts, link notes to work or the graph, and rotate saved quotes on startup.
+- **Jobs and notifications:** configure local reminders, review the notification inbox, and inspect UI logs. Scheduled reminders run while the TUI is open; they are not an OS background service.
+- **Customization:** select a theme, change layout density, edit semantic color tokens, configure `REPOSITORY_TEMPLATE`, `ISSUE_TEMPLATE` and `PULL_REQUEST_TEMPLATE`, and customize keyboard shortcuts without changing Go source.
+
+## Try the sample data
+
+Run `go run ./cmd/idios seed demo`, or select **Load demo workspace** from the Intro, Overview or Settings. The seed is atomic and idempotent. It creates three repositories, eight issues, a parent/sub-issue relationship, blocking and non-blocking graph edges, a project spanning repositories, concepts, labels, a milestone, open and accepted pull requests, a completion, notes, quotes, jobs, a notification, pins and activity events.
+
+Demo content is added to the selected database, not to a separate disposable database. Use `--db /path/to/demo.sqlite3` or `IDIOS_DB` to keep the sample separate from your own workspace.
+
+## Important scope notes
+
+IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting clone. Pull-request acceptance records a logical completion; it does not create Git commits, merge source files, check out branches, or sync with GitHub/GitLab. Notifications are kept in a local inbox, and scheduled jobs are evaluated while the TUI is running.
+
+## Documentation
+
+- [User documentation](docs/user/README.md) — quick start, workflows, settings, shortcuts and CLI usage.
+- [Repository, Issue and Pull Request templates](docs/user/ISSUE_AND_PR_TEMPLATES.md) — customize repository overview scaffolds and detailed Issue / PR forms.
+- [Developer documentation](docs/development/README.md) — package boundaries, SQLite migrations, tests and extension points.
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+
+## Development checks
 
 ```sh
-go test ./...
-go test -race ./...
-go vet ./...
+make fmt-check
+make test
+make vet
+make build
 ```
 
-## Quick start: cross-Repository prerequisite
-
-Create two repositories and related concepts/issues:
-
-```sh
-idios repo create --name CPU --description 'CPU and hardware learning'
-idios repo create --name ARLIZ --description 'Book and chapter writing'
-idios concept create --name 'Electricity fundamentals'
-idios issue create --repo CPU --title 'Learn basic electricity'
-idios issue create --repo ARLIZ --title 'Write ARLIZ chapter three'
-idios issue concept --issue ARLIZ#1 --concept 'Electricity fundamentals'
-idios issue depends --issue ARLIZ#1 --on CPU#1
-```
-
-Attempting to start the ARLIZ Issue now returns a `blocked` error. Complete the CPU prerequisite through the required PR workflow:
-
-```sh
-idios issue start --id CPU#1
-idios pr create --issue CPU#1 --description 'Explain the work, what was learned, and the outcome.'
-idios pr accept --id CPU!1 --summary 'Electricity fundamentals reviewed'
-idios issue start --id ARLIZ#1
-```
-
-After writing the chapter, finish it through its own PR:
-
-```sh
-idios pr create --issue ARLIZ#1 --description 'Chapter contents, supporting concepts, and review notes.'
-idios pr accept --id ARLIZ!1 --summary 'Chapter three drafted and reviewed'
-idios completion list
-```
-
-Repository-local issue references use `Repository#number`; PR references use `Repository!number`. Stable entity IDs are also accepted by most commands.
-
-## CLI and TUI
-
-```sh
-idios --db ./idios.sqlite3 repo list
-idios --db ./idios.sqlite3 --json issue list
-idios --db ./idios.sqlite3 graph --from issue:ARLIZ#1 --depth 2
-idios-tui --db ./idios.sqlite3
-# from source: make tui
-```
-
-The default database is `~/.idios/idios-engine.sqlite3`; `IDIOS_DB` or the global `--db PATH` can override it. Global flags can appear before or after the command. The TUI is a full-screen Bubble Tea application with clickable tabs/buttons, a Workspace sidebar, in-place forms, selectable lists and a typed Graph Explorer. It uses the same Application Core as the CLI and never invokes the CLI as a subprocess. It requires an interactive terminal; `idios-tui --no-color` renders a plain screen with no escape sequences. See [TUI guide](docs/TUI.md) for navigation, mouse support, forms and graph semantics.
-
-Read more:
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Commands](docs/COMMANDS.md)
-- [Terminal UI and Graph Explorer](docs/TUI.md)
-- [SQLite storage](docs/STORAGE.md)
-- [Workflow and invariants](docs/WORKFLOW.md)
-- [Extending IDIOS](docs/EXTENDING.md)
-- [Legacy migration](docs/MIGRATION.md)
-- [JSON protocol for GUI clients](docs/JSON_PROTOCOL.md)
-
-## Status and limitations
-
-This is the first Go Engine implementation, not feature parity with GitHub or the previous Python app. V1 does not include non-main Branch operations, real Git merging, auth/multi-user collaboration, sync, external Git hosting, advanced graph analytics or the future GUI. The module/port boundaries keep those as separate, incremental extensions.
+Tests use temporary SQLite databases and do not need to modify your actual IDIOS workspace. The SQLite driver uses CGO, so a C compiler is required.

@@ -368,3 +368,88 @@ func (s *Service) Graph(ctx context.Context, from string, depth int) (domain.Gra
 	}
 	return filtered, nil
 }
+
+// Workspace experience APIs keep notes, quotes, reminders, notifications and profile data behind
+// the same Store port as the core workflow entities.
+func (s *Service) SeedDemo(ctx context.Context) (domain.SeedReport, error) {
+	return s.store.SeedDemo(ctx)
+}
+func (s *Service) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	return s.store.ListNotes(ctx)
+}
+func (s *Service) CreateNote(ctx context.Context, title, content string) (domain.Note, error) {
+	if strings.TrimSpace(title) == "" {
+		return domain.Note{}, fmt.Errorf("%w: note title is required", domain.ErrInvalid)
+	}
+	return s.store.CreateNote(ctx, title, content)
+}
+func (s *Service) UpdateNote(ctx context.Context, id, title, content string) (domain.Note, error) {
+	if strings.TrimSpace(id) == "" || strings.TrimSpace(title) == "" {
+		return domain.Note{}, fmt.Errorf("%w: note ID and title are required", domain.ErrInvalid)
+	}
+	return s.store.UpdateNote(ctx, id, title, content)
+}
+func (s *Service) DeleteNote(ctx context.Context, id string) error {
+	return s.store.DeleteNote(ctx, id)
+}
+func (s *Service) LinkNote(ctx context.Context, id, entityType, entityRef string, graphVisible bool) error {
+	if strings.TrimSpace(id) == "" || strings.TrimSpace(entityType) == "" || strings.TrimSpace(entityRef) == "" {
+		return fmt.Errorf("%w: note and target entity are required", domain.ErrInvalid)
+	}
+	return s.store.LinkNote(ctx, id, entityType, entityRef, graphVisible)
+}
+func (s *Service) ListQuotes(ctx context.Context) ([]domain.Quote, error) {
+	return s.store.ListQuotes(ctx)
+}
+func (s *Service) CreateQuote(ctx context.Context, quote, author string) (domain.Quote, error) {
+	if strings.TrimSpace(quote) == "" {
+		return domain.Quote{}, fmt.Errorf("%w: quote text is required", domain.ErrInvalid)
+	}
+	return s.store.CreateQuote(ctx, quote, author)
+}
+func (s *Service) NextQuote(ctx context.Context) (domain.Quote, error) { return s.store.NextQuote(ctx) }
+func (s *Service) GetWorkspaceProfile(ctx context.Context) (domain.WorkspaceProfile, error) {
+	return s.store.GetWorkspaceProfile(ctx)
+}
+func (s *Service) UpdateWorkspaceProfile(ctx context.Context, profile domain.WorkspaceProfile) (domain.WorkspaceProfile, error) {
+	if strings.TrimSpace(profile.Username) == "" || strings.TrimSpace(profile.FullName) == "" {
+		return domain.WorkspaceProfile{}, fmt.Errorf("%w: username and display name are required", domain.ErrInvalid)
+	}
+	return s.store.UpdateWorkspaceProfile(ctx, profile)
+}
+func (s *Service) ListWorkspacePins(ctx context.Context) ([]domain.WorkspacePin, error) {
+	return s.store.ListWorkspacePins(ctx)
+}
+func (s *Service) ToggleWorkspacePin(ctx context.Context, entityType, entityRef, label, color string) (bool, error) {
+	return s.store.ToggleWorkspacePin(ctx, entityType, entityRef, label, color)
+}
+func (s *Service) ListScheduledJobs(ctx context.Context) ([]domain.ScheduledJob, error) {
+	return s.store.ListScheduledJobs(ctx)
+}
+func (s *Service) CreateScheduledJob(ctx context.Context, job domain.ScheduledJob) (domain.ScheduledJob, error) {
+	if strings.TrimSpace(job.Name) == "" {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job name is required", domain.ErrInvalid)
+	}
+	if job.IntervalMinutes < 1 {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job interval must be at least one minute", domain.ErrInvalid)
+	}
+	return s.store.CreateScheduledJob(ctx, job)
+}
+func (s *Service) ToggleScheduledJob(ctx context.Context, id string) (domain.ScheduledJob, error) {
+	return s.store.ToggleScheduledJob(ctx, id)
+}
+func (s *Service) ProcessDueJobs(ctx context.Context, now time.Time, notificationsEnabled bool) (int, error) {
+	return s.store.ProcessDueJobs(ctx, now, notificationsEnabled)
+}
+func (s *Service) ListNotifications(ctx context.Context, limit int) ([]domain.Notification, error) {
+	return s.store.ListNotifications(ctx, limit)
+}
+func (s *Service) MarkNotificationsRead(ctx context.Context) error {
+	return s.store.MarkNotificationsRead(ctx)
+}
+func (s *Service) SetAppSetting(ctx context.Context, key, value string) error {
+	return s.store.SetAppSetting(ctx, key, value)
+}
+func (s *Service) GetAppSetting(ctx context.Context, key string) (string, error) {
+	return s.store.GetAppSetting(ctx, key)
+}

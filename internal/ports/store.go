@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"idios/internal/domain"
+	"time"
 )
 
 type Store interface {
@@ -60,6 +61,28 @@ type Store interface {
 	RecordActivity(context.Context, string, string, string, string) error
 
 	ImportLegacy(context.Context, string) (LegacyImportResult, error)
+
+	SeedDemo(context.Context) (domain.SeedReport, error)
+	ListNotes(context.Context) ([]domain.Note, error)
+	CreateNote(context.Context, string, string) (domain.Note, error)
+	UpdateNote(context.Context, string, string, string) (domain.Note, error)
+	DeleteNote(context.Context, string) error
+	LinkNote(context.Context, string, string, string, bool) error
+	ListQuotes(context.Context) ([]domain.Quote, error)
+	CreateQuote(context.Context, string, string) (domain.Quote, error)
+	NextQuote(context.Context) (domain.Quote, error)
+	GetWorkspaceProfile(context.Context) (domain.WorkspaceProfile, error)
+	UpdateWorkspaceProfile(context.Context, domain.WorkspaceProfile) (domain.WorkspaceProfile, error)
+	ListWorkspacePins(context.Context) ([]domain.WorkspacePin, error)
+	ToggleWorkspacePin(context.Context, string, string, string, string) (bool, error)
+	ListScheduledJobs(context.Context) ([]domain.ScheduledJob, error)
+	CreateScheduledJob(context.Context, domain.ScheduledJob) (domain.ScheduledJob, error)
+	ToggleScheduledJob(context.Context, string) (domain.ScheduledJob, error)
+	ProcessDueJobs(context.Context, time.Time, bool) (int, error)
+	ListNotifications(context.Context, int) ([]domain.Notification, error)
+	MarkNotificationsRead(context.Context) error
+	SetAppSetting(context.Context, string, string) error
+	GetAppSetting(context.Context, string) (string, error)
 }
 
 type LegacyImportResult struct {

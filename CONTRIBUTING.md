@@ -3,7 +3,7 @@
 Thanks for helping improve IDIOS. This repository contains the Go Engine and its CLI/TUI adapters;
 the goal is to keep the application local-first, predictable, modular and useful without network
 services or AI. Before changing behavior, read [AGENTS.md](AGENTS.md),
-[Architecture](docs/ARCHITECTURE.md), and the relevant feature guide.
+[Architecture](docs/development/ARCHITECTURE.md), and the relevant feature guide.
 
 ## Toolchain
 
@@ -35,7 +35,7 @@ For Windows, use `./scripts/build.ps1`, `go test ./...`, `go vet ./...`, and `go
 ```text
 cmd/idios ───────> internal/cli ──┐
                                   ├──> internal/application ──> internal/domain
-cmd/idios-tui ───> internal/tui ──┘                │
+cmd/idios-tui ───> tui ──┘                │
                                                    v
                                             internal/ports
                                                    ^
@@ -53,7 +53,7 @@ cmd/idios-tui ───> internal/tui ──┘                │
   persistence. It uses `database/sql` directly with `mattn/go-sqlite3`; avoid creating a second
   query/transaction wrapper or letting database handles leak into Application/Domain.
 - **CLI** (`internal/cli`) owns command parsing and machine/human output routing, not business rules.
-- **TUI** (`internal/tui`) owns full-screen views, navigation, clickable controls, forms and graph presentation. It must call the
+- **TUI** (`tui`) owns full-screen views, navigation, clickable controls, forms and graph presentation. It must call the
   Application Core and must not issue SQL, shell out to `idios`, or duplicate workflow validation.
 - **Composition roots** (`cmd/idios`, `cmd/idios-tui`) wire storage, Application and the appropriate
   adapter. The CLI must not import TUI and the TUI must not import CLI.
@@ -100,4 +100,4 @@ the PR description. User-facing and storage behavior changes should have regress
 include personal database files, generated binaries or secrets in a change.
 
 
-The TUI uses Bubble Tea v2 and Lip Gloss v2 only inside `internal/tui`; keep these dependencies out of Domain, Application, Ports and Storage.
+The TUI uses Bubble Tea v2 and Lip Gloss v2 only inside `tui`; keep these dependencies out of Domain, Application, Ports and Storage.

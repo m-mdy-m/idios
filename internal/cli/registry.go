@@ -24,6 +24,12 @@ type command struct {
 
 var commands = []command{
 	{
+		name: "seed", noun: "seed", action: []string{"demo"},
+		run: func(ctx context.Context, s *application.Service, v values) (any, error) {
+			return s.SeedDemo(ctx)
+		},
+	},
+	{
 		name: "repo", alias: "repository", noun: "repo", action: []string{"create"},
 		flags: []flagSpec{{name: "name", usage: "repository name", required: true}, {name: "description", usage: "description"}},
 		run: func(ctx context.Context, s *application.Service, v values) (any, error) {

@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"idios/internal/config"
 	"idios/internal/domain"
 )
 
 func TestWorkspaceViewLooksLikePersistentFullScreenUI(t *testing.T) {
 	m := newModel(context.Background(), nil, "./idios.sqlite3", Options{NoColor: true})
+	m.page = pageOverview
 	m.width, m.height = 116, 38
 	m.repositories = []domain.Repository{{Name: "CPU", Description: "Hardware and processor research"}, {Name: "ARLIZ", Description: "Writing and research"}}
 	m.projects = []domain.Project{{Name: "Build a personal OS", Description: "Cross-repository project"}}
@@ -179,5 +181,87 @@ func TestCompactTerminalDoesNotRenderPastItsBounds(t *testing.T) {
 	}
 	if !strings.Contains(v.Content, "too small") {
 		t.Fatal("compact view should explain how to restore the full UI")
+	}
+}
+
+func TestRepositoryFormLoadsConfiguredOverviewTemplate(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.RepositoryTemplate.Description = "# {{repository}}\n\n## Purpose\n\nDescribe the outcome."
+	m := newModel(context.Background(), nil, "", Options{NoColor: true, Config: cfg})
+	m.beginForm(formRepository)
+	if len(m.formFields) != 2 || !m.formFields[1].multiline {
+		t.Fatalf("unexpected Repository form shape: %#v", m.formFields)
+	}
+	if got := m.formFields[1].value; got != cfg.RepositoryTemplate.Description {
+		t.Fatalf("Repository overview template = %q, want configured template", got)
+	}
+}
+
+func TestIssueTemplateSelectionLoadsConfiguredMultilineBody(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	m := newModel(context.Background(), nil, "", Options{NoColor: true, Config: cfg})
+	m.repositories = []domain.Repository{{Name: "IDIOS"}}
+	m.beginForm(formIssue)
+	if len(m.formFields) != 6 || !m.formFields[3].multiline {
+		t.Fatalf("unexpected Issue form shape before selection: %#v", m.formFields)
+	}
+	m.formFields[0].value = "bug"
+	if !m.applyIssueTemplateSelection() {
+		t.Fatalf("could not apply bug template: %s", m.formError)
+	}
+	if m.formFields[2].value != "[Bug]: " {
+		t.Fatalf("bug template title prefix = %q", m.formFields[2].value)
+	}
+	if !m.formFields[3].multiline || !strings.Contains(m.formFields[3].value, "## Expected behavior") || !strings.Contains(m.formFields[3].value, "## Steps to reproduce") {
+		t.Fatal("bug template should provide a structured, editable, multiline body")
+	}
+	if m.formTitle != "Create Issue · Bug report" {
+		t.Fatalf("form title = %q", m.formTitle)
+	}
+}
+
+func TestPullRequestFormUsesConfigurableMultilineTemplate(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.PullRequestTemplate.TitlePrefix = "Review: "
+	cfg.PullRequestTemplate.Body = "## Summary\n\n## Verification\n\n- [ ] Tests pass"
+	m := newModel(context.Background(), nil, "", Options{NoColor: true, Config: cfg})
+	m.selectedIssueRef = "CPU#4"
+	m.issues = []domain.Issue{{Number: 4, RepositoryName: "CPU", Title: "Implement graph view", Status: domain.IssueInProgress}}
+	m.beginForm(formPullRequest)
+	if m.formFields[0].value != "CPU#4" {
+		t.Fatalf("Issue reference prefill = %q", m.formFields[0].value)
+	}
+	if m.formFields[1].value != "Review: Implement graph view" {
+		t.Fatalf("PR title prefill = %q", m.formFields[1].value)
+	}
+	if !m.formFields[2].multiline || m.formFields[2].value != cfg.PullRequestTemplate.Body {
+		t.Fatalf("PR form did not load configured body: %#v", m.formFields[2])
+	}
+}
+
+func TestMultilineFormSupportsEnterAndMultilinePaste(t *testing.T) {
+	m := newModel(context.Background(), nil, "", Options{NoColor: true, Config: config.DefaultAppConfig()})
+	m.beginForm(formRepository)
+	m.formFocus = 1
+	m.formFields[1].value = "alpha"
+	m.formCaret = len([]rune(m.formFields[1].value))
+	m.handleFormKey("enter")
+	m.Update(tea.PasteMsg{Content: "beta\r\ngamma"})
+	if got, want := m.formFields[1].value, "alpha\nbeta\ngamma"; got != want {
+		t.Fatalf("multiline editing result = %q, want %q", got, want)
+	}
+}
+
+func TestMultilineFieldNavigationPreservesColumn(t *testing.T) {
+	value := "first\nsecond\nthird"
+	caret := len([]rune("first\nsec"))
+	if got, ok := moveMultilineCaret(value, caret, 1); !ok || got != len([]rune("first\nsecond\nthi")) {
+		t.Fatalf("moving caret down = (%d, %t)", got, ok)
+	}
+	if got := multilineLineBoundary(value, caret, false); got != len([]rune("first\n")) {
+		t.Fatalf("Home boundary = %d", got)
+	}
+	if lines := multilineFieldLines(value, caret, true, "placeholder", 2); len(lines) < 2 || !strings.Contains(strings.Join(lines, "\n"), "second") {
+		t.Fatalf("multiline viewport omitted its caret line: %#v", lines)
 	}
 }

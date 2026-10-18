@@ -139,6 +139,12 @@ func (s *Store) resolveEntityID(ctx context.Context, typ, ref string) (string, e
 		return x.ID, err
 	case "completion":
 		return s.resolveCompletionID(ctx, ref)
+	case "note":
+		row, err := s.p().must(ctx, fmt.Sprintf("note %q", ref), `SELECT id FROM notes WHERE id=? OR title=? COLLATE NOCASE LIMIT 1`, ref, ref)
+		if err != nil {
+			return "", err
+		}
+		return str(row, "id"), nil
 	default:
 		return "", fmt.Errorf("%w: unknown graph entity type %q", domain.ErrInvalid, typ)
 	}

@@ -1,6 +1,6 @@
 # Contributing to IDIOS
 
-Start with [AGENTS.md](../AGENTS.md), then read the matching feature guide in this directory.
+Start with [AGENTS.md](../../AGENTS.md), then read the matching feature guide in this directory.
 IDIOS deliberately keeps the Engine small and modular. A feature belongs in the layer that owns
 its behavior; please do not move workflow logic into the interface that happens to trigger it.
 
@@ -35,7 +35,7 @@ end-to-end smoke test. On Windows without Make, run `./scripts/build.ps1`, `go t
 ```text
 cmd/idios ──────> internal/cli ──────┐
                                      ├──> internal/application ──> internal/domain
-cmd/idios-tui ──> internal/tui ──────┘              │
+cmd/idios-tui ──> tui ──────┘              │
                                                     v
                                              internal/ports
                                                     ^
@@ -54,7 +54,7 @@ cmd/idios-tui ──> internal/tui ──────┘              │
   helpers. Do not add another driver wrapper, pool, ORM or generic Repository framework without a
   demonstrated need.
 - **CLI** (`internal/cli`) owns parsing/help/response routing; it must not contain domain rules.
-- **TUI** (`internal/tui`) owns the full-screen event loop, clickable controls, navigation, forms, layout and graph rendering; it calls the same
+- **TUI** (`tui`) owns the full-screen event loop, clickable controls, navigation, forms, layout and graph rendering; it calls the same
   Application methods as CLI. It must not issue SQL, shell out to `idios`, or import `internal/cli`.
 - **Render/logging**: CLI output formatting belongs in `internal/render`; diagnostic logs belong in
   `internal/logger` and must go to stderr.
@@ -73,8 +73,8 @@ cmd/idios-tui ──> internal/tui ──────┘              │
 6. Expose the use case through CLI and/or TUI. Both adapters must call the same Application method.
 7. Extend graph projection only if the entity/relation belongs in graph navigation. Test edge types,
    references, ordering and neighborhood depth.
-8. Update `docs/COMMANDS.md`, `docs/TUI.md`, `docs/WORKFLOW.md`, `docs/STORAGE.md` and
-   `docs/JSON_PROTOCOL.md` when the public behavior or contract changes.
+8. Update `docs/user/CLI_REFERENCE.md`, `docs/development/TUI.md`, `docs/development/WORKFLOW.md`, `docs/development/STORAGE.md` and
+   `docs/development/JSON_PROTOCOL.md` when the public behavior or contract changes.
 
 ## Workflow invariants
 
@@ -103,4 +103,4 @@ Add one command definition in `internal/cli/registry.go` and the associated Appl
 The generated help is guarded by tests; update tests whenever public flags or output fields change.
 
 
-The TUI uses Bubble Tea v2 and Lip Gloss v2 only inside `internal/tui`; keep these dependencies out of Domain, Application, Ports and Storage.
+The TUI uses Bubble Tea v2 and Lip Gloss v2 only inside `tui`; keep these dependencies out of Domain, Application, Ports and Storage.
