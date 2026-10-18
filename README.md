@@ -1,188 +1,103 @@
-# IDIOS
+# IDIOS Engine 1.0.0 (Go)
 
-> A terminal notebook for learning. You read; IDIOS keeps your questions, answers, notes, highlights and ideas, and connects them.
+**IDIOS is a local-first personal work and knowledge graph.** It brings repositories, issues, cross-repository prerequisites, projects, concepts, labels, milestones, pull-request reviews and a visible graph into one lightweight application.
 
-```text
-$ idios
+Version 1.0.0 is the first stable Go Engine release, implemented from the architecture agreed for IDIOS. The previous Python/SQLite application is not modified by this source tree. Its task records can be imported into a separate Engine database.
 
-Welcome back.
+## V1 scope
 
-Last context:
-Goal: Learn Assembly
-Source: Programming from the Ground Up
-Location: Chapter 2
+- Independent Go packages for domain rules, application use cases, storage, CLI and TUI.
+- Local SQLite storage, schema versioning, transactions and activity events.
+- One `main` branch per Repository. The Branch model has room for future base/source branch relationships, but branch creation, checkout and merging are intentionally not enabled yet.
+- Issues and Sub-issues, cross-repository `depends_on` prerequisites, cycle protection, and readiness/blocker status.
+- A PR is required to finish an Issue. The PR contains the review/explanation; accepting it atomically creates a `CompletionRecord` on `main` and marks the Issue `done`.
+- This is a workflow record model, **not Git**: no commit hashes, file snapshots, source-code diffs or real merge are created.
+- Projects spanning repositories; Concepts; typed knowledge relations; global and Repository labels; Repository- and Project-scoped milestones; Repository settings; activity history.
+- A full-screen, mouse-aware TUI with persistent GitHub-inspired tabs, dashboard cards, clickable forms, Repository pages and a typed Graph Explorer. The CLI has a versioned JSON contract suitable for future GUI clients.
+- Read-only import of legacy IDIOS Concepts and Tasks.
 
-Continue? [Y/n]
+## Requirements
 
-> Why does the CPU need registers?
-✓ Question saved · q1
+- Go 1.25+
+- A C compiler (`gcc` or `clang`) on `PATH`. SQLite is bundled by
+  `github.com/mattn/go-sqlite3`, so no system SQLite library or headers are required.
+- `make` is used by the examples below; on Windows run `go build ./cmd/idios` (or
+  `./scripts/build.ps1`) and `go test ./...` directly.
 
-> Because registers provide very fast CPU-local storage.
-✓ Answer saved · a1
+## Build and test
 
-> highlight: Registers can be accessed much faster than memory.
-✓ Highlight saved · h1
-
-> concept: CPU Register
-✓ Concept created
-
-> link CPU Register to Memory
-✓ Relation created
+```sh
+make test
+make build
+./dist/idios help
+./dist/idios-tui
 ```
 
-Everything is stored in one SQLite file on your machine.
+`make build` writes both binaries to `dist/`; `make smoke` runs the end-to-end
+cross-Repository workflow against `dist/idios`. To run checks directly:
 
-## Install
-
-```bash
-pip install .          # or: make setup for a dev environment
-pip install ".[notifications]"  # optional desktop provider for Linux/macOS
-idios
+```sh
+go test ./...
+go test -race ./...
+go vet ./...
 ```
 
-Requires Python 3.10+. Data lives in `~/.idios/` (set `IDIOS_HOME` to move it).
+## Quick start: cross-Repository prerequisite
 
-## Using it
+Create two repositories and related concepts/issues:
 
-Just type. IDIOS recognises a few explicit forms and files everything under your current context (goal, source, chapter/page), so you never repeat `--source`.
-
-| You type | IDIOS saves |
-|---|---|
-| `Why is memory slower?` | a question |
-| `Because it is off-chip.` / `A small storage…` | an answer to the open question |
-| `note: …` `highlight: …` `quote: …` | a note / highlight / quote |
-| `concept: CPU Register` | a concept (and selects it) |
-| `link A to B` or `link A to B as contains` | a typed relation (unknown names become concepts) |
-| `goal: …` `source: …` `book: …` `article: …` `paper: …` `video: …` `website: …` | sets context, registering what is new |
-| `chapter 2` `page 14` `section 2.3` `time 12:30` | your location in the source |
-| `author: …` `category: …` `tag: a, b` `topic: …` | metadata for the current source / concept |
-| `answer q3: …` | an answer to an older question |
-
-When a line could mean more than one thing, IDIOS asks:
-
-```text
-> registers are important
-What should I save this as?
-
-1. Note
-2. Answer to current question
-3. Ignore
+```sh
+idios repo create --name CPU --description 'CPU and hardware learning'
+idios repo create --name ARLIZ --description 'Book and chapter writing'
+idios concept create --name 'Electricity fundamentals'
+idios issue create --repo CPU --title 'Learn basic electricity'
+idios issue create --repo ARLIZ --title 'Write ARLIZ chapter three'
+idios issue concept --issue ARLIZ#1 --concept 'Electricity fundamentals'
+idios issue depends --issue ARLIZ#1 --on CPU#1
 ```
 
-Relation types: `related_to` `depends_on` `uses` `contains` `part_of` `explains` `contrasts_with` `prerequisite_of`.
+Attempting to start the ARLIZ Issue now returns a `blocked` error. Complete the CPU prerequisite through the required PR workflow:
 
-Full reference with examples: [docs/COMMANDS.md](docs/COMMANDS.md).
-
-### Directives
-
-```text
-:help  :status  :plan  :review  :schedule  :search <query>  :sources  :questions [all]  :concepts
-:highlights  :quotes  :notes  :goals  :graph [concept]  :shelf
-:show <name or id>  :delete <id>  :forget  clear  :intro  :quit
+```sh
+idios issue start --id CPU#1
+idios pr create --issue CPU#1 --description 'Explain the work, what was learned, and the outcome.'
+idios pr accept --id CPU!1 --summary 'Electricity fundamentals reviewed'
+idios issue start --id ARLIZ#1
 ```
 
-`:show` works for sources, concepts, questions and goals and accepts a name or a short id such as `q3`, `c1`, `s2`. `:delete` always asks first.
+After writing the chapter, finish it through its own PR:
 
-`source add` walks you through title, author, type, path/URL and shelf. Local files are **referenced, never copied**.
-
-`url: https://…` and `path: ~/Shelf/book.pdf` set where the current source lives.
-
-### The evening loop (did / plan / remind / review)
-
-Tell IDIOS at night what you did, plan tomorrow, and let it ask you the next evening what got done.
-
-```text
-> did: Finished chapter 2 exercises      ~ done today
-> plan: Read chapter 3                   ~ tomorrow (default)
-> plan monday: Review stack frames       ~ today, tomorrow, monday…sunday, 2026-10-12, +3d
-> :plan                                  ~ today and tomorrow
-> done tk2 tk4   /   skip tk3
-> :schedule 21:00                        ~ review time
-> :schedule install                      ~ asks first, then adds a cron / Task Scheduler job
-> :review                                ~ done? [y]es · [n]ot yet → tomorrow · [s]kip
+```sh
+idios pr create --issue ARLIZ#1 --description 'Chapter contents, supporting concepts, and review notes.'
+idios pr accept --id ARLIZ!1 --summary 'Chapter three drafted and reviewed'
+idios completion list
 ```
 
-At the review time the OS job runs `idios remind` and sends a native desktop notification. Click it to open a dark, card-based schedule dashboard with overdue, today, completed, skipped and upcoming items, colored counters, the daily review time and linked goal/source context. The window is read-only.
+Repository-local issue references use `Repository#number`; PR references use `Repository!number`. Stable entity IDs are also accepted by most commands.
 
-- **Windows 10:** IDIOS uses WinRT Toast notifications and registers a per-user `idios:` link so clicking the toast can open the schedule even after the reminder job exits. The Windows path uses built-in PowerShell/WinRT and does not need the optional provider extra. Task Scheduler runs the reminder only while you're logged in.
-- **Linux/BSD:** `desktop-notifier` is preferred when installed; `notify-send` is the fallback. From the source checkout, install `pip install ".[notifications]"` for the optional provider. `notify-send` may be supplied by `libnotify-bin`.
-- **macOS:** from the source checkout, install the optional provider with `pip install ".[notifications]"`; `terminal-notifier` can also provide click-to-open activation. Native Notification Center delivery depends on macOS notification permissions and a supported/signed Python build; see the [desktop-notifier macOS notes](https://github.com/samschott/desktop-notifier#notes-on-macos).
-- **Schedule window:** IDIOS uses a reusable dark Tkinter theme for its wordmark, cards, buttons, status chips and scrollable sections. Tkinter is included with the standard Windows Python installer and many Python builds; on minimal Linux installations you may need the OS package `python3-tk`.
-- **WSL:** interactive notifications need WSLg/DBus or another working desktop notification provider. Cron must be running, and WSL must be active at the scheduled time.
+## CLI and TUI
 
-If no interactive notification backend is available, IDIOS prints the reminder instead. When you next open IDIOS interactively it can offer the review, save the result as a note and move unfinished items to tomorrow. Nothing is installed without your confirmation; `idios schedule install --dry-run` shows the exact scheduler command. Outside the shell: `idios plan`, `idios review`, `idios remind`, `idios schedule status|install|remove|test`.
-
-### First run and clearing the screen
-
-The very first time you start `idios` at a terminal it shows a welcome banner (ASCII logo, what it is, three things to try) and waits for Enter. It appears once; `:intro` replays it. Every later interactive start shows the logo with a one-line tagline (`IDIOS_NO_LOGO=1` hides it).
-
-`clear` (or `cls`, `:clear`, or Ctrl-L) wipes the screen and redraws your goal/source/location. It changes no data. To forget the current concept and question instead, use `:forget`.
-
-### Help with examples
-
-`:help` is one screen. Each topic adds worked examples you can copy:
-
-```text
-:help learn   :help sources   :help context   :help concepts
-:help plan    :help search  :help manage    :help examples
+```sh
+idios --db ./idios.sqlite3 repo list
+idios --db ./idios.sqlite3 --json issue list
+idios --db ./idios.sqlite3 graph --from issue:ARLIZ#1 --depth 2
+idios-tui --db ./idios.sqlite3
+# from source: make tui
 ```
 
-### Colour
+The default database is `~/.idios/idios-engine.sqlite3`; `IDIOS_DB` or the global `--db PATH` can override it. Global flags can appear before or after the command. The TUI is a full-screen Bubble Tea application with clickable tabs/buttons, a Workspace sidebar, in-place forms, selectable lists and a typed Graph Explorer. It uses the same Application Core as the CLI and never invokes the CLI as a subprocess. It requires an interactive terminal; `idios-tui --no-color` renders a plain screen with no escape sequences. See [TUI guide](docs/TUI.md) for navigation, mouse support, forms and graph semantics.
 
-Colour is automatic on a terminal and off when piped. `NO_COLOR=1` disables it, `IDIOS_COLOR=always` forces it.
+Read more:
 
-### Outside the shell
+- [Architecture](docs/ARCHITECTURE.md)
+- [Commands](docs/COMMANDS.md)
+- [Terminal UI and Graph Explorer](docs/TUI.md)
+- [SQLite storage](docs/STORAGE.md)
+- [Workflow and invariants](docs/WORKFLOW.md)
+- [Extending IDIOS](docs/EXTENDING.md)
+- [Legacy migration](docs/MIGRATION.md)
+- [JSON protocol for GUI clients](docs/JSON_PROTOCOL.md)
 
-```bash
-idios search register
-idios show "CPU Register"
-idios shelf
-idios export --format markdown   # or json; written to ~/.idios/exports/
-idios run examples/01_first_session.idios   # play a script as a transcript
-idios --home /tmp/try run …                 # use a throwaway data folder
-```
+## Status and limitations
 
-## Examples
-
-[`examples/`](examples/README.md) has runnable sessions: a first session, a paper, a video course, building a graph, what happens when IDIOS is unsure, the Python API, and the evening loop.
-
-```bash
-./examples/run.sh --all     # or: make examples
-```
-
-## Architecture
-
-```text
-cli → shell (parser · render · io) → services → domain
-                                         ↓
-                                 storage (SQLite)
-```
-
-- `domain/` typed dataclasses, ULID-style ids, user-facing errors
-- `storage/` schema (`PRAGMA user_version`) and repositories — the only SQL
-- `services/` context & sessions, learning, knowledge & graph, sources & shelf, BM25 search, views, export
-- `shell/` input parser, interpreter loop, text rendering
-
-Rules from `AGENTS.md` are enforced by `tests/test_architecture.py`.
-
-## Project health with psx
-
-The shape of this repository (README, license, tests, CI, security policy, …) is checked by [psx](https://github.com/m-mdy-m/psx). Rules live in [`psx.yml`](psx.yml).
-
-```bash
-psx check            # read-only report
-psx fix --dry-run    # preview anything missing
-make psx             # same as psx check --fail-on error
-```
-
-CI runs it on every push, and `tests/test_experience.py` verifies that every file `psx.yml` expects exists.
-
-## Development
-
-```bash
-make setup && source .venv/bin/activate
-make check           # lint + tests
-make help            # all targets
-```
-
-Licensed under the Mozilla Public License 2.0 (MPL-2.0). See [`LICENSE`](LICENSE) for the full terms.
+This is the first Go Engine implementation, not feature parity with GitHub or the previous Python app. V1 does not include non-main Branch operations, real Git merging, auth/multi-user collaboration, sync, external Git hosting, advanced graph analytics or the future GUI. The module/port boundaries keep those as separate, incremental extensions.

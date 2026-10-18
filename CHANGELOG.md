@@ -1,8 +1,141 @@
 # Changelog
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to IDIOS are documented here. This file follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine release line
+uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.3]
+## [Unreleased]
+
+### Fixed
+
+- **TUI no-color rendering:** with `NO_COLOR`/`--no-color` the screen no longer emits escape
+  sequences. Lip Gloss rendered the previous bold+underline "active control" style as a
+  per-rune sequence, which split words such as `Overview` into fragments and made measured
+  line widths larger than the terminal. The active tab/control is now marked with a `▸` rune,
+  so nothing depends on styling to be understood.
+- **TUI compact view:** the too-small-terminal message can no longer render wider than the
+  terminal window.
+- **Concurrent first start:** two IDIOS processes opening the same fresh database at the same
+  moment could fail with `database is locked`, because SQLite reports `SQLITE_BUSY` at once
+  while another connection switches the journal mode. Opening now retries briefly while the
+  database is contended.
+- **Storage test portability:** the reserved-character database test keeps `?` (which needs URI
+  escaping) out of filenames on Windows, where it is not a legal filename character.
+
+## [1.0.0] - 2026-10-17 — First stable Go Engine release
+
+IDIOS 1.0.0 establishes the new Go Engine architecture and workflow model. This is a
+re-platforming from the former Python application, not an in-place Python upgrade and not
+a promise of complete feature parity. The legacy Python database remains separate and can
+be read through the explicit importer described in `docs/MIGRATION.md`.
+
+### Added
+
+- **Modular Go Engine:** distinct Domain, Application/use cases, Store ports, SQLite adapter,
+  CLI adapter, rendering helpers, configuration and independent TUI executable. The Core
+  does not depend on terminal UI code or CLI flag parsing.
+- **Workspace and Repository model:** local-first workspace data, independent repositories,
+  a default `main` branch for each repository, repository settings and repository-scoped
+  activity history.
+- **Issues and Sub-issues:** Issues replace the old Task model in the Go Engine; issue
+  descriptions, status, priority, due date, parent/child structure and blocker information
+  are represented in the domain. Parent cycles and dependency cycles are rejected.
+- **Cross-repository prerequisites:** typed `depends_on` relations connect Issues across
+  repositories. Starting an Issue is blocked while its required prerequisites remain
+  incomplete; ordinary semantic links do not automatically become blocking dependencies.
+- **Required PR workflow:** each Issue must be completed through a Pull Request. The PR
+  records the explanation/review context. Accepting it atomically creates a
+  `CompletionRecord` on the repository's logical `main` history and marks the Issue `done`.
+- **Logical Branch and completion history:** `main`, Branch metadata, PR target references,
+  completion sequence and history relationships. The current release intentionally activates
+  only `main`; additional branch creation, checkout and merging are future work.
+- **Projects across repositories:** project membership can group Issues from multiple
+  repositories without making the Project itself a Repository.
+- **Knowledge model and graph:** Concepts, typed semantic relations, Issue-to-Concept links,
+  and a graph representation that distinguishes semantic links from operational blockers.
+- **Labels and milestones:** global and repository-scoped Labels, plus Repository- and
+  Project-scoped Milestones that can be assigned to Issues.
+- **Activity records:** structured activity events for relevant domain changes.
+- **SQLite persistence:** `database/sql` with `github.com/mattn/go-sqlite3`, a focused
+  connection setup, transaction/query helpers, scalar/time conversion, typed SQLite error
+  mapping, and embedded, versioned SQL migrations.
+- **Safer storage startup:** SQLite connection settings for foreign-key enforcement and
+  busy timeout, WAL journaling for writable databases, read-only opening for legacy import, migration
+  sequence validation, rejection of a database schema newer than the Engine, and a version
+  re-check inside the migration write transaction to serialize concurrent initialization.
+- **Command-line interface:** separate `idios` executable, flags for the database path and
+  machine-readable JSON output, repository/issue/project/concept/label/milestone/PR/graph
+  commands, stable error envelopes and a versioned JSON output contract for future GUI clients.
+- **Terminal interface:** separate `idios-tui` full-screen application built with Bubble Tea v2 and Lip Gloss v2. It provides persistent GitHub-inspired Workspace/Repository tabs, a sidebar, dashboard cards, clickable mouse-aware controls, selectable lists, in-place editable forms with caret and paste support, visible operation/validation feedback, responsive compact layouts and a typed Graph Explorer with clickable nodes and blocking-vs-semantic relationship labels. It is event-driven and is not a line-oriented `cli --interactive` prompt. The UI dependencies are isolated to `internal/tui`.
+- **Legacy import command:** read-only import of Concepts and Tasks from the former Python
+  database into the new schema. Imported completed Tasks receive explicitly labelled
+  migration PRs and Completion Records so the new workflow invariant is preserved.
+- **Developer and project infrastructure:** Go-focused `Makefile`, PSX v3 project policy,
+  GitHub Actions CI and release workflows, CodeQL, secret scanning, Dependabot updates for
+  Go modules, pre-commit configuration, contribution guidance, security policy, issue/PR
+  templates, build scripts and end-to-end smoke workflow.
+- **Documentation:** architecture and extension guides, workflow invariants, SQLite storage
+  and migration guidance, CLI reference, TUI/Graph usage, JSON protocol and contributor
+  instructions.
+- **Tests:** domain/application/CLI/storage/TUI tests, including workflow invariants,
+  dependency handling, JSON contract behavior, SQLite migration behavior and graph rendering.
+
+### Changed
+
+- **Language and runtime:** the Engine source tree is now Go (`go.mod`) rather than the former
+  Python application. Go 1.25+ and a C compiler are required to build with `go-sqlite3` and
+  CGO enabled.
+- **Storage separation:** the Go Engine uses its own SQLite schema and default database
+  (`~/.idios/idios-engine.sqlite3`). It must not open the prior Python database as if it had
+  the same schema.
+- **Task semantics:** new work is represented as an Issue. Daily planning, reminders,
+  schedules and other Python-era Task behaviors are not implicitly reproduced by the Go
+  Issue workflow.
+- **Completion semantics:** an Issue is not marked `done` directly; PR acceptance and
+  Completion Record creation are the required path.
+- **UI entry points:** the primary interfaces for this release are the Go CLI and a separate
+  Go TUI. The TUI uses the Application Core directly rather than spawning the CLI as a
+  subprocess. A Python GUI is not part of this release; the JSON CLI contract is a future
+  integration boundary, not a long-running daemon/API server.
+- **Quality automation:** CI, CodeQL, release packaging and dependency update policy now target
+  the Go Engine and its build requirements. Release bundles are produced for Linux amd64,
+  macOS arm64 and Windows amd64 by the release workflow.
+- **Storage organization:** the former custom database driver/pool wrapper was removed in
+  favor of standard `database/sql`; connection management, query helpers, value conversion,
+  SQLite error translation and migrations have focused responsibilities.
+
+### Migration and compatibility notes
+
+- The previous Python application and its database are **not overwritten or migrated in
+  place**. Make a backup and use `legacy-import --from PATH` to read the old database.
+- The importer currently imports Concepts, Tasks as Issues in a `Legacy Tasks` Repository,
+  supported semantic relations and selected old metadata as migration context. It does not
+  yet import Goals, Sources, Questions, Notes, schedules or time-tracking records as first-class
+  Go entities; these remain untouched in the original database.
+- Old `done` Tasks receive an explicitly labelled synthetic migration PR and Completion
+  Record. This is migration scaffolding—not evidence that a real old PR or Git commit existed.
+- The `0.4.x` and earlier entries below are preserved as **historical releases of the legacy
+  Python application**. They are not Go Engine releases and do not imply feature parity.
+
+### Not included in 1.0.0
+
+- Real Git commits, repository file snapshots, source diffs or Git merge algorithms.
+- Creating/checking out multiple active Branches or merging Branch histories; only the logical
+  `main` workflow is active in this release.
+- Remote hosting integration, authentication, multi-user collaboration or synchronization.
+- Advanced graph analytics, dependency impact analysis beyond current readiness/blocker rules,
+  or a graphical desktop client.
+- Full feature parity with the former Python learning notebook, desktop schedule UI and
+  notification/reminder subsystem.
+
+---
+
+## Legacy Python application history
+
+The following entries document releases of the former Python implementation, retained as
+historical context. They are separate from the Go Engine's `1.x` version line.
+
+## [0.4.3] — Legacy Python application
 
 ### Added
 - Windows desktop notifications using WinRT Toast and per-user `idios:` URI activation, so clicking a notification can open the schedule details after the reminder process exits.
@@ -96,3 +229,4 @@ instead of a decision engine with an LLM client and a JSON state file.
 ### Removed
 - Decision engine, JEV, model registry, LLM client, JSON state storage,
   `rich` and `pydantic` dependencies. The core now has no runtime dependencies.
+

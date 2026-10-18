@@ -1,835 +1,95 @@
-# AGENTS.md
+# IDIOS Engineering Guide
 
-## Project
+IDIOS is a local-first personal work and knowledge graph. The current Engine is written in Go. It
+models Repositories, Issues/Sub-issues, Projects, Concepts, typed relations, PR review records,
+CompletionRecords, Labels, Milestones and a visible graph. V1 is a logical workflow system, not Git.
 
-IDIOS is a local-first personal cognitive and learning operating system.
-
-Its purpose is to provide one place for the user's learning sources, questions, answers, concepts, notes, highlights, quotes, goals, sessions, and relationships.
-
-The project must remain simple, local, deterministic, and usable without AI.
-
----
-
-# 1. Primary Engineering Principles
-
-## 1.1 Simplicity over abstraction
-
-Do not introduce abstractions unless they solve a real problem.
-
-Prefer:
+## Non-negotiable architecture
 
 ```text
-simple domain model
-simple storage
-simple commands
-simple state
-simple UI
+cmd/idios ──────> internal/cli ──────┐
+                                     ├──> internal/application ──> internal/domain
+cmd/idios-tui ──> internal/tui ──────┘              │
+                                                    v
+                                             internal/ports
+                                                    ^
+                                                    │
+                                         internal/storage/sqlite
 ```
 
-Avoid architecture for architecture's sake.
+- `domain` is pure Go: no SQL, terminal I/O, CLI flags, logging or UI libraries.
+- `application` owns workflow rules and coordinates use cases.
+- `ports` defines the persistence boundary.
+- `storage/sqlite` owns SQL, connection settings, migration and transactions. `connection.go` is the
+  only location allowed to call `sql.Open`; use `database/sql` with `mattn/go-sqlite3` directly.
+- `cli` parses commands and routes output; `tui` renders/navigates. Neither adapter duplicates
+  workflow validation or writes SQL. CLI and TUI must never import one another.
+- `render` owns CLI human/JSON output. `logger` owns optional diagnostics on stderr.
 
----
+Prefer focused files grouped by domain area. Do not add a custom driver, generic repository
+framework, event-sourcing platform, DI framework, service daemon or networking layer unless a
+real requirement justifies it.
 
-## 1.2 Local-first
+## Workflow invariants
 
-IDIOS must work completely offline.
+1. New Repositories begin with the default Branch `main`.
+2. A PR is a review and acceptance record. Accepting it is not a Git merge and writes no files.
+3. An Issue reaches `done` only when its PR is accepted; the CompletionRecord, Issue transition, PR
+   acceptance and associated activity events must commit atomically.
+4. Only explicit `depends_on` relations block work. Concept/semantic relations do not.
+5. Cross-Repository prerequisites are allowed; parent/Sub-issue relationships stay in one
+   Repository. Dependency and parent cycles are rejected.
+6. A parent Issue cannot start or be accepted while active Sub-issues remain unfinished.
+7. Application validation should fail early with a readable error; the storage transaction must
+   re-check important mutable state to protect against concurrent callers.
+8. V1 supports `main` only. Do not fake Git hashes, file snapshots, merge commits, branch switching
+   or non-main merge behavior.
 
-Do not require:
+## Storage and migrations
 
-* API keys
-* network connectivity
-* cloud accounts
-* remote databases
-* AI services
+- Use `s.run(ctx, ...)` for coupled writes that must be atomic.
+- Keep SQL in the appropriate file under `internal/storage/sqlite`.
+- A schema change adds a new `migrations/NNNN_description.sql` file. Shipped migrations are
+  immutable. Never instruct a user to delete their database to update the schema.
+- Classify `go-sqlite3` errors by typed result codes, not error-string matching.
+- Enable and test SQLite foreign keys, busy timeout, path escaping, transaction rollback and
+  read-only legacy import.
+- The legacy importer must never modify its source database.
 
-Tests must be runnable offline.
+## TUI and graph
 
----
+- TUI is a presentation adapter over Application; graph rendering only displays the graph returned
+  by Application/Storage. It must not infer relations or apply blocker policy.
+- Keep persistent navigation and common button actions visible, empty states helpful and references
+  consistent (`CPU#4` for Issues, `CPU!2` for PRs).
+- Respect `NO_COLOR`, `TERM=dumb`, and `--no-color`. The full-screen TUI intentionally requires an interactive TTY; tests should exercise the Bubble Tea model directly without starting a terminal session.
+- Do not convey `BLOCKED` by color alone. Always print the word.
+- Graph nodes must show type/reference and status when meaningful. Edge labels remain visible so
+  `depends_on` cannot be confused with semantic links.
+- Sort graph nodes/edges deterministically and clip long labels to the panel width.
 
-## 1.3 Interactive-first
+## Adding a feature
 
-The main user interface is:
+1. Define or update Domain types/invariants.
+2. Add a small typed method to `ports.Store`.
+3. Implement persistence and a migration if needed.
+4. Add the Application use case and behavior tests.
+5. Expose it through CLI and/or TUI using the same Application method.
+6. Update graph projection if relevant and test node/edge semantics and depth.
+7. Update `docs/COMMANDS.md`, `docs/TUI.md`, `docs/WORKFLOW.md`, `docs/STORAGE.md` and the JSON
+   protocol if behavior/contracts change.
 
-```bash
-idios
+## Required local checks
+
+```sh
+make fmt-check
+make test
+make vet
+make test-race
+make build
+make smoke
+make psx-check
 ```
 
-The user should be able to perform common learning actions interactively.
-
-Do not force the user to memorize commands such as:
-
-```bash
-idios question add ...
-idios answer add ...
-idios highlight add ...
-```
-
-Those operations may exist internally or as secondary CLI commands, but the interactive environment is primary.
-
----
-
-# 2. Core User Experience
-
-The user starts:
-
-```bash
-idios
-```
-
-The system restores or establishes context.
-
-Example:
-
-```text
-Goal: Learn Assembly
-Source: Programming from the Ground Up
-Chapter: 2
-
->
-```
-
-The user types:
-
-```text
-> What is a register?
-```
-
-The system records a question.
-
-The user types:
-
-```text
-> A small storage location inside the CPU.
-```
-
-The system records an answer when appropriate.
-
-The user types:
-
-```text
-> highlight: ...
-```
-
-The system creates a highlight.
-
-The user types:
-
-```text
-> note: ...
-```
-
-The system creates a note.
-
-The user types:
-
-```text
-> concept: CPU Register
-```
-
-The system creates a concept.
-
----
-
-# 3. Do Not Build a Chatbot
-
-Interactive input must not imply that IDIOS needs an LLM.
-
-The interpreter should be deterministic.
-
-Use:
-
-* explicit directives
-* lightweight command recognition
-* context
-* predictable parsing
-
-Do not add an LLM parser.
-
-Do not call external AI APIs to understand commands.
-
----
-
-# 4. Input Model
-
-The interactive shell should support three types of input.
-
-## 4.1 Directives
-
-Prefixed with `:`.
-
-Examples:
-
-```text
-:help
-:search register
-:sources
-:questions
-:concepts
-:status
-:quit
-```
-
-Directives are deterministic.
-
----
-
-## 4.2 Explicit actions
-
-Examples:
-
-```text
-highlight: registers are...
-quote: ...
-note: ...
-concept: CPU Register
-link CPU Register to Memory
-```
-
-These should be easy to recognize.
-
----
-
-## 4.3 Natural learning statements
-
-Example:
-
-```text
-Why does the CPU need registers?
-```
-
-This should become a question.
-
-Example:
-
-```text
-I think registers are faster because they are inside the CPU.
-```
-
-This can become a note or answer depending on active context.
-
-If classification is ambiguous, ask the user.
-
-Do not guess silently when doing so could create incorrect data.
-
----
-
-# 5. Ambiguity
-
-When input is ambiguous:
-
-```text
-> registers are important
-```
-
-Do not invent a complex interpretation.
-
-Ask:
-
-```text
-Save as:
-1. Note
-2. Answer to current question
-3. Ignore
-
->
-```
-
-The user should be able to choose quickly.
-
----
-
-# 6. Context
-
-Context is essential.
-
-Maintain:
-
-```text
-current_goal
-current_source
-current_location
-current_concept
-current_topic
-current_session
-```
-
-Context should be persisted when useful.
-
-Example:
-
-```text
-Source:
-Programming from the Ground Up
-
-Location:
-Chapter 2
-```
-
-Then:
-
-```text
-> highlight this
-```
-
-can use the current source.
-
----
-
-# 7. Session Behavior
-
-Sessions are internal learning state.
-
-Do not require:
-
-```bash
-idios session start
-```
-
-for normal usage.
-
-Starting IDIOS should restore the previous context where possible.
-
-Example:
-
-```text
-Welcome back.
-
-Goal: Learn Assembly
-Source: Programming from the Ground Up
-Location: Chapter 2
-
-Continue? [Y/n]
-```
-
-Session creation should happen automatically.
-
----
-
-# 8. Domain Entities
-
-Core entities:
-
-```text
-Source
-Book
-Article
-Paper
-Video
-Website
-
-Goal
-Session
-
-Question
-Answer
-Note
-Highlight
-Quote
-
-Concept
-Topic
-Category
-Tag
-
-Person
-Author
-
-Relation
-```
-
-Do not create additional entity types unless there is a concrete use case.
-
----
-
-# 9. Source Model
-
-Use a generic source abstraction.
-
-```text
-Source
-├── Book
-├── Article
-├── Paper
-├── Video
-└── Website
-```
-
-Shared source functionality should not be duplicated across individual source types.
-
----
-
-# 10. File References
-
-Never copy user books, papers, or other large external resources into IDIOS automatically.
-
-Store references:
-
-```text
-path
-url
-```
-
-Example:
-
-```text
-~/Shelf/Books/Assembly/book.pdf
-```
-
-The system must treat these as references.
-
----
-
-# 11. Knowledge Graph
-
-Graph relationships must be explicit.
-
-Example:
-
-```text
-CPU
-  └── contains
-       └── Register
-```
-
-Do not use tags to represent semantic relationships.
-
-Do not use categories to represent semantic relationships.
-
-Use graph edges.
-
----
-
-# 12. Search
-
-Search must be local.
-
-BM25 is the preferred initial implementation.
-
-Do not add vector search just because it sounds modern.
-
-Do not add embeddings without a demonstrated need.
-
-Search should operate across relevant entities.
-
----
-
-# 13. Storage
-
-Keep storage local.
-
-Preferred implementation:
-
-```text
-SQLite
-```
-
-unless a simpler storage mechanism is demonstrably better.
-
-Use migrations only when necessary.
-
-Do not introduce external database infrastructure.
-
----
-
-# 14. IDs
-
-Every persistent entity should have a stable ID.
-
-IDs should not depend on titles.
-
-Bad:
-
-```text
-id = "CPU Register"
-```
-
-Good:
-
-```text
-concept_01H...
-```
-
-Titles may change.
-
-IDs should not.
-
----
-
-# 15. Timestamps
-
-Persistent records may contain:
-
-```text
-created_at
-updated_at
-```
-
-Use consistent timezone handling.
-
-Do not make timestamps part of the user experience unless useful.
-
----
-
-# 16. Source Locations
-
-A source interaction may contain:
-
-```text
-chapter
-page
-section
-paragraph
-timestamp
-```
-
-Only store fields that are available.
-
-Do not require exact locations when the user does not provide them.
-
----
-
-# 17. Error Handling
-
-Errors should be human-readable.
-
-Bad:
-
-```text
-ValueError: invalid enum: SOURCE_CONTEXT
-```
-
-Good:
-
-```text
-Could not find that source.
-
-Try:
-  :sources
-```
-
-Never dump internal implementation details during normal interactive use.
-
----
-
-# 18. Data Safety
-
-Never silently delete learning data.
-
-For destructive operations:
-
-```text
-Delete Question #12?
-
-[y/N]
-```
-
-Provide safe alternatives where possible.
-
----
-
-# 19. CLI Design
-
-The CLI should have a small surface.
-
-Possible commands:
-
-```text
-idios
-idios search <query>
-idios show <id>
-idios shelf
-idios export
-```
-
-The interactive shell handles most operations.
-
-Do not create dozens of top-level commands.
-
----
-
-# 20. Interactive Commands
-
-Use directives:
-
-```text
-:help
-:status
-:search
-:sources
-:questions
-:concepts
-:highlights
-:quotes
-:notes
-:graph
-:goals
-:shelf
-:quit
-```
-
-These are examples, not a requirement to implement every directive immediately.
-
----
-
-# 21. Help
-
-`:help` should show only useful commands.
-
-Example:
-
-```text
-IDIOS
-
-Learning:
-  Ask a question normally.
-  note: ...
-  highlight: ...
-  quote: ...
-  concept: ...
-  link A to B
-
-Navigation:
-  :search <query>
-  :sources
-  :questions
-  :concepts
-  :status
-
-Exit:
-  :quit
-```
-
-Do not print a giant manual.
-
----
-
-# 22. UX Feedback
-
-Every successful mutation should provide concise feedback.
-
-Example:
-
-```text
-✓ Question saved
-```
-
-Not:
-
-```text
-QuestionEntity successfully persisted to SQLite database.
-```
-
-Internal terminology should not leak into normal UI.
-
----
-
-# 23. Architecture
-
-A simple architecture is preferred:
-
-```text
-CLI
- │
- ▼
-Interactive Shell
- │
- ▼
-Application Services
- │
- ├── Sources
- ├── Learning
- ├── Knowledge
- ├── Graph
- └── Search
- │
- ▼
-Storage
-```
-
-Keep domain logic independent from terminal rendering.
-
----
-
-# 24. Separation of Concerns
-
-Do not put business logic directly inside CLI handlers.
-
-Prefer:
-
-```text
-CLI
- → application service
- → domain
- → repository
-```
-
-The exact architecture may remain lightweight.
-
-Do not create dozens of interfaces without need.
-
----
-
-# 25. Testing
-
-Tests should cover:
-
-## Domain
-
-* source creation
-* question creation
-* answer creation
-* highlights
-* quotes
-* concepts
-* relationships
-
-## Context
-
-* restore context
-* change source
-* change goal
-* current location
-
-## Search
-
-* indexing
-* BM25 ranking
-* filtering
-* entity retrieval
-
-## Interactive shell
-
-* question input
-* note input
-* highlight input
-* directives
-* ambiguity handling
-
-## Persistence
-
-* save
-* reload
-* update
-* deletion safety
-
----
-
-# 26. No AI in Tests
-
-Tests must never depend on:
-
-* OpenAI
-* Gemini
-* Qwen
-* Claude
-* remote APIs
-
-The complete test suite must work offline.
-
----
-
-# 27. Development Priority
-
-Implement in this order:
-
-```text
-1. Storage
-2. Domain model
-3. Sources
-4. Goals
-5. Context
-6. Questions / Answers
-7. Notes
-8. Highlights / Quotes
-9. Concepts
-10. Relationships
-11. Search
-12. Interactive shell
-13. Shelf
-14. Export
-15. Polish
-```
-
-Do not implement everything simultaneously.
-
-Build a working vertical slice early.
-
----
-
-# 28. First Vertical Slice
-
-The first usable version should support:
-
-```text
-idios
-```
-
-Then:
-
-```text
-> source Programming from the Ground Up
-```
-
-```text
-> goal Learn Assembly
-```
-
-```text
-> What is a register?
-```
-
-```text
-> A small storage location inside the CPU.
-```
-
-```text
-> note: registers are much faster than RAM
-```
-
-```text
-> concept: CPU Register
-```
-
-```text
-> :questions
-```
-
-and:
-
-```text
-> :search register
-```
-
-If this works reliably, the core idea is alive.
-
----
-
-# 29. What Not To Do
-
-Do not:
-
-* add an AI dependency
-* build a cloud backend
-* add authentication
-* build multi-user support
-* create a web frontend before the core works
-* build a vector database
-* build a complex agent system
-* require Obsidian
-* copy source files
-* create a huge command hierarchy
-* overengineer the graph
-* implement speculative features
-* optimize before usage reveals a problem
-
----
-
-# 30. Final Engineering Rule
-
-When uncertain between two implementations:
-
-> Choose the smaller implementation that preserves the user's learning experience.
-
-IDIOS should feel like a small personal tool with a deep internal model.
-
-Not like a giant platform.
+Do not require network connectivity or AI services at runtime or in tests. Dependencies are fetched
+as a setup step; tests should use temporary local databases.
