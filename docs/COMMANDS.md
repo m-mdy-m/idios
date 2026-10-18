@@ -1,273 +1,263 @@
 # IDIOS command reference
 
-Everything you can type, with examples. Output shown is real (colour omitted).
+Everything the Engine CLI accepts, grouped by what it is for. Run `idios help` for the
+one-screen version, or `idios help COMMAND...` (for example `idios help issue create`) for
+one command's flags. `idios <group> --help` works too.
 
-- [How input is understood](#how-input-is-understood)
-- [Learning](#learning) · [Context](#context) · [Sources](#sources) · [Concepts and relations](#concepts-and-relations)
-- [Planning: did, plan, done, skip](#planning) · [Review and reminders](#review-and-reminders)
-- [Looking things up](#looking-things-up) · [Managing data](#managing-data) · [Screen and help](#screen-and-help)
-- [Command line](#command-line) · [Environment variables](#environment-variables) · [Cheat sheet](#cheat-sheet)
+- [Running it](#running-it)
+- [Global flags](#global-flags)
+- [References](#references)
+- [Repositories](#repositories) · [Projects](#projects) · [Issues](#issues) · [Pull requests](#pull-requests)
+- [Completions and branches](#completions-and-branches) · [Concepts and relations](#concepts-and-relations)
+- [Labels](#labels) · [Milestones](#milestones) · [Graph](#graph) · [Activity](#activity)
+- [Legacy import](#legacy-import)
+- [Environment variables](#environment-variables) · [Cheat sheet](#cheat-sheet)
 
-## How input is understood
+## Running it
 
-Each line you type is classified by a few fixed rules, in this order:
+```sh
+idios [--db PATH] [--json] [--verbose] COMMAND [FLAGS]
+idios help COMMAND...
+idios protocol
+idios version
+```
 
-| You type | It is |
+The default database is `~/.idios/idios-engine.sqlite3`. Global flags may appear before or
+after the command. Every successful mutation prints one short confirmation; failures print
+one readable line plus a usage hint (and never a stack trace).
+
+The workflow rules — what can start, what counts as done — are in
+[WORKFLOW.md](WORKFLOW.md). This page is only the command surface.
+
+### Terminal UI
+
+```sh
+idios-tui
+idios-tui --db ./work.sqlite3
+idios-tui --no-color
+make tui # run from the source checkout
+```
+
+The TUI is an independent, full-screen Bubble Tea presentation adapter with clickable tabs, a workspace sidebar, forms and a typed Graph Explorer. It calls the same Application Core as CLI. Bubble Tea and Lip Gloss are presentation-only dependencies. The `--db` flag selects the Engine database, while `--no-color` disables color for monochrome terminals or accessibility setups: in that mode the screen carries no escape sequences and marks the current control with `▸`. `NO_COLOR` and `TERM=dumb` are respected automatically. Unlike the CLI, the TUI requires an interactive terminal and does not support redirected stdin/stdout. Keyboard navigation and the Graph Explorer are documented in
+[TUI.md](TUI.md).
+
+## Global flags
+
+| Flag | Meaning |
 | --- | --- |
-| `:name …` | a directive (command) |
-| `keyword: text` | that kind of record (`note:`, `goal:`, `did:` …) |
-| `link A to B` | a relation |
-| `chapter 2`, `page 14` | a location update |
-| a line ending in `?` | a question |
-| anything else | IDIOS asks what to save it as |
+| `--db PATH` | Engine database file (default `~/.idios/idios-engine.sqlite3`, `IDIOS_DB` overrides) |
+| `--json` | One JSON document on stdout; errors become a JSON envelope on stderr |
+| `--no-json` | Return to human output for the rest of the argument list |
+| `--verbose` | Write monitoring logs to stderr (same as `--log-level debug`) |
+| `--log-level LEVEL` | `debug`, `info`, `warn`, `error` |
 
-```text
-> registers are important
-What should I save this as?
+Logs always go to stderr and only when asked for, so scripts can rely on stdout.
 
-1. Note
-2. Answer to current question
-3. Ignore
-> 1
-✓ Note saved · n2
+## References
+
+A few commands accept either a stable ID (`repo_01H…`) or a short, human reference:
+
+| Form | Example | Used by |
+| --- | --- | --- |
+| `Repository#number` | `CPU#12` | Issues |
+| `Repository!number` | `CPU!3` | Pull requests |
+| `concept:Name`, `label:global/lang`, `branch:Repo/main`, `milestone:repository/CPU/Release`, `completion:Repo/main/1` | | `graph --from`, relations |
+
+Repository, Project, Concept, Label and Milestone names are also accepted where unambiguous;
+a name that matches two things is rejected with a message telling you to use the scoped form.
+
+## Repositories
+
+Repositories own Issues, Pull Requests and Branches. Creating one also creates its default
+`main` Branch.
+
+```sh
+idios repo create --name CPU --description 'CPU and hardware learning'
+idios repo list
+idios repo show --repo CPU
+idios repo settings get --repo CPU
+idios repo settings set --repo CPU --key color --value blue
 ```
 
-Every saved item gets a short id: `q3` question, `a1` answer, `n2` note, `h1` highlight, `qt1` quote,
-`c1` concept, `s2` source, `g1` goal, `p1` person, `t1` topic, `k1` category, `tg1` tag, `tk4` task.
-Use these ids with `:show`, `:delete`, `done`, `skip`, `answer`.
+## Projects
 
-## Learning
+A Project groups Issues and can span Repositories. Ownership of an Issue stays with its
+Repository.
 
-### Question — end the line with `?`
-```text
-> Why does the CPU need registers?
-✓ Question saved · q1
-```
-It becomes the *current question*. It remembers your goal, source, chapter and page.
-
-### Answer
-A reply that reads like an answer is attached to the open question:
-```text
-> Because registers give very fast CPU-local storage.
-✓ Answer saved · a1
-  to: Why does the CPU need registers?
-```
-Explicit forms:
-```text
-> answer: Because the ALU reads them directly.      ~ to the current question
-> answer q3: Because the ALU reads them directly.   ~ to any older question
+```sh
+idios project create --name 'Assembly track' --description 'Everything about x86'
+idios project list
+idios project add-issue --project 'Assembly track' --issue CPU#2
+idios project issues --project 'Assembly track'
 ```
 
-### `note:`  `highlight:`  `quote:`
-```text
-> note: RAM is slower because it is off-chip.
-✓ Note saved · n1
-> highlight: Registers can be accessed much faster than memory.
-✓ Highlight saved · h1
-> quote: "Simplicity is prerequisite for reliability."
-✓ Quote saved · qt1
-```
-Highlights and quotes belong to the current source and location. Notes attach to the current context.
+## Issues
 
-## Context
+The unit of work. `--parent` makes a Sub-issue (same Repository only); `depends` adds a
+blocking prerequisite that may cross Repositories.
 
-Context is what IDIOS remembers so you never repeat yourself: goal, source, chapter/page/section/time, concept, question.
-
-| Input | Effect |
-| --- | --- |
-| `goal: Learn Assembly` | create or select a goal |
-| `source: Ground Up` | select a source (a unique piece of the title is enough) |
-| `chapter 2` · `page 14` · `section 2.3` · `time 12:30` | set the location (`time` is for videos) |
-| `:forget` | forget the current concept and question |
-| `:status` | show where you are and counts |
-
-```text
-> :status
-IDIOS STATUS
-Goal:      Learn Assembly
-Source:    Programming from the Ground Up
-Location:  Chapter 2
-…
-```
-Quit and come back: IDIOS offers `Continue?` from where you stopped.
-
-## Sources
-
-Local files are **referenced, never copied**.
-
-```text
-> book: Programming from the Ground Up       ~ also article: paper: video: website:
-✓ Source added and selected
-Author (Enter to skip): Jonathan Bartlett
-Path / URL (Enter to skip): ~/Shelf/Books/Assembly/pgu.pdf
+```sh
+idios issue create --repo CPU --title 'Learn basic electricity' --priority p2 --due 2026-02-01
+idios issue create --repo CPU --title 'Learn registers' --parent CPU#1
+idios issue list --repo CPU --status in_progress
+idios issue show --id CPU#1
+idios issue start --id CPU#1
+idios issue cancel --id CPU#1
+idios issue depends --issue ARLIZ#1 --on CPU#1
+idios issue undepends --issue ARLIZ#1 --on CPU#1
+idios issue deps --id ARLIZ#1
+idios issue concept --issue CPU#2 --concept 'CPU Register'
+idios issue label --issue CPU#2 --label p2
+idios issue milestone --issue CPU#2 --milestone 'milestone:repository/CPU/Chapter 2'
 ```
 
-| Input | Effect |
-| --- | --- |
-| `source add` | step-by-step: title, author, type, path/URL, shelf |
-| `source: <name>` | switch to a registered source |
-| `author: Jonathan Bartlett` | add an author to the current source |
-| `category: Assembly` | shelf category for the current source |
-| `tag: cpu, low-level` | tags for the current source |
-| `url: https://…` · `path: ~/x.pdf` | where the current source lives |
-| `:sources` · `:shelf` | list sources · the shelf grouped by type and category |
+`--status` is one of `open`, `in_progress`, `done`, `cancelled`. An Issue cannot be set to
+`done` by hand; only an accepted Pull Request does that.
+
+## Pull requests
+
+The review record for finishing an Issue. The description is required and holds the work
+explanation and result.
+
+```sh
+idios pr create --issue CPU#1 --description 'What I did, what I learned, and the result'
+idios pr list --repo CPU --status open
+idios pr show --id CPU!1
+idios pr accept --id CPU!1 --summary 'Electricity fundamentals reviewed'
+idios pr close --id CPU!1
+```
+
+`--status` is one of `open`, `accepted`, `closed`. Accepting the PR is the only path that
+completes the Issue; it writes the CompletionRecord on `main` in the same transaction.
+
+## Completions and branches
+
+```sh
+idios completion list
+idios completion list --repo CPU
+idios branch list --repo CPU
+```
+
+Completion history is the log of accepted work per Branch. V1 exposes `main` only.
 
 ## Concepts and relations
 
-```text
-> concept: CPU Register
-✓ Concept created
-  linked to: What is a register?          ~ typed right after a question
-> topic: Systems Programming               ~ files the current concept under a topic
-> link CPU to CPU Register as contains
-✓ Relation created
-  CPU Register —related_to→ Memory
-```
-`link A to B` creates unknown names as concepts. `as <type>` is optional (default `related_to`):
-`related_to` `depends_on` `uses` `contains` `part_of` `explains` `contrasts_with` `prerequisite_of`.
+Concepts are global knowledge nodes. Relations are typed *semantic* edges — they never block
+work. Use `issue depends` for blocking.
 
-```text
-> :graph CPU
-CPU
-└── contains → CPU Register
-    └── related_to → Memory
-> :concepts
+```sh
+idios concept create --name 'CPU Register' --description 'Storage inside the CPU'
+idios concept list
+idios relation add --from-type concept --from 'CPU' --to-type concept --to 'Register' --type contains
 ```
 
-## Planning
+`--type` defaults to `related_to`. Allowed: `related_to`, `uses`, `contains`, `part_of`,
+`explains`, `contrasts_with`, `uses_concept`, `references`, `supports`, `contradicts`,
+`implements`, `implemented_by`. `issue concept` is the shortcut for a `uses_concept` edge.
 
-Tasks are small items with a day. `tk` ids.
+## Labels
 
-```text
-> did: Finished chapter 2 exercises          ~ done today
-✓ Done saved · tk1
-> plan: Read chapter 3                       ~ tomorrow is the default
-✓ Planned · tk2
-  Tomorrow · Sat 10 Oct
-> plan monday: Review stack frames
-> plan 2026-10-20: Exam
-> plan +3d: Revisit pointers
-> did yesterday: Read the paper              ~ log something you forgot
-```
-When words: `today` `tomorrow` `monday`…`sunday` (next one) `+Nd` or `YYYY-MM-DD`.
+Labels are global or scoped to one Repository. When you assign by name, a local label wins
+over a same-name global one.
 
-```text
-> done tk2 tk4         ~ mark done (several at once)
-✓ Marked done: Read chapter 3
-> skip tk3             ~ drop it without doing it
-> :plan                ~ overdue, today, tomorrow and the week ahead
-Plan
-Today · Fri 9 Oct
-tk1   ✓ Finished exercises
-Tomorrow · Sat 10 Oct
-tk2   ○ Read chapter 3
+```sh
+idios label create --name p2 --description 'High priority'
+idios label create --name lang --scope repository --repo CPU --color blue
+idios label list
+idios label list --scope CPU
+idios label assign --issue CPU#2 --label p2
 ```
 
-## Review and reminders
+## Milestones
 
-The loop: **night** → `did:` + `plan:` → **next evening** reminder → `:review`.
+A Milestone is scoped to a Repository or a Project. Assigning a Project milestone first
+requires the Issue to be in that Project.
 
-| Input | Effect |
-| --- | --- |
-| `:review` | go through today's open tasks one by one |
-| `:schedule` | show the review time and whether the reminder is on |
-| `:schedule 21:30` | change the review time (24-hour) |
-| `:schedule install` | shows the job, asks, then installs it |
-| `:schedule remove` | removes only IDIOS's own job |
-| `:schedule test` | sends a test notification now |
-
-```text
-> :review
-tk2  Read chapter 3
-  done? [y]es · [n]ot yet → tomorrow · [s]kip:
-```
-The result is saved as a note; "not yet" items move to tomorrow.
-
-### What `:schedule install` actually does
-
-It adds **one line** to your crontab (Task Scheduler on Windows):
-```text
-0 21 * * * /usr/bin/python3 -m idios remind # idios-reminder
-```
-Every day at 21:00 the OS runs `idios remind`: it sends a desktop notification listing your open items, or prints text if no interactive backend exists, and stays silent if nothing is open. Clicking the notification opens a read-only schedule window with task dates, states, linked goal/source details and the review time.
-
-- **Windows 10:** WinRT Toast uses a per-user Start Menu shortcut with an AppUserModelID and the `idios:` protocol handler for click-to-open. The Task Scheduler job runs only while you are logged in; no Python notification extra is needed.
-- **Linux/BSD:** from the source checkout, install `pip install ".[notifications]"` for the optional `desktop-notifier` provider; `notify-send` (for example, package `libnotify-bin`) is the fallback.
-- **macOS:** the optional `desktop-notifier` provider supports click callbacks; `terminal-notifier` is another click-to-open option. Notification delivery depends on macOS permissions and a supported/signed Python build. See the [desktop-notifier macOS notes](https://github.com/samschott/desktop-notifier#notes-on-macos).
-- **Schedule window:** Tkinter is required. Minimal Linux installs may need the `python3-tk` OS package.
-- **WSL:** interactive notifications require WSLg/DBus or another available desktop provider; cron must be running and WSL active at the scheduled time.
-
-Install the job only after reviewing `idios schedule install --dry-run`; remove it with `:schedule remove`.
-
-## Looking things up
-
-| Input | Shows |
-| --- | --- |
-| `:search register` | ranked results across everything (BM25, plain words) |
-| `:show CPU Register` · `:show q1` | a source, concept, question or goal in detail |
-| `:questions` · `:questions all` | open questions · every question |
-| `:concepts` `:sources` `:goals` `:notes` `:highlights` `:quotes` | lists |
-| `:graph [concept]` | relation tree |
-| `:shelf` | sources by type and category |
-
-```text
-> :search register
-1. Concept — CPU Register  [c1]
-2. Question — What is a register? · Programming from the Ground Up  [q1]
-3. Highlight — Registers are fast. · Programming from the Ground Up  [h1]
+```sh
+idios milestone create --owner CPU --title 'Chapter 2' --due 2026-03-01
+idios milestone create --scope project --owner 'Assembly track' --title 'Foundations'
+idios milestone list --scope repository --owner CPU
+idios milestone assign --issue CPU#2 --milestone 'Chapter 2'
 ```
 
-## Managing data
+`--scope` is `repository` (default) or `project`.
 
-```text
-> :delete q3
-Delete Question q3? This also removes 1 answer. [y/N]
+## Graph
+
+```sh
+idios graph
+idios graph --from issue:CPU#1 --depth 2
 ```
-`:delete` always asks. Data lives in `~/.idios/idios.db` (SQLite). Export with `idios export` (below).
 
-## Screen and help
+Without `--from` it prints the whole graph; with it, the neighbourhood within `--depth`
+edges (default 1). Nodes and edges are sorted so output and JSON stay stable.
 
-| Input | Effect |
-| --- | --- |
-| `clear` · `cls` · `:clear` · Ctrl-L | clear the screen and redraw the context |
-| `:help` | one-screen overview |
-| `:help learn \| sources \| context \| concepts \| plan \| search \| manage \| examples` | topic with examples |
-| `:intro` | replay the welcome banner |
-| `:quit` · `quit` · `exit` · Ctrl-D | leave (everything is already saved) |
+## Activity
 
-## Command line
-
-```bash
-idios                               # open the shell
-idios search register               # search without opening the shell
-idios show "CPU Register"
-idios shelf
-idios plan                          # today, tomorrow, the week
-idios review                        # settle today's open tasks
-idios remind                        # what the scheduler runs
-idios schedule status|install|remove|test [--at 21:30] [--dry-run] [--yes]
-idios export [-f markdown|json] [-o FILE]
-idios run examples/01_first_session.idios     # play a script
-idios --home /tmp/try …             # use another data folder
-idios --version
+```sh
+idios activity list
+idios activity list --type issue --id i_01H… --limit 20
 ```
+
+Recent workflow events. Not an event-sourcing log and not the source of truth for state.
+
+## Legacy import
+
+Reads an existing IDIOS 0.4.x SQLite file **read-only** and imports its Concepts and Tasks
+(Tasks become Issues; historical done Tasks get a labelled synthetic PR). The source file is
+never modified.
+
+```sh
+idios legacy-import --from ./old-idios.sqlite3
+```
+
+Details and caveats: [MIGRATION.md](MIGRATION.md).
 
 ## Environment variables
 
-| Variable | Effect |
+| Variable | Meaning |
 | --- | --- |
-| `IDIOS_HOME` | data folder (default `~/.idios`) |
-| `NO_COLOR=1` / `IDIOS_COLOR=always` | turn colour off / force it |
-| `IDIOS_NO_LOGO=1` | hide the logo on interactive start |
+| `IDIOS_DB` | Default database path when `--db` is not given |
+| `IDIOS_LOG_LEVEL` | Enable stderr logging (`debug`, `info`, `warn`, `error`, or `off`) |
 
 ## Cheat sheet
 
-```text
-LEARN     Why…?   answer: …   note: …   highlight: …   quote: …
-CONTEXT   goal: …  source: …  chapter 2  page 14  section 2.3  time 12:30  :forget  :status
-SOURCES   book: …  article: …  paper: …  video: …  website: …  source add  author: …  tag: …  url: …
-GRAPH     concept: …  topic: …  link A to B [as type]  :graph [name]
-PLAN      did: …  plan [when]: …  done tk1 tk2  skip tk3  :plan  :review  :schedule [HH:MM|install|remove|test]
-FIND      :search …  :show X  :questions [all]  :concepts  :sources  :goals  :notes  :highlights  :quotes  :shelf
-OTHER     :delete ID  clear  :help [topic]  :intro  :quit
+```sh
+# A small cross-Repository run
+idios repo create --name CPU
+idios repo create --name ARLIZ
+idios issue create --repo CPU --title 'Learn basic electricity'
+idios issue create --repo ARLIZ --title 'Write chapter three'
+idios issue depends --issue ARLIZ#1 --on CPU#1
+idios issue start --id ARLIZ#1                 # blocked until CPU#1 is done
+idios issue start --id CPU#1
+idios pr create --issue CPU#1 --description 'Reviewed and wrote up the result.'
+idios pr accept --id CPU!1 --summary 'Electricity basics reviewed'
+idios issue start --id ARLIZ#1                 # now allowed
+idios completion list
+idios graph --from issue:ARLIZ#1 --depth 3
 ```
+
+
+## Development commands
+
+The Makefile provides a repeatable quality gate for contributors. These are build-tool commands,
+not part of the `idios` runtime CLI.
+
+| Command | Purpose |
+| --- | --- |
+| `make build` | Build `dist/idios` and `dist/idios-tui`. |
+| `make test` | Run all Go tests. |
+| `make test-race` | Run tests with the race detector. |
+| `make test-cover` | Run tests and write `coverage.out`. |
+| `make vet` | Run `go vet ./...`. |
+| `make fmt` / `make fmt-check` | Format Go files / verify formatting without edits. |
+| `make check` | Formatting check, tests and vet. |
+| `make smoke` | Build and run the cross-Repository workflow smoke test. |
+| `make ci` | Full local gate: checks, race tests, build and smoke test. |
+| `make psx-check` / `make psx-fix` | Check/fix repository shape using PSX v3. |
+| `make tidy` | Reconcile `go.mod` and `go.sum`. |
+| `make clean` | Remove generated binaries and coverage data. |
+
+The storage layout, migration rules and connection options are documented in [STORAGE.md](STORAGE.md);
+terminal navigation is documented in [TUI.md](TUI.md).
