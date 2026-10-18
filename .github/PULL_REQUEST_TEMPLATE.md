@@ -1,38 +1,38 @@
-## What does this change?
+## What changed?
 
-<!-- One paragraph. What problem does it solve, or what capability does it add? -->
+<!-- State the user-visible behavior or architecture improvement. -->
 
-## Motivation
+## Why?
 
-<!-- Why is this the right approach? Link to a relevant issue if there is one. -->
+<!-- Link the Issue and explain the design decision. -->
 
 Closes #
 
 ## Type of change
 
-- [ ] Bug fix (non-breaking)
-- [ ] New feature (non-breaking)
-- [ ] Breaking change (incompatible change to commands or the database)
-- [ ] Refactor / internal cleanup (no behaviour change)
-- [ ] Documentation only
+- [ ] Bug fix
+- [ ] Feature
+- [ ] Breaking change (CLI, JSON protocol or database schema)
+- [ ] Refactor with no intended behavior change
+- [ ] Documentation / CI only
 
-## Checklist
+## Validation
 
-### Correctness
-- [ ] Logic is covered by at least one unit test in `tests/`
-- [ ] New tests pass locally: `pytest -q`
-- [ ] Existing tests still pass
+- [ ] `make fmt-check`
+- [ ] `make test`
+- [ ] `make vet`
+- [ ] `make test-race` (when practical)
+- [ ] `make smoke` (for workflow changes)
+- [ ] `make psx-check` (if PSX is installed)
+- [ ] New/changed behavior has regression tests
 
-### Documentation
-- [ ] Public API changes are reflected in docstrings
-- [ ] `CHANGELOG.md` has an entry under `[Unreleased]`
-- [ ] `docs/COMMANDS.md` updated if commands changed
+## Storage and compatibility
 
-## Testing notes
+- [ ] No schema change
+- [ ] Added a new numbered migration (existing migrations remain unchanged)
+- [ ] Legacy importer remains read-only
+- [ ] User-visible JSON/TUI/CLI behavior and docs were updated
 
-<!-- Describe what you tested and how. Include any edge cases exercised. -->
+## Notes for reviewers
 
-## Breaking changes
-
-<!-- If breaking: describe the migration path. What must callers change? -->
-<!-- If not breaking: delete this section. -->
+<!-- Describe trade-offs, failure cases tested, and any known limitation. -->

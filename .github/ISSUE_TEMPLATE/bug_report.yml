@@ -1,19 +1,19 @@
 name: Bug report
-description: Something is broken or behaves unexpectedly.
+description: A reproducible problem in the Go Engine, CLI or TUI.
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Before filing: start `idios` and paste the output of `:status` below.
-        Check that your Python is ≥ 3.10 and your virtualenv is activated.
+        Before filing, try the latest commit and include the exact command or TUI action that failed.
+        Do not upload a personal SQLite database; redact paths and sensitive content.
 
   - type: textarea
     id: description
     attributes:
       label: What happened?
-      description: Clear description of what went wrong.
-      placeholder: "typing `highlight: ...` crashed with ..."
+      description: Describe the unexpected behavior and the operation you were attempting.
+      placeholder: "`idios issue start --id ARLIZ#3` returns ..."
     validations:
       required: true
 
@@ -21,7 +21,6 @@ body:
     id: expected
     attributes:
       label: What did you expect?
-      description: What should have happened instead?
     validations:
       required: true
 
@@ -29,73 +28,46 @@ body:
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: Minimal sequence of commands that reliably triggers the bug.
+      description: Minimal commands or TUI key sequence that demonstrates the problem.
       placeholder: |
-        1. `./scripts/setup.sh`
-        2. `source .venv/bin/activate`
-        3. type `...` in the shell
-        4. Error appears
+        1. `idios --db ./test.sqlite3 repo create --name CPU`
+        2. `idios --db ./test.sqlite3 issue list --repo CPU`
+        3. Observe the incorrect output
     validations:
       required: true
 
   - type: textarea
-    id: status_output
+    id: environment
     attributes:
-      label: "`:status` output"
-      description: Paste the full output of `:status`.
-      render: shell
+      label: Environment
+      description: Paste `go version`, OS, architecture, whether `CGO_ENABLED=1`, and whether this was CLI or TUI.
+      placeholder: |
+        go version go1.25.x linux/amd64
+        OS: Linux
+        UI: TUI
     validations:
       required: true
 
   - type: textarea
-    id: error_output
+    id: output
     attributes:
-      label: Error output / traceback
-      description: Full traceback or error message.
-      render: shell
+      label: Error or output
+      description: Relevant error/output. Remove secrets and personal data.
+      render: text
     validations:
       required: false
 
-  - type: dropdown
-    id: python_version
-    attributes:
-      label: Python version
-      options:
-        - "3.10"
-        - "3.11"
-        - "3.12"
-        - "3.13"
-        - Other (describe in notes)
-    validations:
-      required: true
-
-  - type: dropdown
-    id: os
-    attributes:
-      label: Operating system
-      options:
-        - Linux
-        - macOS
-        - Windows
-        - Other
-    validations:
-      required: true
-
   - type: textarea
-    id: config
+    id: database
     attributes:
-      label: Relevant config (sanitise secrets)
-      description: |
-        Mention if you set IDIOS_HOME or other environment variables
-        or environment variables you set.
-      render: toml
+      label: Database / migration context
+      description: Engine schema version if known; never attach the database itself.
     validations:
       required: false
 
   - type: textarea
     id: notes
     attributes:
-      label: Additional notes
-      description: Anything else that might help reproduce or fix this.
+      label: Additional context
     validations:
       required: false

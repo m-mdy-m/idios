@@ -1,29 +1,43 @@
 name: Feature request
-description: Propose a new capability or improvement.
+description: Propose a focused improvement to the IDIOS Engine or its adapters.
 labels: ["enhancement", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        IDIOS is small on purpose. Before proposing, ask: does this help someone learn?
+        IDIOS aims to remain local-first, deterministic and modular. Prefer one concrete use case over a broad feature wishlist.
 
   - type: textarea
     id: problem
     attributes:
       label: What problem are you solving?
-      description: Describe the situation where IDIOS falls short today, not just "add feature X".
-      placeholder: "When I have 200 concepts, `:search` returns too many unrelated results because ..."
+      description: Describe the user workflow that is difficult today.
+      placeholder: "When I connect issues between CPU and ARLIZ, I cannot ..."
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: What would you type, and what would you see? Which command or input form?
+      label: Proposed behavior
+      description: What would the CLI/TUI accept and what result should it show?
       placeholder: |
-        > :review old
-        ...
+        Command or TUI flow:
+        Expected output:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Main area
+      options:
+        - Domain / workflow
+        - SQLite storage / migration
+        - CLI / JSON protocol
+        - TUI / Graph Explorer
+        - Documentation / CI
+        - Future GUI / IPC
     validations:
       required: true
 
@@ -33,26 +47,6 @@ body:
       label: Alternatives considered
     validations:
       required: false
-
-  - type: dropdown
-    id: area
-    attributes:
-      label: Which part does this touch?
-      multiple: true
-      options:
-        - Shell input (new form or command)
-        - Questions and answers
-        - Notes, highlights, quotes
-        - Sources and shelf
-        - Concepts and graph
-        - Planning and reminders
-        - Search
-        - Export
-        - Storage
-        - Documentation
-        - CI / tooling
-    validations:
-      required: true
 
   - type: textarea
     id: notes
