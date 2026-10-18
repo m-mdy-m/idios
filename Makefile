@@ -1,39 +1,63 @@
-# idios: a terminal notebook for learning
-#
-# Common entry points. Run `make help` to list targets.
+GO ?= go
+PSX ?= psx
+BIN_DIR ?= dist
+CGO_ENABLED ?= 1
+GOFILES := $(shell find cmd internal -type f -name '*.go' -print)
 
-SHELL := bash
-.DEFAULT_GOAL := help
-PYTHON ?= python3
+.PHONY: all build tui test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 
-.PHONY: help setup run test lint check psx examples export build clean
+all: ci
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+## Build
+build: ## Build both native entry points into $(BIN_DIR)/.
+	mkdir -p $(BIN_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags='-s -w' -o $(BIN_DIR)/idios ./cmd/idios
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags='-s -w' -o $(BIN_DIR)/idios-tui ./cmd/idios-tui
 
-setup: ## Create .venv and install idios with dev tools
-	./scripts/setup.sh
+## Interactive UI
+tui: ## Run the full-screen, mouse-aware TUI against the default Engine database.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) run ./cmd/idios-tui
 
-run: ## Start the interactive learning shell
-	$(PYTHON) -m idios
+## Quality
+fmt: ## Format Go source files in-place.
+	$(GO) fmt ./...
 
-test: ## Run the test suite
-	./scripts/test.sh
+fmt-check: ## Fail if any Go source file is not gofmt-formatted.
+	@unformatted="$$(gofmt -l $(GOFILES))"; \
+	if [ -n "$$unformatted" ]; then echo "Unformatted Go files:"; echo "$$unformatted"; exit 1; fi
 
-lint: ## Syntax-check every module
-	$(PYTHON) -m compileall -q src tests
+test: ## Run all tests.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
 
-psx: ## Check the project's shape with psx (README, tests, CI, ...)
-	psx check --fail-on error
+test-race: ## Run all tests under the race detector.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -race ./...
 
-check: lint test ## Lint + tests
+test-cover: ## Run tests and write coverage.out.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -coverprofile=coverage.out ./...
 
-examples: ## Run every example script against a throwaway data folder
-	./examples/run.sh --all
+vet: ## Run go vet.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
 
-build: ## Build sdist and wheel
-	./scripts/build.sh
+check: fmt-check test vet ## Run the fast local quality gate.
 
-clean: ## Remove build artifacts and caches
-	./scripts/clean.sh
+ci: check test-race build smoke ## Run the full local CI gate (PSX is a separate optional target).
+
+smoke: build ## Exercise a cross-Repository workflow end-to-end.
+	sh ./scripts/smoke.sh
+
+psx-check: ## Check repository structure and documentation with PSX v3.
+	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found. Install github.com/m-mdy-m/psx/cmd/psx or skip this optional check." >&2; exit 2; }
+	$(PSX) check
+
+psx-fix: ## Apply safe project-shape fixes defined by psx.yml.
+	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found; install github.com/m-mdy-m/psx/cmd/psx first." >&2; exit 2; }
+	$(PSX) fix
+
+tidy: ## Reconcile go.mod and go.sum.
+	$(GO) mod tidy
+
+clean: ## Remove build outputs and coverage data.
+	rm -rf $(BIN_DIR) coverage.out
+
+help: ## List Make targets.
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)

@@ -1,7 +1,7 @@
-# See https://pre-commit.com for more information
+# Source formatting and quick correctness checks for the Go Engine.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -12,9 +12,14 @@ repos:
       - id: mixed-line-ending
   - repo: local
     hooks:
-      - id: tests
-        name: pytest
-        entry: python3 -m pytest -q
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -w
+        language: system
+        types: [go]
+      - id: go-test
+        name: go test
+        entry: go test ./...
         language: system
         pass_filenames: false
         stages: [pre-push]
