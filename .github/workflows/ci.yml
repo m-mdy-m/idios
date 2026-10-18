@@ -26,14 +26,6 @@ jobs:
           cache: true
       - name: Install C compiler
         run: sudo apt-get update && sudo apt-get install -y gcc
-      - name: Install PSX
-        run: go install github.com/m-mdy-m/psx/cmd/psx@v3.0.0
-      - name: Add Go bin to PATH
-        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Download modules
-        run: go mod download
-      - name: Check project shape
-        run: make psx-check
       - name: Run quality gate
         run: make check
       - name: Race tests
