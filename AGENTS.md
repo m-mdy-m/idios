@@ -7,14 +7,15 @@ CompletionRecords, Labels, Milestones and a visible graph. V1 is a logical workf
 ## Non-negotiable architecture
 
 ```text
-cmd/idios ──────> internal/cli ──────┐
-                                     ├──> internal/application ──> internal/domain
-cmd/idios-tui ──> tui ──────┘              │
-                                                    v
-                                             internal/ports
-                                                    ^
-                                                    │
-                                         internal/storage/sqlite
+cmd/idios ───────────────> internal/cli ───────────┐
+                                                   ├──> internal/application ──> internal/domain
+cmd/idios-tui ───────┐                             │
+                     ├──> internal/tuilaunch ─> tui│
+cmd/idios-tui-demo ──┘                             v
+                                            internal/ports
+                                                   ^
+                                                   │
+                                        internal/storage/sqlite
 ```
 
 - `domain` is pure Go: no SQL, terminal I/O, CLI flags, logging or UI libraries.
@@ -22,7 +23,7 @@ cmd/idios-tui ──> tui ──────┘              │
 - `ports` defines the persistence boundary.
 - `storage/sqlite` owns SQL, connection settings, migration and transactions. `connection.go` is the
   only location allowed to call `sql.Open`; use `database/sql` with `mattn/go-sqlite3` directly.
-- `cli` parses commands and routes output; `tui` renders/navigates. Neither adapter duplicates
+- `cli` parses commands and routes output; `tuilaunch` selects the clean or isolated demo SQLite database, and `tui` renders/navigates. Neither adapter duplicates
   workflow validation or writes SQL. CLI and TUI must never import one another.
 - `render` owns CLI human/JSON output. `logger` owns optional diagnostics on stderr.
 

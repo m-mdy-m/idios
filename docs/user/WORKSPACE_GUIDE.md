@@ -62,4 +62,4 @@ Overview and Repository Activity show recent event records, such as workspace ch
 
 ## Demo data and existing work
 
-`idios seed demo` adds a realistic sample once per database. It does not create a separate namespace or automatically remove data. To avoid mixing examples with your own records, use another `IDIOS_DB` path before seeding.
+Use `idios-tui-demo` to explore the built-in sample workspace. It stores data in `~/.idios/demo/idios-demo.sqlite3` by default (override with `IDIOS_DEMO_DB`) and automatically seeds it idempotently. The normal `idios-tui` uses `~/.idios/idios-engine.sqlite3` and never seeds sample data on startup. The demo binary ignores `IDIOS_DB` when selecting its default path; however, an explicit `--db PATH` overrides either default, so do not point both apps at the same file unless that is intentional. The CLI command `idios seed demo` remains an explicit operation on the CLI-selected database and can mix sample records into it. Database files and existing records are never silently deleted.

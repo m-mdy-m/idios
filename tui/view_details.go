@@ -269,7 +269,7 @@ func (m *model) renderHelp(c *canvas, p palette) {
 		{"overview", "Overview"}, {"repositories", "Repositories"}, {"projects", "Projects"}, {"issues", "Issues"},
 		{"pull_requests", "Pull requests"}, {"graph", "Knowledge graph"}, {"notes", "Notes"}, {"quotes", "Quotes"},
 		{"jobs", "Scheduled jobs"}, {"notifications", "Notification inbox"}, {"logs", "Logs"}, {"settings", "Settings"},
-		{"profile", "Edit profile"}, {"refresh", "Refresh data"}, {"seed", "Load demo data"}, {"quit", "Quit"},
+		{"profile", "Edit profile"}, {"refresh", "Refresh data"}, {"quit", "Quit"},
 	}
 	for _, shortcut := range shortcuts {
 		key := strings.TrimSpace(m.config.Keyboard[shortcut.action])

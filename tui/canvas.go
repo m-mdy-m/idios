@@ -1,8 +1,9 @@
 package tui
 
 import (
-	"charm.land/lipgloss/v2"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 )
 
 type canvas struct {

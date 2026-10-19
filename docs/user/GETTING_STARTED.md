@@ -2,48 +2,54 @@
 
 ## 1. Launch IDIOS
 
-From a source checkout, run:
+From a source checkout, choose one of the two TUI entry points:
 
 ```sh
+# Normal workspace: starts with no sample records in a new database
 go run ./cmd/idios-tui
+
+# Demo workspace: creates sample data in a separate database automatically
+go run ./cmd/idios-tui-demo
 ```
 
-The TUI opens in an Intro screen by default. Choose **Enter Overview** to enter the workspace, **Customize IDIOS** to change preferences, or **Load demo workspace** to explore realistic connected data.
+The standard TUI opens in Intro and does not include a “Load Demo Workspace” button. Launch the demo executable when you want to explore sample repositories, linked issues, concepts, projects, pull requests and graph relationships. The two apps share the interface but use different default database paths.
 
-For a prebuilt version, build both apps with `make build` and launch `dist/idios-tui` (or `dist\\idios-tui.exe` on Windows).
+For prebuilt binaries, run `make build`, then launch `dist/idios-tui` or `dist/idios-tui-demo` (Windows: `dist\idios-tui.exe` or `dist\idios-tui-demo.exe`).
 
 ## 2. Choose a database
 
-The default database is `~/.idios/idios-engine.sqlite3`. Use `IDIOS_DB=/path/to/demo.sqlite3` or the CLI `--db PATH` flag to work with a different database. The app creates tables and applies schema migrations at startup.
+The normal workspace defaults to `~/.idios/idios-engine.sqlite3`. It honors `IDIOS_DB` or `--db PATH`. A fresh database receives schema migrations only; the standard TUI does not seed demo records.
 
-The demo seed is written into the currently selected database. To keep it separate from real work, choose a new database path before seeding:
+The demo workspace defaults to `~/.idios/demo/idios-demo.sqlite3`. Set `IDIOS_DEMO_DB` to override its default. The demo binary intentionally ignores `IDIOS_DB`, so setting the normal workspace path does not redirect its default seed into your real workspace. You can also pass `--db PATH` directly to either executable for an explicit override; do not point both at the same file unless you deliberately want to share one workspace.
+
+Both binaries support `--check` for automation and diagnostics. It initializes and checks the selected database without requiring an interactive terminal. The demo binary also ensures that sample data exists:
 
 ```sh
-IDIOS_DB=./idios-demo.sqlite3 go run ./cmd/idios seed demo
-IDIOS_DB=./idios-demo.sqlite3 go run ./cmd/idios-tui
+./dist/idios-tui --check --db ./clean-workspace.sqlite3
+IDIOS_DEMO_DB=./demo-workspace.sqlite3 ./dist/idios-tui-demo --check
 ```
 
 PowerShell:
 
 ```powershell
-$env:IDIOS_DB = "$PWD\\idios-demo.sqlite3"
-go run ./cmd/idios seed demo
-go run ./cmd/idios-tui
+.\dist\idios-tui.exe --check --db .\clean-workspace.sqlite3
+$env:IDIOS_DEMO_DB = "$PWD\demo-workspace.sqlite3"
+.\dist\idios-tui-demo.exe --check
 ```
 
-## 3. Load demo data
+## 3. Explore demo data
 
-Run `go run ./cmd/idios seed demo` in the selected database, or choose **Load demo workspace** in the UI. Seeding is atomic and designed to be idempotent: repeating it does not add duplicate demo records.
-
-The sample includes:
+Launch `idios-tui-demo` (or run `go run ./cmd/idios-tui-demo`). Its seed is atomic and idempotent. The sample includes:
 
 - The IDIOS, CDIN and ZINX repositories.
-- A child Issue and its parent, plus `depends_on` prerequisite examples.
+- Parent and child Issues, plus `depends_on` prerequisite examples.
 - A cross-repository Project with Issues from multiple repositories.
 - Concepts, typed relationships, labels and a milestone.
-- An open PR, an accepted PR and a completion record.
-- Notes linked to an Issue, a Concept and a Repository; some Notes are visible in the graph.
-- Rotating Quotes, scheduled Jobs, a Notification, important pins and recent activity.
+- Open and accepted Pull Requests and a Completion record.
+- Notes linked to Issues, Concepts and Repositories, including graph-visible Notes.
+- Rotating Quotes, scheduled Jobs, a Notification, important pins and recent Activity.
+
+The demo database persists between launches so you can explore changes. It is separate from the normal workspace by default. If you explicitly run `idios seed demo`, the CLI seeds the database selected by `IDIOS_DB` or `--db`; use that command only when you intend to add sample data to that database. IDIOS never automatically deletes an existing database or removes sample records previously added by an older build.
 
 ## 4. Keyboard basics
 
@@ -85,5 +91,4 @@ matches your operating system and processor:
 - Windows: `windows-amd64` or `windows-arm64` (`.zip`)
 
 Extract the archive and run `./idios help` (PowerShell: `.\idios.exe help`) to confirm that the CLI launches.
-Run `./idios-tui` (PowerShell: `.\idios-tui.exe`) from an interactive terminal to open the full-screen interface. The release archive includes both programs
-and the user guides. `SHA256SUMS.txt` is published alongside the archives for integrity checks.
+Run `./idios-tui` for the clean workspace or `./idios-tui-demo` for the isolated sample workspace (PowerShell: `.\idios-tui.exe` or `.\idios-tui-demo.exe`). The release archive includes the CLI and both TUI variants. `SHA256SUMS.txt` is published alongside the archives for integrity checks.

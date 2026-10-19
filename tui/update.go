@@ -3,10 +3,11 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"fmt"
 	"strings"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -194,8 +195,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.handleAction("job-action:new")
 			case "mark_notifications_read":
 				return m, m.handleAction("notification-action:read-all")
-			case "seed":
-				return m, m.handleAction("demo:seed")
 			case "quit":
 				return m, tea.Quit
 			}

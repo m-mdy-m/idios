@@ -11,4 +11,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 go build -trimpath -o "dist/idios-tui.exe" ./cmd/idios-tui
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Built dist/idios.exe and dist/idios-tui.exe"
+go build -trimpath -o "dist/idios-tui-demo.exe" ./cmd/idios-tui-demo
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Built dist/idios.exe, dist/idios-tui.exe, and dist/idios-tui-demo.exe"

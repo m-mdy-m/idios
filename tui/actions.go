@@ -296,10 +296,6 @@ func (m *model) handleAction(action string) tea.Cmd {
 				return operationMsg{message: message, err: err}
 			}
 		}
-	case "demo":
-		if value == "seed" {
-			return m.runOperation("Demo workspace loaded.", func() error { _, err := m.app.SeedDemo(m.ctx); return err })
-		}
 	case "graph":
 		switch {
 		case value == "all":

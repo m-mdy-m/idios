@@ -3,9 +3,10 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"idios/internal/domain"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *model) goBack() {
@@ -219,7 +220,7 @@ func (m *model) findGraphNode(id string) *domain.GraphNode {
 func (m *model) shortcutAction(key string) string {
 	// Explicit order avoids map iteration randomness if a user accidentally configures two
 	// actions with the same key. First match wins and the Settings page documents defaults.
-	for _, action := range []string{"quit", "new", "search", "help", "overview", "repositories", "projects", "issues", "pull_requests", "graph", "concepts", "settings", "notes", "quotes", "jobs", "notifications", "logs", "profile", "edit_profile", "theme", "density", "debug", "toggle_notifications", "intro", "poll_interval", "new_note", "new_quote", "new_job", "mark_notifications_read", "refresh", "seed"} {
+	for _, action := range []string{"quit", "new", "search", "help", "overview", "repositories", "projects", "issues", "pull_requests", "graph", "concepts", "settings", "notes", "quotes", "jobs", "notifications", "logs", "profile", "edit_profile", "theme", "density", "debug", "toggle_notifications", "intro", "poll_interval", "new_note", "new_quote", "new_job", "mark_notifications_read", "refresh"} {
 		if shortcut := strings.TrimSpace(m.config.Keyboard[action]); shortcut != "" && shortcut == key {
 			return action
 		}

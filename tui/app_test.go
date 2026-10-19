@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"idios/internal/config"
 	"idios/internal/domain"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestWorkspaceViewLooksLikePersistentFullScreenUI(t *testing.T) {
@@ -266,5 +267,29 @@ func TestMultilineFieldNavigationPreservesColumn(t *testing.T) {
 	contentWithoutCaret := strings.ReplaceAll(rendered, "▏", "")
 	if !strings.Contains(contentWithoutCaret, "second") || !strings.Contains(rendered, "sec▏ond") {
 		t.Fatalf("multiline viewport omitted the caret line or caret marker: %#v", lines)
+	}
+}
+
+func TestCleanAndDemoTUIAreVisiblySeparatedWithoutInAppSeedAction(t *testing.T) {
+	clean := newModel(context.Background(), nil, "clean.sqlite3", Options{NoColor: true, Config: config.DefaultAppConfig()})
+	clean.page = pageIntro
+	clean.width, clean.height = 116, 38
+	cleanView := clean.View()
+	if strings.Contains(strings.ToLower(cleanView.Content), "load demo workspace") {
+		t.Fatal("standard TUI must not offer an in-app demo-loading action")
+	}
+	if strings.Contains(cleanView.Content, "DEMO WORKSPACE") || strings.Contains(cleanView.Content, "· DEMO") {
+		t.Fatal("standard TUI must not be labeled as the demo workspace")
+	}
+
+	demo := newModel(context.Background(), nil, "demo.sqlite3", Options{NoColor: true, DemoMode: true, Config: config.DefaultAppConfig()})
+	demo.page = pageIntro
+	demo.width, demo.height = 116, 38
+	demoView := demo.View()
+	if !strings.Contains(demoView.Content, "DEMO") || !strings.Contains(demoView.Content, "DEMO WORKSPACE") {
+		t.Fatal("demo TUI should be explicitly marked as the isolated demo workspace")
+	}
+	if strings.Contains(strings.ToLower(demoView.Content), "load demo workspace") {
+		t.Fatal("demo TUI must not offer a redundant in-app demo-loading action")
 	}
 }

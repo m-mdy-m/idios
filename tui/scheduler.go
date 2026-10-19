@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"idios/internal/application"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 type schedulerTickMsg struct{ at time.Time }

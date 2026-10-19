@@ -5,26 +5,26 @@ IDIOS is a local-first work and knowledge graph. The Go Engine owns domain rules
 ## Dependency direction
 
 ```text
-cmd/idios ──────> internal/cli ──────────────┐
-                                             ├──> internal/application ──> internal/domain
-cmd/idios-tui ──> tui (Bubble Tea adapter) ──┘              │
-                                                           v
-                                                    internal/ports
-                                                           ^
-                                                           │
-                                              internal/storage/sqlite
-                                                           │
-                                              database/sql + go-sqlite3
+cmd/idios ─────────> internal/cli ──────────────┐
+                                                ├──> internal/application ──> internal/domain
+cmd/idios-tui ─────┐                            │                  │
+                   ├──> internal/tuilaunch ──> tui                v
+cmd/idios-tui-demo ┘                              └────────> internal/ports
+                                                               ^
+                                                               │
+                                                   internal/storage/sqlite
+                                                               │
+                                                   database/sql + go-sqlite3
 ```
 
-- `cmd/idios` and `cmd/idios-tui` are composition roots. Both open the same SQLite-backed Store and create `application.Service`.
+- `cmd/idios`, `cmd/idios-tui`, and `cmd/idios-tui-demo` are entry points. The two TUI entry points share `internal/tuilaunch`; the standard app opens the normal database without seeding, while the demo app idempotently seeds a separate database before running the same TUI.
 - `internal/cli` owns command parsing, flags, user help and CLI/JSON output selection.
 - `tui/` owns the terminal-only presentation: view layout, navigation, forms, keyboard/mouse events, styling, built-in UI copy, diagnostics and the in-app scheduler. It is deliberately outside `internal/`, and must call Application use cases rather than execute SQL.
 - `internal/application` coordinates use cases and validates workflow transitions. New rules belong here, not in a button callback.
 - `internal/domain` defines entities, IDs, typed statuses and errors. It does not import UI libraries, SQLite or CLI packages.
 - `internal/ports` is the persistence contract.
 - `internal/storage/sqlite` implements the port. SQL, migrations, transactions, entity mapping and local scheduling persistence live here.
-- `internal/config` owns CLI database path policy and the user-editable TUI configuration file. Product copy is a separate embedded resource at `tui/content/en.json`; copy is not written into user preferences.
+- `internal/tuilaunch` composes the TUI, Application and SQLite adapter, and chooses the clean or isolated demo database lifecycle. `internal/config` owns the CLI and TUI database path policy and the user-editable TUI configuration file. Product copy is a separate embedded resource at `tui/content/en.json`; copy is not written into user preferences.
 
 ## TUI module map
 

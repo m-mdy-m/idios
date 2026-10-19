@@ -37,20 +37,20 @@ The current release is not a Git implementation. It does not create real commits
 
 ## Native platform and release verification
 
-The CI matrix runs formatting checks, Go tests, `go vet`, builds both executables with CGO enabled,
+The CI matrix runs formatting checks, Go tests, `go vet`, builds the CLI and both TUI variants with CGO enabled,
 and runs `scripts/smoke-platform.sh` on native Linux amd64/arm64, macOS amd64/arm64, and Windows
 amd64/arm64 runners. CI and release builds use the current Go 1.27.x toolchain; `go.mod` declares
 Go 1.25.0 as the module's minimum. Windows jobs install an architecture-matched C compiler because
 the SQLite driver uses CGO.
 
 Pushing a semantic version tag such as `v1.0.0` starts the release workflow. Each native runner builds
-and smoke-tests both binaries before packaging them. Linux and macOS assets are `.tar.gz`; Windows
+and smoke-tests the CLI, clean TUI and demo TUI before packaging them. Linux and macOS assets are `.tar.gz`; Windows
 assets are `.zip`. Linux release bundles are built on Ubuntu 22.04 as a conservative glibc baseline.
 The artifacts are named `idios-<tag>-<target>.<archive>`, for example
 `idios-v1.0.0-linux-amd64.tar.gz` and `idios-v1.0.0-windows-arm64.zip`.
 
 Before publication, a separate native runner downloads each Actions artifact, extracts it without
-installing the build toolchain, and executes both bundled programs plus the SQLite-backed smoke
+installing the build toolchain, and executes all three bundled programs plus the SQLite-backed smoke
 workflow. Only then does the publish job attach all bundles and `SHA256SUMS.txt` to the GitHub
 Release. A final verification matrix downloads the actual published assets using the GitHub CLI,
 validates each checksum, extracts the bundle, and repeats the runtime smoke test on the matching

@@ -109,7 +109,7 @@ jobs:
         run: go test ./...
       - name: Vet
         run: go vet ./...
-      - name: Build both executables
+      - name: Build CLI and both TUI variants
         shell: bash
         env:
           EXE_SUFFIX: ${{ matrix.exe }}
@@ -123,6 +123,7 @@ jobs:
           fi
           go build -trimpath -ldflags="$LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
           go build -trimpath -ldflags="$LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
+          go build -trimpath -ldflags="$LDFLAGS" -o "dist/idios-tui-demo${EXE_SUFFIX}" ./cmd/idios-tui-demo
       - name: Run binaries and SQLite workflow
         shell: bash
         env:
@@ -136,7 +137,7 @@ jobs:
               export PATH
             fi
           fi
-          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
       - name: Upload native test binaries
         uses: actions/upload-artifact@v4
         with:
@@ -181,9 +182,6 @@ jobs:
         with:
           name: idios-ci-${{ matrix.target }}
           path: dist
-      - name: Restore Unix executable permissions
-        if: runner.os != 'Windows'
-        run: chmod +x dist/idios dist/idios-tui
       - name: Execute downloaded binaries and SQLite workflow
         shell: bash
         env:
@@ -197,4 +195,4 @@ jobs:
               export PATH
             fi
           fi
-          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh

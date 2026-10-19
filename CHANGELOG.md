@@ -9,6 +9,17 @@ All notable changes to IDIOS are documented here. This file follows
 
 ## [Unreleased]
 
+### Added
+- **Separate demo TUI:** add `idios-tui-demo`, which automatically seeds and opens a sample workspace in its own SQLite database.
+- **Headless database check:** add `--check` to both TUI entry points so CI can initialize and verify databases without an interactive terminal.
+
+### Changed
+- **Clean default TUI:** `idios-tui` now opens an unseeded workspace on first launch and has no in-app “Load Demo Workspace” action, shortcut, or button.
+- **Database isolation:** the demo UI defaults to `~/.idios/demo/idios-demo.sqlite3` and uses `IDIOS_DEMO_DB`; it intentionally ignores `IDIOS_DB` unless `--db` explicitly overrides the database.
+- **Build and distribution:** build and ship `idios`, `idios-tui`, and `idios-tui-demo` on all supported release platforms.
+- **Smoke tests:** verify that the standard TUI stays empty, the demo TUI seeds idempotently, and the two databases remain isolated.
+
+
 **Intended target:** `1.0.0`.
 
 IDIOS 1.0.0 is a re-platforming of IDIOS into a local-first Go workspace engine. It introduces a
@@ -69,11 +80,11 @@ former Python application, and it does not perform real Git operations or remote
 - **Separate command-line interface:** an `idios` executable with database-path selection, JSON output
   for supported commands, repository/Issue/Project/Concept/Label/Milestone/Pull Request/graph
   workflows, and stable error/output structures intended for future integrations.
-- **Demo workspace seed:** `idios seed demo` and an in-app seed action for exercising repository,
-  parent/sub-Issue, blocking dependency, Project, Concept, graph, Label, Milestone, Pull Request,
-  completion, Note, Quote, pin, activity, Job, and notification relationships. Seeding is designed to
-  be atomic and idempotent. It writes to the selected database, so a separate database path is
-  recommended when trying the sample data.
+- **Demo workspace seed:** `idios-tui-demo` automatically provisions an isolated, persistent sample
+  database covering Repository, parent/sub-Issue, blocking dependency, Project, Concept, graph, Label,
+  Milestone, Pull Request, completion, Note, Quote, pin, Activity, Job and notification relationships.
+  The seed is atomic and idempotent. The CLI `idios seed demo` remains available as an explicit action
+  against the database selected for the CLI; the standard TUI never seeds a workspace on startup.
 - **SQLite persistence and migrations:** storage built on `database/sql` and `go-sqlite3`, versioned
   embedded SQL migrations, transaction/query helpers, time and scalar conversion, and typed SQLite
   error handling.
@@ -150,13 +161,13 @@ former Python application, and it does not perform real Git operations or remote
 
 ### Build, test, and distribution
 
-- Provide Makefile targets for formatting checks, tests, vetting, and building both `idios` and
-  `idios-tui` executables.
+- Provide Makefile targets for formatting checks, tests, vetting, and building `idios`, `idios-tui`,
+  and `idios-tui-demo` executables.
 - Configure native CI and release automation for Linux amd64/arm64, macOS amd64/arm64, and Windows
-  amd64/arm64. Each target runs tests, builds both executables with CGO, and executes a SQLite-backed
+  amd64/arm64. Each target runs tests, builds all three executables with CGO, and executes a SQLite-backed
   smoke workflow on its native runner. After publishing, CI downloads each actual release bundle on
   the matching runner, checks its SHA-256 checksum, extracts it, and reruns the runtime smoke test.
-- The full release gate runs format checks, `go test ./...`, `go vet ./...`, both native builds, and
+- The full release gate runs format checks, `go test ./...`, `go vet ./...`, all three native builds, and
   post-publish download/execute verification under Go 1.25+ with CGO and an architecture-matched C
   compiler before a release is considered verified.
 

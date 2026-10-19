@@ -89,7 +89,6 @@ The default bindings are:
 | Logs | `Ctrl+L` |
 | Edit profile | `Ctrl+P` |
 | Refresh | `r` |
-| Load demo data | `Ctrl+D` |
 | Quit | `q` or `Ctrl+C` |
 
 Change these in the `keyboard` object of `config.json`, for example:
@@ -104,4 +103,4 @@ Change these in the `keyboard` object of `config.json`, for example:
 }
 ```
 
-The settings are merged with defaults, so omitted shortcuts retain their defaults. F6 or Ctrl+Tab focuses visible controls; Up/Down moves the focus and Enter activates it. Tab/Shift+Tab changes sections. If two actions are assigned the same key, the first action in IDIOS's documented shortcut priority wins. Use a unique key per action for predictable behavior.
+The settings are merged with defaults, so omitted shortcuts retain their defaults. Demo data is no longer an in-app action: launch `idios-tui-demo` to use the separate sample database. F6 or Ctrl+Tab focuses visible controls; Up/Down moves the focus and Enter activates it. Tab/Shift+Tab changes sections. If two actions are assigned the same key, the first action in IDIOS's documented shortcut priority wins. Use a unique key per action for predictable behavior.

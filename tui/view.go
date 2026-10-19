@@ -18,7 +18,11 @@ func (m *model) View() tea.View {
 	header.focusAction = m.focusAction
 
 	// Global application bar: persistent destinations and obvious actions, not a prompt menu.
-	header.button("◈ IDIOS", "nav:intro", m.page == pageIntro && m.repoContext == "")
+	brand := "◈ IDIOS"
+	if m.demoMode {
+		brand += " · DEMO"
+	}
+	header.button(brand, "nav:intro", m.page == pageIntro && m.repoContext == "")
 	header.space(2)
 	if m.searchMode {
 		header.button("⌕ "+m.search+"▏", "search:focus", true)

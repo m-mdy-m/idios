@@ -93,8 +93,7 @@
     "new_note": "ctrl+alt+n",
     "new_quote": "ctrl+alt+q",
     "new_job": "ctrl+alt+j",
-    "mark_notifications_read": "ctrl+alt+m",
-    "seed": "ctrl+d"
+    "mark_notifications_read": "ctrl+alt+m"
   },
   "REPOSITORY_TEMPLATE": {
     "description": "# {{repository}}\n\n## Purpose\n\nDescribe what this repository is for and the outcome it supports.\n\n## Scope\n\n- In scope:\n- Out of scope:\n\n## Getting started\n\n1. Add the first concrete step needed to work in this repository.\n\n## Architecture and decisions\n\nRecord important design choices and their rationale. Link related Issues, Projects, and Concepts in IDIOS.\n"

@@ -7,8 +7,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"charm.land/lipgloss/v2"
 	"idios/internal/domain"
+
+	"charm.land/lipgloss/v2"
 )
 
 // cursorItem is the stable keyboard-selection representation used by list pages.

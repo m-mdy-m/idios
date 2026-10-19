@@ -18,6 +18,9 @@ func (m *model) renderOverview(c *canvas, p palette) {
 	}
 	c.title(profileName)
 	c.muted("@" + username + "  ·  IDIOS local workspace")
+	if m.demoMode {
+		c.panel(copyText.DemoWorkspaceTitle, copyText.DemoWorkspaceNotice)
+	}
 	c.buttonRow(
 		buttonSpec{"Edit profile", "settings-action:profile", true},
 		buttonSpec{"Customize", "nav:settings", false},
@@ -714,7 +717,7 @@ func (m *model) renderSettings(c *canvas, p palette) {
 	c.title("Data & workflow")
 	c.panel("LOCAL DATABASE", "Database path: "+m.databasePath, "Configuration path: "+config.AppConfigPath(), "Workspace data is stored in SQLite on this device. No account or network service is required.")
 	c.panel("HOW WORK IS COMPLETED", "A prerequisite blocks starting an Issue until it is complete.", "Accepting a Pull Request records a Completion on the logical main branch. It does not merge real Git files.")
-	c.buttonRow(buttonSpec{"Reload data", "refresh:now", false}, buttonSpec{"Load demo workspace", "demo:seed", false}, buttonSpec{"Quick guide", "nav:help", false})
+	c.buttonRow(buttonSpec{"Reload data", "refresh:now", false}, buttonSpec{"Quick guide", "nav:help", false})
 	c.blank()
 	c.title("Keyboard shortcuts")
 	shortcuts := []struct{ action, label string }{
@@ -724,7 +727,7 @@ func (m *model) renderSettings(c *canvas, p palette) {
 		{"notifications", "Notifications"}, {"logs", "Logs"}, {"settings", "Settings"}, {"profile", "Edit profile"},
 		{"theme", "Next theme"}, {"density", "Toggle density"}, {"debug", "Toggle debug logs"}, {"toggle_notifications", "Toggle reminders"},
 		{"intro", "Toggle startup intro"}, {"poll_interval", "Change check interval"}, {"new_note", "New note"}, {"new_quote", "Save quote"}, {"new_job", "Schedule reminder"}, {"mark_notifications_read", "Mark notifications read"},
-		{"refresh", "Refresh"}, {"seed", "Load demo data"}, {"quit", "Quit"},
+		{"refresh", "Refresh"}, {"quit", "Quit"},
 	}
 	for _, item := range shortcuts {
 		key := m.config.Keyboard[item.action]

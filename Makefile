@@ -4,19 +4,23 @@ BIN_DIR ?= dist
 CGO_ENABLED ?= 1
 GOFILES := $(shell find cmd internal tui -type f -name '*.go' -print)
 
-.PHONY: all build tui test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
+.PHONY: all build tui tui-demo test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 
 all: ci
 
 ## Build
-build: ## Build both native entry points into $(BIN_DIR)/.
+build: ## Build CLI, clean TUI, and demo TUI into $(BIN_DIR)/.
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags='-s -w' -o $(BIN_DIR)/idios ./cmd/idios
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags='-s -w' -o $(BIN_DIR)/idios-tui ./cmd/idios-tui
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags='-s -w' -o $(BIN_DIR)/idios-tui-demo ./cmd/idios-tui-demo
 
 ## Interactive UI
-tui: ## Run the full-screen, mouse-aware TUI against the default Engine database.
+tui: ## Run the full-screen, clean TUI against the standard Engine database.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) run ./cmd/idios-tui
+
+tui-demo: ## Run the demo TUI against its isolated, automatically seeded database.
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) run ./cmd/idios-tui-demo
 
 ## Quality
 fmt: ## Format Go source files in-place.
@@ -42,8 +46,8 @@ check: fmt-check test vet ## Run the fast local quality gate.
 
 ci: check test-race build smoke ## Run the full local CI gate (PSX is a separate optional target).
 
-smoke: build ## Smoke-test both executables and exercise a cross-Repository SQLite workflow.
-	IDIOS_BIN=$(BIN_DIR)/idios IDIOS_TUI_BIN=$(BIN_DIR)/idios-tui sh ./scripts/smoke-platform.sh
+smoke: build ## Smoke-test all executables, clean/demo database isolation, and a cross-Repository SQLite workflow.
+	IDIOS_BIN=$(BIN_DIR)/idios IDIOS_TUI_BIN=$(BIN_DIR)/idios-tui IDIOS_TUI_DEMO_BIN=$(BIN_DIR)/idios-tui-demo sh ./scripts/smoke-platform.sh
 
 psx-check: ## Check repository structure and documentation with PSX v3.
 	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found. Install github.com/m-mdy-m/psx/cmd/psx or skip this optional check." >&2; exit 2; }

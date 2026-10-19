@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"idios/internal/domain"
+
+	"charm.land/lipgloss/v2"
 )
 
 func (m *model) renderIntro(c *canvas, p palette) {
@@ -26,6 +27,10 @@ func (m *model) renderIntro(c *canvas, p palette) {
 	c.blank()
 	c.title(copyText.IntroTitle)
 	c.muted(copyText.IntroSubtitle)
+	if m.demoMode {
+		c.blank()
+		c.panel(copyText.DemoWorkspaceTitle, copyText.DemoWorkspaceNotice)
+	}
 	c.blank()
 	c.panel("A LOCAL-FIRST WORKSPACE", copyText.IntroPrivacy,
 		fmt.Sprintf(copyText.text("%d repositories · %d open issues · %d concepts · %d notes"), len(m.repositories), len(m.issues), len(m.concepts), len(m.notes)))
@@ -38,7 +43,6 @@ func (m *model) renderIntro(c *canvas, p palette) {
 	c.blank()
 	c.buttonRow(
 		buttonSpec{copyText.IntroContinue, "nav:overview", true},
-		buttonSpec{copyText.IntroSeed, "demo:seed", false},
 		buttonSpec{copyText.IntroHelp, "nav:help", false},
 		buttonSpec{copyText.IntroSettings, "nav:settings", false},
 	)

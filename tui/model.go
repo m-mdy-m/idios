@@ -3,13 +3,14 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
 	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/domain"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 type page string
@@ -191,6 +192,7 @@ type model struct {
 	statusError  bool
 	databasePath string
 	plain        bool
+	demoMode     bool
 	config       config.AppConfig
 	hits         []hitbox
 	buttonFocus  bool
@@ -198,11 +200,12 @@ type model struct {
 	focusIndex   int
 }
 
-// Options controls UI rendering only; the Engine and data rules are unaffected.
+// Options controls TUI presentation and identifies the isolated demo presentation mode.
 
 type Options struct {
-	NoColor bool
-	Config  config.AppConfig
+	NoColor  bool
+	DemoMode bool
+	Config   config.AppConfig
 }
 
 // RunInteractive runs the full-screen TUI in the terminal alternate screen.
@@ -240,6 +243,7 @@ func newModel(ctx context.Context, app *application.Service, dbPath string, opts
 		graphDepth:   2,
 		databasePath: dbPath,
 		plain:        opts.NoColor,
+		demoMode:     opts.DemoMode,
 		status:       "Everything stays local · Engine rules apply to every interface",
 		focusIndex:   -1,
 	}

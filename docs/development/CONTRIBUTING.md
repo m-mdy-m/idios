@@ -33,14 +33,15 @@ end-to-end smoke test. On Windows without Make, run `./scripts/build.ps1`, `go t
 ## Dependency direction
 
 ```text
-cmd/idios ──────> internal/cli ──────┐
-                                     ├──> internal/application ──> internal/domain
-cmd/idios-tui ──> tui ──────┘              │
-                                                    v
-                                             internal/ports
-                                                    ^
-                                                    │
-                                         internal/storage/sqlite
+cmd/idios ───────────────> internal/cli ───────────┐
+                                                   ├──> internal/application ──> internal/domain
+cmd/idios-tui ───────┐                             │
+                     ├──> internal/tuilaunch ─> tui│
+cmd/idios-tui-demo ──┘                             v
+                                            internal/ports
+                                                   ^
+                                                   │
+                                        internal/storage/sqlite
 ```
 
 - **Domain** (`internal/domain`) owns entities, statuses, IDs and domain errors. No SQL, terminal
@@ -58,7 +59,7 @@ cmd/idios-tui ──> tui ──────┘              │
   Application methods as CLI. It must not issue SQL, shell out to `idios`, or import `internal/cli`.
 - **Render/logging**: CLI output formatting belongs in `internal/render`; diagnostic logs belong in
   `internal/logger` and must go to stderr.
-- **Composition roots** (`cmd/idios`, `cmd/idios-tui`) wire adapters to the Engine.
+- **Composition roots** (`cmd/idios`, `cmd/idios-tui`, `cmd/idios-tui-demo`) wire adapters to the Engine. `internal/tuilaunch` keeps the two TUI entry points on the same UI while separating their default database lifecycle.
 
 ## Adding a feature
 

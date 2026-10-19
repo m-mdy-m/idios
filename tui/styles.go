@@ -4,8 +4,9 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"idios/internal/config"
+
+	"charm.land/lipgloss/v2"
 )
 
 // palette is a data-driven presentation adapter. Every color resolves from the selected

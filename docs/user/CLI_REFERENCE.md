@@ -1,6 +1,6 @@
 # CLI reference
 
-The CLI and TUI use the same Application Engine and database. Every command can accept `--db PATH` to select a database; set `IDIOS_DB` to configure a default for the process. Add `--json` for machine-readable output and use `idios help COMMAND...` to see accepted options.
+The CLI and both TUI variants use the same Application Engine but have different default database paths. CLI commands and the clean TUI use `IDIOS_DB`; the demo TUI uses `IDIOS_DEMO_DB` and seeds only its separate database by default. Every CLI command and both TUI binaries can accept `--db PATH` to explicitly select a database. Add `--json` for machine-readable output and use `idios help COMMAND...` to see accepted options.
 
 ## Common commands
 
@@ -9,8 +9,11 @@ The CLI and TUI use the same Application Engine and database. Every command can 
 go run ./cmd/idios --help
 go run ./cmd/idios version
 
-# Seed a sample workspace (once per database)
-go run ./cmd/idios seed demo
+# Intentionally seed the currently selected CLI database (use a separate path)
+go run ./cmd/idios --db ./idios-demo.sqlite3 seed demo
+
+# Prefer the isolated demo TUI for a ready-to-explore sample workspace
+go run ./cmd/idios-tui-demo
 
 # Create and inspect repositories
 go run ./cmd/idios repo create --name CPU --description "CPU learning notes"
@@ -48,6 +51,8 @@ go run ./cmd/idios --json graph
 ```
 
 The `--json` output is useful for scripts and integration clients. For protocol and schema details, see [the developer protocol notes](../development/JSON_PROTOCOL.md).
+
+The demo TUI supports `--check` for non-interactive setup verification. It applies schema migrations, ensures seed data exists and exits with an error if the database cannot be opened. The clean TUI `--check` only initializes/verifies the schema and does not insert sample records.
 
 ## Workflow limitation
 

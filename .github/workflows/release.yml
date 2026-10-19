@@ -124,7 +124,7 @@ jobs:
         run: go test ./...
       - name: Run vet
         run: go vet ./...
-      - name: Build both executables
+      - name: Build CLI and both TUI variants
         shell: bash
         env:
           EXE_SUFFIX: ${{ matrix.exe }}
@@ -140,13 +140,14 @@ jobs:
           CLI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/cli.Version=${VERSION}"
           go build -trimpath -ldflags="$CLI_LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
           go build -trimpath -ldflags="$BASE_LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
+          go build -trimpath -ldflags="$BASE_LDFLAGS" -o "dist/idios-tui-demo${EXE_SUFFIX}" ./cmd/idios-tui-demo
       - name: Smoke-test native executables
         shell: bash
         env:
           EXE_SUFFIX: ${{ matrix.exe }}
         run: |
           set -euo pipefail
-          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
       - name: Package Unix bundle
         if: runner.os != 'Windows'
         shell: bash
@@ -155,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" release/
+          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" "dist/idios-tui-demo${EXE_SUFFIX}" release/
           cp README.md LICENSE docs/user/GETTING_STARTED.md docs/user/WORKSPACE_GUIDE.md docs/user/SETTINGS.md release/
           tar -czf "idios-${GITHUB_REF_NAME}-${{ matrix.asset }}.tar.gz" -C release .
       - name: Package Windows bundle
@@ -164,7 +165,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item dist/idios.exe, dist/idios-tui.exe, README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md -Destination release/
+          Copy-Item dist/idios.exe, dist/idios-tui.exe, dist/idios-tui-demo.exe, README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md -Destination release/
           Compress-Archive -Path release/* -DestinationPath "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip" -Force
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
@@ -251,6 +252,7 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="bundle/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="bundle/idios-tui${EXE_SUFFIX}" \
+          IDIOS_TUI_DEMO_BIN="bundle/idios-tui-demo${EXE_SUFFIX}" \
           sh ./scripts/smoke-platform.sh
 
   publish:
@@ -369,4 +371,5 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="release-download/unpacked/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="release-download/unpacked/idios-tui${EXE_SUFFIX}" \
+          IDIOS_TUI_DEMO_BIN="release-download/unpacked/idios-tui-demo${EXE_SUFFIX}" \
           sh ./scripts/smoke-platform.sh

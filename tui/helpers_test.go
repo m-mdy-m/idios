@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"idios/internal/domain"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestTruncateVisibleUsesDisplayWidth(t *testing.T) {
