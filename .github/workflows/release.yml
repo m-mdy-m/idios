@@ -307,6 +307,9 @@ jobs:
           rpm_pkg="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
           dpkg-deb --info "$deb" >/dev/null
           rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "$rpm_pkg"
+          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios' 
+          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui'
+          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui-demo'
           dpkg-deb --contents "$deb" > package-contents.txt
           grep -Eq '\./usr/bin/idios$' package-contents.txt
           grep -Eq '\./usr/bin/idios-tui$' package-contents.txt
@@ -330,6 +333,19 @@ jobs:
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
           trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
           test -f "$mountpoint/idios-${GITHUB_REF_NAME}-${ASSET}.pkg"
+      - name: Install and smoke-test macOS PKG package
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          sudo installer -pkg "artifact/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" -target /
+          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" \
+          IDIOS_BIN="/usr/local/bin/idios" \
+          IDIOS_TUI_BIN="/usr/local/bin/idios-tui" \
+          IDIOS_TUI_DEMO_BIN="/usr/local/bin/idios-tui-demo" \
+          sh ./scripts/smoke-platform.sh
       - name: Install Windows setup and verify installed files
         if: runner.os == 'Windows'
         shell: pwsh
@@ -471,6 +487,9 @@ jobs:
             sudo apt-get install -y rpm
             dpkg-deb --info "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" >/dev/null
             rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
+            rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios'
+            rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios-tui'
+            rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios-tui-demo'
             dpkg-deb --contents "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" > release-download/deb-contents.txt
             grep -Eq '\./usr/bin/idios-tui-demo$' release-download/deb-contents.txt
             sudo dpkg -i "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb"
@@ -483,6 +502,7 @@ jobs:
             hdiutil attach "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
             trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
             test -f "$mountpoint/idios-${GITHUB_REF_NAME}-${ASSET}.pkg"
+            sudo installer -pkg "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" -target /
           fi
       - name: Download, verify and install published Windows assets
         if: runner.os == 'Windows'
@@ -524,18 +544,24 @@ jobs:
           IDIOS_TUI_BIN="published-installer/idios-tui.exe" \
           IDIOS_TUI_DEMO_BIN="published-installer/idios-tui-demo.exe" \
           sh ./scripts/smoke-platform.sh
-      - name: Smoke-test installed published Linux DEB package
-        if: runner.os == 'Linux'
+      - name: Smoke-test installed published Linux/macOS package
+        if: runner.os != 'Windows'
         shell: bash
         env:
           IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
-          IDIOS_BIN="/usr/bin/idios" \
-          IDIOS_TUI_BIN="/usr/bin/idios-tui" \
-          IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo" \
-          sh ./scripts/smoke-platform.sh
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            IDIOS_BIN="/usr/bin/idios"
+            IDIOS_TUI_BIN="/usr/bin/idios-tui"
+            IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo"
+          else
+            IDIOS_BIN="/usr/local/bin/idios"
+            IDIOS_TUI_BIN="/usr/local/bin/idios-tui"
+            IDIOS_TUI_DEMO_BIN="/usr/local/bin/idios-tui-demo"
+          fi
+          export IDIOS_BIN IDIOS_TUI_BIN IDIOS_TUI_DEMO_BIN
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" sh ./scripts/smoke-platform.sh
       - name: Execute downloaded CLI and SQLite workflow
         shell: bash
         env:
