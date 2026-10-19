@@ -114,7 +114,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          mapfile -t go_files < <(git ls-files '*.go')
+          unformatted="$(gofmt -l "${go_files[@]}")"
           if [ -n "$unformatted" ]; then
             echo "Go files need gofmt:"
             printf '%s\n' "$unformatted"
@@ -175,7 +176,8 @@ jobs:
           TARGET_GOARCH: ${{ matrix.asset == 'linux-arm64' && 'arm64' || 'amd64' }}
         run: |
           set -euo pipefail
-          export VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          export VERSION
           sudo apt-get update
           sudo apt-get install -y rpm
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
