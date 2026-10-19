@@ -102,7 +102,7 @@ jobs:
           unformatted="$(gofmt -l $(git ls-files '*.go'))"
           if [ -n "$unformatted" ]; then
             echo "Go files need gofmt:"
-            printf '%s\\n' "$unformatted"
+            printf '%s\n' "$unformatted"
             exit 1
           fi
       - name: Test
@@ -130,9 +130,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            filtered_path="$(printf '%s' "$PATH" | tr ':' '\\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
             if [[ -n "$filtered_path" ]]; then
-              PATH="$(printf '%s\\n' "$filtered_path" | paste -sd ':' -)"
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
               export PATH
             fi
           fi
@@ -191,9 +191,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            filtered_path="$(printf '%s' "$PATH" | tr ':' '\\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
             if [[ -n "$filtered_path" ]]; then
-              PATH="$(printf '%s\\n' "$filtered_path" | paste -sd ':' -)"
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
               export PATH
             fi
           fi
