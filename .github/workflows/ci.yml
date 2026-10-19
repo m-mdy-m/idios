@@ -181,6 +181,9 @@ jobs:
         with:
           name: idios-ci-${{ matrix.target }}
           path: dist
+      - name: Restore Unix executable permissions
+        if: runner.os != 'Windows'
+        run: chmod +x dist/idios dist/idios-tui
       - name: Execute downloaded binaries and SQLite workflow
         shell: bash
         env:
