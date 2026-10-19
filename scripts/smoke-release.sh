@@ -13,14 +13,15 @@ for binary in "$CLI" "$TUI"; do
   fi
 done
 
-if [ -e "${CLI%/*}/idios-tui-demo" ] || [ -e "${CLI%/*}/idios-tui-demo.exe" ]; then
+CLI_DIR=$(dirname -- "$CLI")
+if [ -e "$CLI_DIR/idios-tui-demo" ] || [ -e "$CLI_DIR/idios-tui-demo.exe" ]; then
   echo "FAIL: demo TUI must not be present in a user release." >&2
   exit 1
 fi
 
-case "$(uname -s 2>/dev/null || true)" in
-  Linux|Darwin) chmod u+x "$CLI" "$TUI" ;;
-esac
+# Do not chmod release binaries here: packaged/installed binaries must already
+# carry executable permissions, and chmod may be prohibited on mounted paths
+# in containerized package-verification runners.
 
 "$CLI" help >/dev/null
 version=$("$CLI" version)
