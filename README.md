@@ -80,29 +80,43 @@ IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting cl
 
 ## Downloads and supported platforms
 
-Once a version tag passes the release workflow, assets are published for the following 64-bit desktop targets:
+Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). Each installation format includes all three entry points: `idios` (CLI), `idios-tui` (clean workspace with an empty database), and `idios-tui-demo` (demo workspace using its isolated sample database).
 
-| Platform | Architectures | Asset format |
-| --- | --- | --- |
-| Linux | x86-64 (`amd64`), ARM64 (`arm64`) | `.tar.gz` |
-| macOS | Intel (`amd64`), Apple Silicon (`arm64`) | `.tar.gz` |
-| Windows | x86-64 (`amd64`), ARM64 (`arm64`) | `.zip` |
+| Platform | Architectures | Installable formats | Portable format |
+| --- | --- | --- | --- |
+| Linux | x86-64 (`amd64`), ARM64 (`arm64`) | `.deb`, `.rpm` | `.tar.gz` |
+| macOS | Intel (`amd64`), Apple Silicon (`arm64`) | `.pkg`, `.dmg` (contains the `.pkg` installer) | `.tar.gz` |
+| Windows | x86-64 (`amd64`), ARM64 (`arm64`) | `-setup.exe` installer | `.zip` |
 
-Assets follow the naming pattern `idios-<tag>-<target>.<archive>`, such as
-`idios-v1.0.0-linux-amd64.tar.gz` or `idios-v1.0.0-windows-arm64.zip`. Each bundle contains `idios` (CLI), `idios-tui` (clean interactive UI), and `idios-tui-demo` (sample-data UI), plus the license and core user guides.
-When a release is available, download the asset matching both your operating system and CPU
-architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying
-integrity. The release pipeline builds and tests on native OS/architecture runners, then downloads
-the published asset again on the corresponding runner and executes the included binaries and a
-SQLite-backed workflow. This catches packaging and runtime-loader issues before the release
-pipeline reports success.
+Asset names use the release tag and target architecture, for example:
 
-After extraction, run `./idios help` to confirm the CLI starts. In PowerShell, use `.\idios.exe help`.
-Run `./idios-tui` for a clean workspace or `./idios-tui-demo` for the seeded sample workspace from an interactive terminal (PowerShell: `.\idios-tui.exe` or `.\idios-tui-demo.exe`). The binaries are placed at the archive root, alongside the license and user guides.
+- Linux: `idios-v1.0.0-linux-amd64.deb` and `idios-v1.0.0-linux-arm64.rpm`
+- macOS: `idios-v1.0.0-darwin-arm64.pkg` and `idios-v1.0.0-darwin-arm64.dmg`
+- Windows: `idios-v1.0.0-windows-amd64-setup.exe` and `idios-v1.0.0-windows-arm64-setup.exe`
 
-The SQLite driver uses CGO. Building from source therefore requires Go 1.25+ and a supported C
-compiler; the prebuilt release bundles do not require a Go toolchain to run. Releases cover 64-bit
-x86 and ARM only; 32-bit targets are not currently provided.
+Choose the asset that matches both your operating system and CPU architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying all downloadable assets. The release workflow checks package contents and checksums, installs the Linux DEB and Windows setup package on native runners, and executes the included binaries against a SQLite-backed smoke workflow before and after publishing.
+
+### Install
+
+On Debian or Ubuntu, install the matching `.deb` package:
+
+```sh
+sudo apt install ./idios-v1.0.0-linux-amd64.deb
+```
+
+On Fedora, RHEL or another RPM-based distribution, install the matching `.rpm` package:
+
+```sh
+sudo dnf install ./idios-v1.0.0-linux-amd64.rpm
+```
+
+On macOS, open the matching `.pkg` directly, or open the `.dmg` and launch the `.pkg` included inside. The installer places the executables in `/usr/local/bin` and user guides in `/usr/local/share/doc/idios`. The current pipeline does not have Apple Developer ID signing/notarization credentials, so macOS may display a security warning for these packages.
+
+On Windows, run the matching `-setup.exe`. It installs the three executables per-user under `%LOCALAPPDATA%\\Programs\\IDIOS` and offers Start Menu shortcuts. The `.zip` remains available for portable use without an installer. The setup executable is not Authenticode-signed by this pipeline, so Windows SmartScreen may warn about an unknown publisher.
+
+The portable `.tar.gz` and `.zip` bundles remain available and contain all three executables, the license and core user guides. After extracting a portable bundle, run `./idios help` (PowerShell: `.\\idios.exe help`). Run `./idios-tui` for a clean workspace or `./idios-tui-demo` for the isolated sample workspace; the full-screen variants need an interactive terminal.
+
+The SQLite driver uses CGO. Building from source requires Go 1.25+ and a supported C compiler; the prebuilt packages and portable bundles do not require a Go toolchain to run. Releases cover 64-bit x86 and ARM only; 32-bit targets are not currently provided.
 
 ## Development checks
 
