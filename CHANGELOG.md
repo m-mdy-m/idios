@@ -4,11 +4,14 @@ All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Release status:** IDIOS 1.0.0 has **not been released yet**. This version-specific entry
-> documents the intended first Go Engine release. Its release date will be added when the
-> `v1.0.0` tag is published and verified.
+## [Unreleased]
 
-## [1.0.0] — Unreleased
+### Build, test, and distribution
+
+- **Clean end-user downloads:** exclude `idios-tui-demo` and extended guides from portable archives and native installers. User-facing packages contain only the `idios` CLI, clean `idios-tui`, `README.md`, and `LICENSE`; the demo executable and extended guides remain available in the source repository for development and CI smoke tests.
+- Release checks validate the exact four-file portable bundle and verify that native package payloads do not contain the demo executable.
+
+## [1.0.0] — 2026-10-19
 
 IDIOS 1.0.0 is a re-platforming of IDIOS into a local-first Go workspace engine. It introduces a
 repository and Issue workflow with structured dependencies, Pull Request-based completion,
@@ -160,9 +163,6 @@ former Python application, and it does not perform real Git operations or remote
   `.pkg` installers and `.dmg` containers, and per-user Windows `-setup.exe` installers; retain
   Linux/macOS `.tar.gz` and Windows `.zip` bundles. End-user packages contain the CLI, clean TUI,
   README, and license; the demo TUI and extended guides remain developer/source-repository resources.
-- **Clean end-user downloads:** exclude `idios-tui-demo` from portable archives and native installers,
-  while retaining the demo executable in source builds and developer/CI smoke tests. Release checks
-  validate the four-file portable bundle and verify that native package payloads do not contain the demo.
 - Verify package contents, installable payloads, and SHA-256 checksums before/after publication. Native
   runners download and test the published release assets and exercise the installed binaries against the
   SQLite-backed smoke workflow.
