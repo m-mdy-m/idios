@@ -287,6 +287,11 @@ jobs:
           set -euo pipefail
           mkdir -p bundle
           tar -xzf "artifact/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" -C bundle
+          test ! -e "bundle/idios-tui-demo"
+          test ! -e "bundle/idios-tui-demo.exe"
+          test -f bundle/README.md
+          test -f bundle/LICENSE
+          test "$(find bundle -maxdepth 1 -type f | wc -l | tr -d " ")" = 4
       - name: Extract Windows bundle
         if: runner.os == 'Windows'
         shell: pwsh
@@ -317,6 +322,9 @@ jobs:
           grep -Eq '\./usr/bin/idios-tui$' package-contents.txt
           ! grep -Eq '\./usr/bin/idios-tui-demo$' package-contents.txt
           sudo dpkg -i "$deb"
+          grep -Eq '\./usr/share/doc/idios/README.md$' package-contents.txt
+          grep -Eq '\./usr/share/doc/idios/LICENSE$' package-contents.txt
+          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="/usr/bin/idios" IDIOS_TUI_BIN="/usr/bin/idios-tui" sh ./scripts/smoke-release.sh
       - name: Validate macOS PKG and DMG payloads
         if: runner.os == 'macOS'
         shell: bash
@@ -500,6 +508,10 @@ jobs:
             dpkg-deb --contents "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" > release-download/deb-contents.txt
             ! grep -Eq '\./usr/bin/idios-tui-demo$' release-download/deb-contents.txt
             sudo dpkg -i "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb"
+             grep -Eq '\./usr/bin/idios$' release-download/deb-contents.txt
+             grep -Eq '\./usr/bin/idios-tui$' release-download/deb-contents.txt
+             grep -Eq '\./usr/share/doc/idios/README.md$' release-download/deb-contents.txt
+             grep -Eq '\./usr/share/doc/idios/LICENSE$' release-download/deb-contents.txt
           else
             pkgutil --payload-files "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" > release-download/pkg-payload.txt
             grep -Eq '(^|/)bin/idios$' release-download/pkg-payload.txt
