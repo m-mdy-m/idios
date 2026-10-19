@@ -181,7 +181,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
-          export PATH="$(go env GOPATH)/bin:$PATH"
+          PATH="$(go env GOPATH)/bin:$PATH"
+          export PATH
           nfpm package --config packaging/nfpm.yaml --packager deb --target "idios-${GITHUB_REF_NAME}-${ASSET}.deb"
           nfpm package --config packaging/nfpm.yaml --packager rpm --target "idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
           dpkg-deb --info "idios-${GITHUB_REF_NAME}-${ASSET}.deb" >/dev/null
