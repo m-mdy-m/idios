@@ -316,7 +316,12 @@ jobs:
           rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui'
           ! rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui-demo'
           dpkg-deb --contents "$deb" > package-contents.txt
-          grep -Eq '\./usr/bin/idios
+          grep -Eq '\./usr/bin/idios$' package-contents.txt
+          grep -Eq '\./usr/bin/idios-tui$' package-contents.txt
+          ! grep -Eq '\./usr/bin/idios-tui-demo$' package-contents.txt
+          grep -Eq '\./usr/share/doc/idios/README.md$' package-contents.txt
+          grep -Eq '\./usr/share/doc/idios/LICENSE$' package-contents.txt
+          sudo dpkg -i "$deb"
           IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="/usr/bin/idios" IDIOS_TUI_BIN="/usr/bin/idios-tui" sh ./scripts/smoke-release.sh
       - name: Validate macOS PKG and DMG payloads
         if: runner.os == 'macOS'
