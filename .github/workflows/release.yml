@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -85,7 +85,7 @@ jobs:
             exit 1
           fi
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -209,7 +209,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout source for smoke scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Download this platform's packaged artifact
         uses: actions/download-artifact@v4
         with:
@@ -316,7 +316,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout release source for smoke scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Download published bundle and checksum (Unix)
         if: runner.os != 'Windows'
         shell: bash
