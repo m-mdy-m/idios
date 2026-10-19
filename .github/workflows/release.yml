@@ -156,8 +156,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" "dist/idios-tui-demo${EXE_SUFFIX}" release/
-          cp README.md LICENSE docs/user/GETTING_STARTED.md docs/user/WORKSPACE_GUIDE.md docs/user/SETTINGS.md release/
+          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" release/
+          cp README.md LICENSE release/
           tar -czf "idios-${GITHUB_REF_NAME}-${{ matrix.asset }}.tar.gz" -C release .
       - name: Package Windows bundle
         if: runner.os == 'Windows'
@@ -165,7 +165,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item dist/idios.exe, dist/idios-tui.exe, dist/idios-tui-demo.exe, README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md -Destination release/
+          Copy-Item dist/idios.exe, dist/idios-tui.exe, README.md, LICENSE -Destination release/
           Compress-Archive -Path release/* -DestinationPath "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip" -Force
       - name: Build Linux DEB and RPM packages
         if: runner.os == 'Linux'
@@ -311,13 +311,12 @@ jobs:
           rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "$rpm_pkg"
           rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios' 
           rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui'
-          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui-demo'
+          ! rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui-demo'
           dpkg-deb --contents "$deb" > package-contents.txt
           grep -Eq '\./usr/bin/idios$' package-contents.txt
           grep -Eq '\./usr/bin/idios-tui$' package-contents.txt
-          grep -Eq '\./usr/bin/idios-tui-demo$' package-contents.txt
+          ! grep -Eq '\./usr/bin/idios-tui-demo$' package-contents.txt
           sudo dpkg -i "$deb"
-          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="/usr/bin/idios" IDIOS_TUI_BIN="/usr/bin/idios-tui" IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo" sh ./scripts/smoke-platform.sh
       - name: Validate macOS PKG and DMG payloads
         if: runner.os == 'macOS'
         shell: bash
@@ -330,7 +329,7 @@ jobs:
           pkgutil --payload-files "$pkg" > pkg-payload.txt
           grep -Eq '(^|/)bin/idios$' pkg-payload.txt
           grep -Eq '(^|/)bin/idios-tui$' pkg-payload.txt
-          grep -Eq '(^|/)bin/idios-tui-demo$' pkg-payload.txt
+          ! grep -Eq '(^|/)bin/idios-tui-demo$' pkg-payload.txt
           mountpoint="$(mktemp -d "${TMPDIR:-/tmp}/idios-dmg.XXXXXX")"
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
           trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
@@ -346,8 +345,7 @@ jobs:
           IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" \
           IDIOS_BIN="/usr/local/bin/idios" \
           IDIOS_TUI_BIN="/usr/local/bin/idios-tui" \
-          IDIOS_TUI_DEMO_BIN="/usr/local/bin/idios-tui-demo" \
-          sh ./scripts/smoke-platform.sh
+          sh ./scripts/smoke-release.sh
       - name: Install Windows setup and verify installed files
         if: runner.os == 'Windows'
         shell: pwsh
@@ -360,9 +358,13 @@ jobs:
           $installDir = Join-Path $PWD 'installer-test'
           $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Windows setup exited with code $($proc.ExitCode)." }
-          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'idios-tui-demo.exe')) {
+          foreach ($binary in @('idios.exe', 'idios-tui.exe')) {
             if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Installed executable is missing: $binary" }
           }
+          foreach ($file in @('README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path (Join-Path $installDir 'docs') $file))) { throw "Installed documentation is missing: $file" }
+          }
+          if (Test-Path (Join-Path $installDir 'idios-tui-demo.exe')) { throw 'Demo TUI must not be installed for end users.' }
       - name: Execute packaged binaries without build-toolchain setup
         shell: bash
         env:
@@ -380,8 +382,7 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="bundle/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="bundle/idios-tui${EXE_SUFFIX}" \
-          IDIOS_TUI_DEMO_BIN="bundle/idios-tui-demo${EXE_SUFFIX}" \
-          sh ./scripts/smoke-platform.sh
+          sh ./scripts/smoke-release.sh
       - name: Smoke-test installed Windows setup
         if: runner.os == 'Windows'
         shell: bash
@@ -392,8 +393,7 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="installer-test/idios.exe" \
           IDIOS_TUI_BIN="installer-test/idios-tui.exe" \
-          IDIOS_TUI_DEMO_BIN="installer-test/idios-tui-demo.exe" \
-          sh ./scripts/smoke-platform.sh
+          sh ./scripts/smoke-release.sh
 
 
   publish:
@@ -484,6 +484,11 @@ jobs:
             sh ./scripts/verify-checksum.sh "$asset_file" release-download/SHA256SUMS.txt
           done
           tar -xzf "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" -C release-download/unpacked
+          test ! -e "release-download/unpacked/idios-tui-demo"
+          test ! -e "release-download/unpacked/idios-tui-demo.exe"
+          test -f release-download/unpacked/README.md
+          test -f release-download/unpacked/LICENSE
+          test "$(find release-download/unpacked -maxdepth 1 -type f | wc -l | tr -d ' ')" = 4
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
             sudo apt-get install -y rpm
@@ -491,15 +496,15 @@ jobs:
             rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
             rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios'
             rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios-tui'
-            rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios-tui-demo'
+            ! rpm -qpl "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm" | grep -Fx '/usr/bin/idios-tui-demo'
             dpkg-deb --contents "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" > release-download/deb-contents.txt
-            grep -Eq '\./usr/bin/idios-tui-demo$' release-download/deb-contents.txt
+            ! grep -Eq '\./usr/bin/idios-tui-demo$' release-download/deb-contents.txt
             sudo dpkg -i "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb"
           else
             pkgutil --payload-files "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" > release-download/pkg-payload.txt
             grep -Eq '(^|/)bin/idios$' release-download/pkg-payload.txt
             grep -Eq '(^|/)bin/idios-tui$' release-download/pkg-payload.txt
-            grep -Eq '(^|/)bin/idios-tui-demo$' release-download/pkg-payload.txt
+            ! grep -Eq '(^|/)bin/idios-tui-demo$' release-download/pkg-payload.txt
             mountpoint="$(mktemp -d "${TMPDIR:-/tmp}/idios-published-dmg.XXXXXX")"
             hdiutil attach "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
             trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
@@ -527,13 +532,23 @@ jobs:
             if ($actual -ne $expected) { throw "SHA-256 mismatch for $name" }
           }
           Expand-Archive -LiteralPath "release-download/$archive" -DestinationPath release-download/unpacked -Force
+          if (Test-Path 'release-download/unpacked/idios-tui-demo.exe') { throw 'Release archive must not contain the demo TUI.' }
+          $archiveFiles = @(Get-ChildItem release-download/unpacked -File)
+          if ($archiveFiles.Count -ne 4) { throw "Expected exactly four user-facing archive files, found $($archiveFiles.Count)." }
+          foreach ($required in @('idios.exe', 'idios-tui.exe', 'README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path 'release-download/unpacked' $required))) { throw "Release archive is missing $required." }
+          }
           $installDir = Join-Path $PWD 'published-installer'
           $installerPath = (Resolve-Path "release-download/$installer").Path
           $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published Windows setup exited with code $($proc.ExitCode)." }
-          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'idios-tui-demo.exe')) {
+          foreach ($binary in @('idios.exe', 'idios-tui.exe')) {
             if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Published installer did not install $binary." }
           }
+          foreach ($file in @('README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path (Join-Path $installDir 'docs') $file))) { throw "Installed documentation is missing: $file" }
+          }
+          if (Test-Path (Join-Path $installDir 'idios-tui-demo.exe')) { throw 'Demo TUI must not be installed for end users.' }
       - name: Execute published Windows installer binaries
         if: runner.os == 'Windows'
         shell: bash
@@ -544,8 +559,7 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="published-installer/idios.exe" \
           IDIOS_TUI_BIN="published-installer/idios-tui.exe" \
-          IDIOS_TUI_DEMO_BIN="published-installer/idios-tui-demo.exe" \
-          sh ./scripts/smoke-platform.sh
+          sh ./scripts/smoke-release.sh
       - name: Smoke-test installed published Linux/macOS package
         if: runner.os != 'Windows'
         shell: bash
@@ -556,14 +570,11 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             IDIOS_BIN="/usr/bin/idios"
             IDIOS_TUI_BIN="/usr/bin/idios-tui"
-            IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo"
           else
             IDIOS_BIN="/usr/local/bin/idios"
             IDIOS_TUI_BIN="/usr/local/bin/idios-tui"
-            IDIOS_TUI_DEMO_BIN="/usr/local/bin/idios-tui-demo"
           fi
-          export IDIOS_BIN IDIOS_TUI_BIN IDIOS_TUI_DEMO_BIN
-          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" sh ./scripts/smoke-platform.sh
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" sh ./scripts/smoke-release.sh
       - name: Execute downloaded CLI and SQLite workflow
         shell: bash
         env:
@@ -581,5 +592,4 @@ jobs:
           IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
           IDIOS_BIN="release-download/unpacked/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="release-download/unpacked/idios-tui${EXE_SUFFIX}" \
-          IDIOS_TUI_DEMO_BIN="release-download/unpacked/idios-tui-demo${EXE_SUFFIX}" \
-          sh ./scripts/smoke-platform.sh
+          sh ./scripts/smoke-release.sh
