@@ -48,14 +48,9 @@ Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription:
 [Files]
 Source: "..\..\dist\idios.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\dist\idios-tui.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\dist\idios-tui-demo.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\..\docs\user\GETTING_STARTED.md"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\..\docs\user\WORKSPACE_GUIDE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\..\docs\user\SETTINGS.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\IDIOS\IDIOS CLI Help"; Filename: "{app}\idios.exe"; Parameters: "help"; Tasks: startmenu
 Name: "{userprograms}\IDIOS\IDIOS Terminal Workspace"; Filename: "{app}\idios-tui.exe"; Tasks: startmenu
-Name: "{userprograms}\IDIOS\IDIOS Demo Workspace"; Filename: "{app}\idios-tui-demo.exe"; Tasks: startmenu
