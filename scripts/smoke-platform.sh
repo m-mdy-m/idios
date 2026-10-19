@@ -20,6 +20,14 @@ if [ ! -f "$TUI_DEMO" ]; then
   exit 2
 fi
 
+# GitHub Actions artifacts do not reliably preserve executable mode bits on
+# download. Restore them before running binaries in the cross-job smoke test.
+case "$(uname -s 2>/dev/null || true)" in
+  Linux|Darwin)
+    chmod u+x "$CLI" "$TUI" "$TUI_DEMO"
+    ;;
+esac
+
 "$CLI" help >/dev/null
 version=$("$CLI" version)
 if [ -n "${IDIOS_EXPECT_VERSION:-}" ] && [ "$version" != "$IDIOS_EXPECT_VERSION" ]; then
