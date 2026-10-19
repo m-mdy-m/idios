@@ -4,9 +4,9 @@ All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] — Unreleased
 
-### Build, test, and distribution
+### Fixed
 
 - **Clean end-user downloads:** exclude `idios-tui-demo` and extended guides from portable archives and native installers. User-facing packages contain only the `idios` CLI, clean `idios-tui`, `README.md`, and `LICENSE`; the demo executable and extended guides remain available in the source repository for development and CI smoke tests.
 - Release checks validate the exact four-file portable bundle and verify that native package payloads do not contain the demo executable.
