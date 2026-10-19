@@ -18,27 +18,11 @@ contents:
     dst: /usr/bin/idios-tui
     file_info:
       mode: 0755
-  - src: dist/idios-tui-demo
-    dst: /usr/bin/idios-tui-demo
-    file_info:
-      mode: 0755
   - src: README.md
     dst: /usr/share/doc/idios/README.md
     file_info:
       mode: 0644
   - src: LICENSE
     dst: /usr/share/doc/idios/LICENSE
-    file_info:
-      mode: 0644
-  - src: docs/user/GETTING_STARTED.md
-    dst: /usr/share/doc/idios/GETTING_STARTED.md
-    file_info:
-      mode: 0644
-  - src: docs/user/WORKSPACE_GUIDE.md
-    dst: /usr/share/doc/idios/WORKSPACE_GUIDE.md
-    file_info:
-      mode: 0644
-  - src: docs/user/SETTINGS.md
-    dst: /usr/share/doc/idios/SETTINGS.md
     file_info:
       mode: 0644
