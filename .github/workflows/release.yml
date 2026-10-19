@@ -360,9 +360,13 @@ jobs:
           $installDir = Join-Path $PWD 'installer-test'
           $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Windows setup exited with code $($proc.ExitCode)." }
-          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'README.md', 'LICENSE')) {
+          foreach ($binary in @('idios.exe', 'idios-tui.exe')) {
             if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Installed executable is missing: $binary" }
           }
+          foreach ($file in @('README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path (Join-Path $installDir 'docs') $file))) { throw "Installed documentation is missing: $file" }
+          }
+          if (Test-Path (Join-Path $installDir 'idios-tui-demo.exe')) { throw 'Demo TUI must not be installed for end users.' }
       - name: Execute packaged binaries without build-toolchain setup
         shell: bash
         env:
@@ -538,9 +542,13 @@ jobs:
           $installerPath = (Resolve-Path "release-download/$installer").Path
           $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published Windows setup exited with code $($proc.ExitCode)." }
-          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'README.md', 'LICENSE')) {
+          foreach ($binary in @('idios.exe', 'idios-tui.exe')) {
             if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Published installer did not install $binary." }
           }
+          foreach ($file in @('README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path (Join-Path $installDir 'docs') $file))) { throw "Published installer is missing $file." }
+          }
+          if (Test-Path (Join-Path $installDir 'idios-tui-demo.exe')) { throw 'Published installer must not include the demo TUI.' }
       - name: Execute published Windows installer binaries
         if: runner.os == 'Windows'
         shell: bash
