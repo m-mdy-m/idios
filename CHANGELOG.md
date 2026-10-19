@@ -158,8 +158,11 @@ former Python application, and it does not perform real Git operations or remote
   on its native runner.
 - Publish native installation formats alongside portable archives: Linux `.deb` and `.rpm`, macOS
   `.pkg` installers and `.dmg` containers, and per-user Windows `-setup.exe` installers; retain
-  Linux/macOS `.tar.gz` and Windows `.zip` bundles. Each format includes the CLI, clean TUI, demo TUI,
-  license, and user guides.
+  Linux/macOS `.tar.gz` and Windows `.zip` bundles. End-user packages contain the CLI, clean TUI,
+  README, and license; the demo TUI and extended guides remain developer/source-repository resources.
+- **Clean end-user downloads:** exclude `idios-tui-demo` from portable archives and native installers,
+  while retaining the demo executable in source builds and developer/CI smoke tests. Release checks
+  validate the four-file portable bundle and verify that native package payloads do not contain the demo.
 - Verify package contents, installable payloads, and SHA-256 checksums before/after publication. Native
   runners download and test the published release assets and exercise the installed binaries against the
   SQLite-backed smoke workflow.
