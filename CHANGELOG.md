@@ -4,23 +4,11 @@ All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Release status:** IDIOS 1.0.0 has **not been released**. The section below records the
-> intended contents of the first Go Engine release. No release date or published tag is assigned.
+> **Release status:** IDIOS 1.0.0 has **not been released yet**. This version-specific entry
+> documents the intended first Go Engine release. Its release date will be added when the
+> `v1.0.0` tag is published and verified.
 
-## [Unreleased]
-
-### Added
-- **Separate demo TUI:** add `idios-tui-demo`, which automatically seeds and opens a sample workspace in its own SQLite database.
-- **Headless database check:** add `--check` to both TUI entry points so CI can initialize and verify databases without an interactive terminal.
-
-### Changed
-- **Clean default TUI:** `idios-tui` now opens an unseeded workspace on first launch and has no in-app “Load Demo Workspace” action, shortcut, or button.
-- **Database isolation:** the demo UI defaults to `~/.idios/demo/idios-demo.sqlite3` and uses `IDIOS_DEMO_DB`; it intentionally ignores `IDIOS_DB` unless `--db` explicitly overrides the database.
-- **Build and distribution:** build and ship `idios`, `idios-tui`, and `idios-tui-demo` on all supported release platforms.
-- **Smoke tests:** verify that the standard TUI stays empty, the demo TUI seeds idempotently, and the two databases remain isolated.
-
-
-**Intended target:** `1.0.0`.
+## [1.0.0] — Unreleased
 
 IDIOS 1.0.0 is a re-platforming of IDIOS into a local-first Go workspace engine. It introduces a
 repository and Issue workflow with structured dependencies, Pull Request-based completion,
@@ -77,6 +65,8 @@ former Python application, and it does not perform real Git operations or remote
 - **Keyboard and mouse interaction:** a persistent full-screen, event-driven TUI with navigation,
   selectable content, focusable controls, clickable hit targets, editable single-line and multiline
   forms with caret/paste support, responsive narrow-terminal rendering, and a typed Graph Explorer.
+- **Headless database checks:** add `--check` to both TUI entry points so automation can initialize
+  and verify the selected database without requiring an interactive terminal.
 - **Separate command-line interface:** an `idios` executable with database-path selection, JSON output
   for supported commands, repository/Issue/Project/Concept/Label/Milestone/Pull Request/graph
   workflows, and stable error/output structures intended for future integrations.
@@ -164,12 +154,19 @@ former Python application, and it does not perform real Git operations or remote
 - Provide Makefile targets for formatting checks, tests, vetting, and building `idios`, `idios-tui`,
   and `idios-tui-demo` executables.
 - Configure native CI and release automation for Linux amd64/arm64, macOS amd64/arm64, and Windows
-  amd64/arm64. Each target runs tests, builds all three executables with CGO, and executes a SQLite-backed
-  smoke workflow on its native runner. After publishing, CI downloads each actual release bundle on
-  the matching runner, checks its SHA-256 checksum, extracts it, and reruns the runtime smoke test.
-- The full release gate runs format checks, `go test ./...`, `go vet ./...`, all three native builds, and
-  post-publish download/execute verification under Go 1.25+ with CGO and an architecture-matched C
-  compiler before a release is considered verified.
+  amd64/arm64. Each target builds all three executables with CGO and runs a SQLite-backed smoke workflow
+  on its native runner.
+- Publish native installation formats alongside portable archives: Linux `.deb` and `.rpm`, macOS
+  `.pkg` installers and `.dmg` containers, and per-user Windows `-setup.exe` installers; retain
+  Linux/macOS `.tar.gz` and Windows `.zip` bundles. Each format includes the CLI, clean TUI, demo TUI,
+  license, and user guides.
+- Verify package contents, installable payloads, and SHA-256 checksums before/after publication. Native
+  runners download and test the published release assets and exercise the installed binaries against the
+  SQLite-backed smoke workflow.
+- The release quality gate runs formatting checks, `go test ./...`, `go vet ./...`, and native build
+  and runtime verification under Go 1.25+ with CGO and an architecture-matched C compiler.
+- **Signing caveat:** the initial packaging workflow does not sign/notarize macOS packages or Authenticode-sign
+  the Windows installer; operating-system security warnings may be shown until release signing is configured.
 
 ### Migration and compatibility notes
 
