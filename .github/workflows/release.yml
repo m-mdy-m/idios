@@ -363,7 +363,8 @@ jobs:
           IDIOS_BIN="bundle/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="bundle/idios-tui${EXE_SUFFIX}" \
           IDIOS_TUI_DEMO_BIN="bundle/idios-tui-demo${EXE_SUFFIX}" \
-          sh ./scripts/smoke-platform.sh      - name: Smoke-test installed Windows setup
+          sh ./scripts/smoke-platform.sh
+      - name: Smoke-test installed Windows setup
         if: runner.os == 'Windows'
         shell: bash
         env:
@@ -522,6 +523,18 @@ jobs:
           IDIOS_BIN="published-installer/idios.exe" \
           IDIOS_TUI_BIN="published-installer/idios-tui.exe" \
           IDIOS_TUI_DEMO_BIN="published-installer/idios-tui-demo.exe" \
+          sh ./scripts/smoke-platform.sh
+      - name: Smoke-test installed published Linux DEB package
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
+          IDIOS_BIN="/usr/bin/idios" \
+          IDIOS_TUI_BIN="/usr/bin/idios-tui" \
+          IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo" \
           sh ./scripts/smoke-platform.sh
       - name: Execute downloaded CLI and SQLite workflow
         shell: bash
