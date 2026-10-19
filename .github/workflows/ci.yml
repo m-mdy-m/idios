@@ -142,6 +142,9 @@ jobs:
             fi
           fi
           IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+          mkdir -p release-smoke
+          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" README.md LICENSE release-smoke/
+          IDIOS_BIN="release-smoke/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="release-smoke/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-release.sh
       - name: Upload native test binaries
         uses: actions/upload-artifact@v4
         with:
@@ -200,3 +203,6 @@ jobs:
             fi
           fi
           IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+          mkdir -p release-smoke
+          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" README.md LICENSE release-smoke/
+          IDIOS_BIN="release-smoke/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="release-smoke/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-release.sh
