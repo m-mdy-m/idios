@@ -167,11 +167,70 @@ jobs:
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Copy-Item dist/idios.exe, dist/idios-tui.exe, dist/idios-tui-demo.exe, README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md -Destination release/
           Compress-Archive -Path release/* -DestinationPath "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip" -Force
-      - name: Upload release bundle
+      - name: Build Linux DEB and RPM packages
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+          TARGET_GOARCH: ${{ matrix.asset == 'linux-arm64' && 'arm64' || 'amd64' }}
+        run: |
+          set -euo pipefail
+          export VERSION="${GITHUB_REF_NAME#v}"
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          nfpm package --config packaging/nfpm.yaml --packager deb --target "idios-${GITHUB_REF_NAME}-${ASSET}.deb"
+          nfpm package --config packaging/nfpm.yaml --packager rpm --target "idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
+          dpkg-deb --info "idios-${GITHUB_REF_NAME}-${ASSET}.deb" >/dev/null
+          rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
+      - name: Build macOS PKG and DMG installers
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          bash ./scripts/package-macos.sh "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" "$ASSET"
+      - name: Build Windows setup installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $roots = @([Environment]::GetFolderPath('ProgramFilesX86'), [Environment]::GetFolderPath('ProgramFiles'))
+          $compiler = $null
+          foreach ($root in $roots) {
+            foreach ($version in @('Inno Setup 7', 'Inno Setup 6')) {
+              $candidate = Join-Path $root "$version\ISCC.exe"
+              if (Test-Path $candidate) { $compiler = $candidate; break }
+            }
+            if ($compiler) { break }
+          }
+          if (-not $compiler) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to install Inno Setup.' }
+            foreach ($root in $roots) {
+              foreach ($version in @('Inno Setup 7', 'Inno Setup 6')) {
+                $candidate = Join-Path $root "$version\ISCC.exe"
+                if (Test-Path $candidate) { $compiler = $candidate; break }
+              }
+              if ($compiler) { break }
+            }
+          }
+          if (-not $compiler) { throw 'ISCC.exe was not found after installing Inno Setup.' }
+          & $compiler '/O.' 'packaging/windows/idios.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE." }
+          $installer = "idios-$env:GITHUB_REF_NAME-$env:ASSET-setup.exe"
+          if (-not (Test-Path $installer)) { throw "Expected installer was not created: $installer" }
+      - name: Upload release bundles and native installers
         uses: actions/upload-artifact@v4
         with:
           name: idios-${{ matrix.asset }}
-          path: idios-${{ github.ref_name }}-${{ matrix.asset }}.${{ matrix.archive }}
+          path: |
+            idios-${{ github.ref_name }}-${{ matrix.asset }}.*
+            idios-${{ github.ref_name }}-${{ matrix.asset }}-setup.exe
           if-no-files-found: error
           retention-days: 5
 
@@ -235,6 +294,57 @@ jobs:
           $archive = Get-ChildItem artifact/*.zip | Select-Object -First 1
           if (-not $archive) { throw 'Windows release artifact archive is missing.' }
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath bundle -Force
+      - name: Validate and smoke-test installed Linux DEB package
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          deb="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.deb"
+          rpm_pkg="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
+          dpkg-deb --info "$deb" >/dev/null
+          rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "$rpm_pkg"
+          dpkg-deb --contents "$deb" > package-contents.txt
+          grep -Eq '\./usr/bin/idios$' package-contents.txt
+          grep -Eq '\./usr/bin/idios-tui$' package-contents.txt
+          grep -Eq '\./usr/bin/idios-tui-demo$' package-contents.txt
+          sudo dpkg -i "$deb"
+          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="/usr/bin/idios" IDIOS_TUI_BIN="/usr/bin/idios-tui" IDIOS_TUI_DEMO_BIN="/usr/bin/idios-tui-demo" sh ./scripts/smoke-platform.sh
+      - name: Validate macOS PKG and DMG payloads
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          pkg="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.pkg"
+          dmg="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.dmg"
+          pkgutil --payload-files "$pkg" > pkg-payload.txt
+          grep -Eq '(^|/)bin/idios$' pkg-payload.txt
+          grep -Eq '(^|/)bin/idios-tui$' pkg-payload.txt
+          grep -Eq '(^|/)bin/idios-tui-demo$' pkg-payload.txt
+          mountpoint="$(mktemp -d "${TMPDIR:-/tmp}/idios-dmg.XXXXXX")"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+          trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
+          test -f "$mountpoint/idios-${GITHUB_REF_NAME}-${ASSET}.pkg"
+      - name: Install Windows setup and verify installed files
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installerPath = Join-Path $PWD "artifact/idios-$env:GITHUB_REF_NAME-$env:ASSET-setup.exe"
+          if (-not (Test-Path $installerPath)) { throw "Windows setup installer is missing: $installerPath" }
+          $installDir = Join-Path $PWD 'installer-test'
+          $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Windows setup exited with code $($proc.ExitCode)." }
+          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'idios-tui-demo.exe')) {
+            if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Installed executable is missing: $binary" }
+          }
       - name: Execute packaged binaries without build-toolchain setup
         shell: bash
         env:
@@ -253,7 +363,19 @@ jobs:
           IDIOS_BIN="bundle/idios${EXE_SUFFIX}" \
           IDIOS_TUI_BIN="bundle/idios-tui${EXE_SUFFIX}" \
           IDIOS_TUI_DEMO_BIN="bundle/idios-tui-demo${EXE_SUFFIX}" \
+          sh ./scripts/smoke-platform.sh      - name: Smoke-test installed Windows setup
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
+          IDIOS_BIN="installer-test/idios.exe" \
+          IDIOS_TUI_BIN="installer-test/idios-tui.exe" \
+          IDIOS_TUI_DEMO_BIN="installer-test/idios-tui-demo.exe" \
           sh ./scripts/smoke-platform.sh
+
 
   publish:
     name: Publish GitHub Release
@@ -319,7 +441,7 @@ jobs:
     steps:
       - name: Checkout release source for smoke scripts
         uses: actions/checkout@v4
-      - name: Download published bundle and checksum (Unix)
+      - name: Download and verify published assets (Unix)
         if: runner.os != 'Windows'
         shell: bash
         env:
@@ -329,14 +451,39 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-download/unpacked
-          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --pattern "idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" \
-            --pattern 'SHA256SUMS.txt' --dir release-download
-          sh ./scripts/verify-checksum.sh \
-            "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" \
-            release-download/SHA256SUMS.txt
+          patterns=(--pattern "idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" --pattern 'SHA256SUMS.txt')
+          files=("release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}")
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            patterns+=(--pattern "idios-${GITHUB_REF_NAME}-${ASSET}.deb" --pattern "idios-${GITHUB_REF_NAME}-${ASSET}.rpm")
+            files+=("release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm")
+          else
+            patterns+=(--pattern "idios-${GITHUB_REF_NAME}-${ASSET}.pkg" --pattern "idios-${GITHUB_REF_NAME}-${ASSET}.dmg")
+            files+=("release-download/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.dmg")
+          fi
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${patterns[@]}" --dir release-download
+          for asset_file in "${files[@]}"; do
+            sh ./scripts/verify-checksum.sh "$asset_file" release-download/SHA256SUMS.txt
+          done
           tar -xzf "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" -C release-download/unpacked
-      - name: Download and extract published bundle (Windows)
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y rpm
+            dpkg-deb --info "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" >/dev/null
+            rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
+            dpkg-deb --contents "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb" > release-download/deb-contents.txt
+            grep -Eq '\./usr/bin/idios-tui-demo$' release-download/deb-contents.txt
+            sudo dpkg -i "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.deb"
+          else
+            pkgutil --payload-files "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.pkg" > release-download/pkg-payload.txt
+            grep -Eq '(^|/)bin/idios$' release-download/pkg-payload.txt
+            grep -Eq '(^|/)bin/idios-tui$' release-download/pkg-payload.txt
+            grep -Eq '(^|/)bin/idios-tui-demo$' release-download/pkg-payload.txt
+            mountpoint="$(mktemp -d "${TMPDIR:-/tmp}/idios-published-dmg.XXXXXX")"
+            hdiutil attach "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+            trap 'hdiutil detach "$mountpoint" -quiet || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
+            test -f "$mountpoint/idios-${GITHUB_REF_NAME}-${ASSET}.pkg"
+          fi
+      - name: Download, verify and install published Windows assets
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -345,15 +492,37 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release-download/unpacked | Out-Null
-          $archive = "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip"
-          gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern $archive --pattern 'SHA256SUMS.txt' --dir release-download
+          $archive = "idios-$env:GITHUB_REF_NAME-$env:ASSET.zip"
+          $installer = "idios-$env:GITHUB_REF_NAME-$env:ASSET-setup.exe"
+          gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern $archive --pattern $installer --pattern 'SHA256SUMS.txt' --dir release-download
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $line = Get-Content release-download/SHA256SUMS.txt | Where-Object { $_ -match "\s+$([regex]::Escape($archive))$" } | Select-Object -First 1
-          if (-not $line) { throw "Checksum entry missing for $archive" }
-          $expected = ($line -split '\s+')[0].ToLowerInvariant()
-          $actual = (Get-FileHash "release-download/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "SHA-256 mismatch for $archive" }
+          foreach ($name in @($archive, $installer)) {
+            $line = Get-Content release-download/SHA256SUMS.txt | Where-Object { $_ -match "\s+$([regex]::Escape($name))$" } | Select-Object -First 1
+            if (-not $line) { throw "Checksum entry missing for $name" }
+            $expected = ($line -split '\s+')[0].ToLowerInvariant()
+            $actual = (Get-FileHash "release-download/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "SHA-256 mismatch for $name" }
+          }
           Expand-Archive -LiteralPath "release-download/$archive" -DestinationPath release-download/unpacked -Force
+          $installDir = Join-Path $PWD 'published-installer'
+          $installerPath = (Resolve-Path "release-download/$installer").Path
+          $proc = Start-Process -FilePath $installerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Published Windows setup exited with code $($proc.ExitCode)." }
+          foreach ($binary in @('idios.exe', 'idios-tui.exe', 'idios-tui-demo.exe')) {
+            if (-not (Test-Path (Join-Path $installDir $binary))) { throw "Published installer did not install $binary." }
+          }
+      - name: Execute published Windows installer binaries
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
+          IDIOS_BIN="published-installer/idios.exe" \
+          IDIOS_TUI_BIN="published-installer/idios-tui.exe" \
+          IDIOS_TUI_DEMO_BIN="published-installer/idios-tui-demo.exe" \
+          sh ./scripts/smoke-platform.sh
       - name: Execute downloaded CLI and SQLite workflow
         shell: bash
         env:
