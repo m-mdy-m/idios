@@ -301,6 +301,12 @@ jobs:
           $archive = Get-ChildItem artifact/*.zip | Select-Object -First 1
           if (-not $archive) { throw 'Windows release artifact archive is missing.' }
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath bundle -Force
+          if (Test-Path 'bundle/idios-tui-demo.exe') { throw 'Release archive must not contain the demo TUI.' }
+          $archiveFiles = @(Get-ChildItem bundle -File)
+          if ($archiveFiles.Count -ne 4) { throw "Expected exactly four user-facing archive files, found $($archiveFiles.Count)." }
+          foreach ($required in @('idios.exe', 'idios-tui.exe', 'README.md', 'LICENSE')) {
+            if (-not (Test-Path (Join-Path 'bundle' $required))) { throw "Release archive is missing $required." }
+          }
       - name: Validate and smoke-test installed Linux DEB package
         if: runner.os == 'Linux'
         shell: bash
