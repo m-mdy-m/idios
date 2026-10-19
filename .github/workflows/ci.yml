@@ -139,7 +139,7 @@ jobs:
           fi
           IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" IDIOS_TUI_DEMO_BIN="dist/idios-tui-demo${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
       - name: Upload native test binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: idios-ci-${{ matrix.target }}
           path: dist/*
