@@ -261,7 +261,10 @@ func TestMultilineFieldNavigationPreservesColumn(t *testing.T) {
 	if got := multilineLineBoundary(value, caret, false); got != len([]rune("first\n")) {
 		t.Fatalf("Home boundary = %d", got)
 	}
-	if lines := multilineFieldLines(value, caret, true, "placeholder", 2); len(lines) < 2 || !strings.Contains(strings.Join(lines, "\n"), "second") {
-		t.Fatalf("multiline viewport omitted its caret line: %#v", lines)
+	lines := multilineFieldLines(value, caret, true, "placeholder", 2)
+	rendered := strings.Join(lines, "\n")
+	contentWithoutCaret := strings.ReplaceAll(rendered, "▏", "")
+	if !strings.Contains(contentWithoutCaret, "second") || !strings.Contains(rendered, "sec▏ond") {
+		t.Fatalf("multiline viewport omitted the caret line or caret marker: %#v", lines)
 	}
 }

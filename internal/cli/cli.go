@@ -14,7 +14,8 @@ import (
 	"idios/internal/render"
 )
 
-const Version = "1.0.0"
+// Version is set to the source version by default and overridden by release builds via -ldflags.
+var Version = "1.0.0"
 
 // config holds the global flags, which may appear anywhere in the argument list.
 type config struct {

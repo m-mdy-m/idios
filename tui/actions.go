@@ -3,13 +3,11 @@
 package tui
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"fmt"
 	"idios/internal/config"
 	"idios/internal/domain"
-	"sort"
 	"strings"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 func (m *model) handleAction(action string) tea.Cmd {

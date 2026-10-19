@@ -3,8 +3,8 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BIN=${IDIOS_BIN:-"$ROOT/dist/idios"}
-if [ ! -x "$BIN" ]; then
-  echo "IDIOS binary not found/executable: $BIN" >&2
+if [ ! -f "$BIN" ]; then
+  echo "IDIOS binary not found: $BIN" >&2
   echo "Run 'make build' first or set IDIOS_BIN." >&2
   exit 2
 fi

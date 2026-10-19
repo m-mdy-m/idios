@@ -1,13 +1,10 @@
 package tui
 
 import (
+	"charm.land/lipgloss/v2"
 	"fmt"
-	"idios/internal/config"
 	"idios/internal/domain"
 	"strings"
-	"time"
-
-	"charm.land/lipgloss/v2"
 )
 
 func (m *model) renderOverview(c *canvas, p palette) {

@@ -73,3 +73,17 @@ Shortcuts are configurable in `~/.idios/config.json`. The Settings screen displa
 6. Add the Issue to a **Project** if it belongs to a larger goal. Link a **Concept** for reusable knowledge, or attach a **Note** for a thought worth keeping.
 
 See [Workspace guide](WORKSPACE_GUIDE.md) for the distinctions between these relationships. Before using templates heavily, see [Repository, Issue and Pull Request templates](ISSUE_AND_PR_TEMPLATES.md) to customize the default briefs, acceptance criteria and review checklist.
+
+
+## Download a prebuilt release
+
+After a release is published, open the project's GitHub Releases page and select the archive that
+matches your operating system and processor:
+
+- Linux: `linux-amd64` or `linux-arm64` (`.tar.gz`)
+- macOS: `darwin-amd64` for Intel or `darwin-arm64` for Apple Silicon (`.tar.gz`)
+- Windows: `windows-amd64` or `windows-arm64` (`.zip`)
+
+Extract the archive and run `./idios help` (PowerShell: `.\idios.exe help`) to confirm that the CLI launches.
+Run `./idios-tui` (PowerShell: `.\idios-tui.exe`) from an interactive terminal to open the full-screen interface. The release archive includes both programs
+and the user guides. `SHA256SUMS.txt` is published alongside the archives for integrity checks.

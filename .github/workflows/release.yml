@@ -3,121 +3,370 @@ name: Go Release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+      - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  test:
-    name: Release gate
-    runs-on: ubuntu-latest
+  quality:
+    name: Release quality gate
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.27.x'
           cache: true
       - name: Install C compiler
         run: sudo apt-get update && sudo apt-get install -y gcc
-      - name: Download modules
-        run: go mod download
-      - name: Test and vet
+      - name: Run make check
         run: make check
       - name: Race tests
         run: make test-race
-      - name: Workflow smoke test
+      - name: Build and run end-to-end smoke test
         run: make smoke
 
   build:
-    name: Build ${{ matrix.asset }}
-    needs: test
+    name: Build and test ${{ matrix.asset }}
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - runner: ubuntu-22.04
             asset: linux-amd64
-            exe: ""
-          - os: macos-14
+            cc: gcc
+            exe: ''
+            archive: tar.gz
+          - runner: ubuntu-22.04-arm
+            asset: linux-arm64
+            cc: gcc
+            exe: ''
+            archive: tar.gz
+          - runner: macos-15-intel
+            asset: darwin-amd64
+            cc: clang
+            exe: ''
+            archive: tar.gz
+          - runner: macos-15
             asset: darwin-arm64
-            exe: ""
-          - os: windows-latest
+            cc: clang
+            exe: ''
+            archive: tar.gz
+          - runner: windows-2025
             asset: windows-amd64
-            exe: ".exe"
-    runs-on: ${{ matrix.os }}
+            cc: gcc
+            exe: '.exe'
+            archive: zip
+          - runner: windows-11-arm
+            asset: windows-arm64
+            cc: clang
+            exe: '.exe'
+            archive: zip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      CGO_ENABLED: '1'
+      CC: ${{ matrix.cc }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Validate semantic version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v1.2.3 or v1.2.3-rc.1; got: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.27.x'
           cache: true
-      - name: Install Windows C compiler
-        if: runner.os == 'Windows'
+      - name: Install Windows amd64 C toolchain
+        if: matrix.asset == 'windows-amd64'
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
           install: mingw-w64-ucrt-x86_64-gcc
-      - name: Install Unix C compiler
+      - name: Install Windows ARM64 C toolchain
+        if: matrix.asset == 'windows-arm64'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          install: mingw-w64-clang-aarch64-clang
+      - name: Install Linux C compiler
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Download modules
         run: go mod download
-      - name: Build binaries (Unix)
-        if: runner.os != 'Windows'
+      - name: Verify formatting
         shell: bash
         run: |
           set -euo pipefail
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [ -n "$unformatted" ]; then
+            echo "Go files need gofmt:"
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Run tests
+        run: go test ./...
+      - name: Run vet
+        run: go vet ./...
+      - name: Build both executables
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            BASE_LDFLAGS='-s -w -linkmode external -extldflags=-static'
+          else
+            BASE_LDFLAGS='-s -w'
+          fi
+          CLI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/cli.Version=${VERSION}"
+          go build -trimpath -ldflags="$CLI_LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
+          go build -trimpath -ldflags="$BASE_LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
+      - name: Smoke-test native executables
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+      - name: Package Unix bundle
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
           mkdir -p release
-          CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o "release/idios${{ matrix.exe }}" ./cmd/idios
-          CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o "release/idios-tui${{ matrix.exe }}" ./cmd/idios-tui
+          cp "dist/idios${EXE_SUFFIX}" "dist/idios-tui${EXE_SUFFIX}" release/
           cp README.md LICENSE docs/user/GETTING_STARTED.md docs/user/WORKSPACE_GUIDE.md docs/user/SETTINGS.md release/
-          tar -czf "idios-${{ github.ref_name }}-${{ matrix.asset }}.tar.gz" -C release .
-      - name: Build binaries (Windows)
+          tar -czf "idios-${GITHUB_REF_NAME}-${{ matrix.asset }}.tar.gz" -C release .
+      - name: Package Windows bundle
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          $env:CGO_ENABLED = '1'
-          go build -trimpath -ldflags='-s -w' -o 'release/idios.exe' ./cmd/idios
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go build -trimpath -ldflags='-s -w' -o 'release/idios-tui.exe' ./cmd/idios-tui
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md release/
-          Compress-Archive -Path release/* -DestinationPath "idios-${{ github.ref_name }}-${{ matrix.asset }}.zip" -Force
+          Copy-Item dist/idios.exe, dist/idios-tui.exe, README.md, LICENSE, docs/user/GETTING_STARTED.md, docs/user/WORKSPACE_GUIDE.md, docs/user/SETTINGS.md -Destination release/
+          Compress-Archive -Path release/* -DestinationPath "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip" -Force
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
           name: idios-${{ matrix.asset }}
-          path: idios-${{ github.ref_name }}-${{ matrix.asset }}.*
+          path: idios-${{ github.ref_name }}-${{ matrix.asset }}.${{ matrix.archive }}
           if-no-files-found: error
           retention-days: 5
 
+  verify-bundles:
+    name: Download and execute pre-release ${{ matrix.asset }} bundle
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            asset: linux-amd64
+            archive: tar.gz
+            exe: ''
+          - runner: ubuntu-22.04-arm
+            asset: linux-arm64
+            archive: tar.gz
+            exe: ''
+          - runner: macos-15-intel
+            asset: darwin-amd64
+            archive: tar.gz
+            exe: ''
+          - runner: macos-15
+            asset: darwin-arm64
+            archive: tar.gz
+            exe: ''
+          - runner: windows-2025
+            asset: windows-amd64
+            archive: zip
+            exe: '.exe'
+          - runner: windows-11-arm
+            asset: windows-arm64
+            archive: zip
+            exe: '.exe'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source for smoke scripts
+        uses: actions/checkout@v4
+      - name: Download this platform's packaged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: idios-${{ matrix.asset }}
+          path: artifact
+      - name: Extract Unix bundle
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          tar -xzf "artifact/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" -C bundle
+      - name: Extract Windows bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path bundle | Out-Null
+          $archive = Get-ChildItem artifact/*.zip | Select-Object -First 1
+          if (-not $archive) { throw 'Windows release artifact archive is missing.' }
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath bundle -Force
+      - name: Execute packaged binaries without build-toolchain setup
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+          IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            if [[ -n "$filtered_path" ]]; then
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
+              export PATH
+            fi
+          fi
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
+          IDIOS_BIN="bundle/idios${EXE_SUFFIX}" \
+          IDIOS_TUI_BIN="bundle/idios-tui${EXE_SUFFIX}" \
+          sh ./scripts/smoke-platform.sh
+
   publish:
     name: Publish GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
+    needs: verify-bundles
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
-      - name: Download all bundles
+      - name: Download all native bundles
         uses: actions/download-artifact@v4
         with:
           pattern: idios-*
           path: release-assets
           merge-multiple: true
-      - name: Generate checksums
-        run: cd release-assets && sha256sum * > SHA256SUMS.txt
+      - name: Generate SHA-256 checksums
+        working-directory: release-assets
+        run: sha256sum idios-* > SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           name: "IDIOS ${{ github.ref_name }}"
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-published-download:
+    name: Download and execute ${{ matrix.asset }} release
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            asset: linux-amd64
+            archive: tar.gz
+            exe: ''
+          - runner: ubuntu-22.04-arm
+            asset: linux-arm64
+            archive: tar.gz
+            exe: ''
+          - runner: macos-15-intel
+            asset: darwin-amd64
+            archive: tar.gz
+            exe: ''
+          - runner: macos-15
+            asset: darwin-arm64
+            archive: tar.gz
+            exe: ''
+          - runner: windows-2025
+            asset: windows-amd64
+            archive: zip
+            exe: '.exe'
+          - runner: windows-11-arm
+            asset: windows-arm64
+            archive: zip
+            exe: '.exe'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release source for smoke scripts
+        uses: actions/checkout@v4
+      - name: Download published bundle and checksum (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET: ${{ matrix.asset }}
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-download/unpacked
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --pattern "idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" \
+            --pattern 'SHA256SUMS.txt' --dir release-download
+          sh ./scripts/verify-checksum.sh \
+            "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" \
+            release-download/SHA256SUMS.txt
+          tar -xzf "release-download/idios-${GITHUB_REF_NAME}-${ASSET}.${ARCHIVE}" -C release-download/unpacked
+      - name: Download and extract published bundle (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path release-download/unpacked | Out-Null
+          $archive = "idios-$env:GITHUB_REF_NAME-${{ matrix.asset }}.zip"
+          gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern $archive --pattern 'SHA256SUMS.txt' --dir release-download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $line = Get-Content release-download/SHA256SUMS.txt | Where-Object { $_ -match "\s+$([regex]::Escape($archive))$" } | Select-Object -First 1
+          if (-not $line) { throw "Checksum entry missing for $archive" }
+          $expected = ($line -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash "release-download/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "SHA-256 mismatch for $archive" }
+          Expand-Archive -LiteralPath "release-download/$archive" -DestinationPath release-download/unpacked -Force
+      - name: Execute downloaded CLI and SQLite workflow
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+          IDIOS_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            if [[ -n "$filtered_path" ]]; then
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
+              export PATH
+            fi
+          fi
+          IDIOS_EXPECT_VERSION="${IDIOS_EXPECT_VERSION#v}" \
+          IDIOS_BIN="release-download/unpacked/idios${EXE_SUFFIX}" \
+          IDIOS_TUI_BIN="release-download/unpacked/idios-tui${EXE_SUFFIX}" \
+          sh ./scripts/smoke-platform.sh

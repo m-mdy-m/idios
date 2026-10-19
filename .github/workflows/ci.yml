@@ -14,15 +14,15 @@ concurrency:
 
 jobs:
   quality:
-    name: Format, test, vet and smoke
-    runs-on: ubuntu-latest
+    name: Linux quality gate
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.27.x'
           cache: true
       - name: Install C compiler
         run: sudo apt-get update && sudo apt-get install -y gcc
@@ -30,5 +30,168 @@ jobs:
         run: make check
       - name: Race tests
         run: make test-race
-      - name: Build and workflow smoke test
+      - name: Build and runtime smoke test
         run: make smoke
+
+  native-platforms:
+    name: ${{ matrix.target }} tests and runtime smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+            cc: gcc
+            exe: ''
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            cc: gcc
+            exe: ''
+          - target: darwin-amd64
+            runner: macos-15-intel
+            cc: clang
+            exe: ''
+          - target: darwin-arm64
+            runner: macos-15
+            cc: clang
+            exe: ''
+          - target: windows-amd64
+            runner: windows-2025
+            cc: gcc
+            exe: '.exe'
+          - target: windows-arm64
+            runner: windows-11-arm
+            cc: clang
+            exe: '.exe'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    env:
+      CGO_ENABLED: '1'
+      CC: ${{ matrix.cc }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: true
+      - name: Install Windows amd64 C toolchain
+        if: matrix.target == 'windows-amd64'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Install Windows ARM64 C toolchain
+        if: matrix.target == 'windows-arm64'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          install: mingw-w64-clang-aarch64-clang
+      - name: Install Linux C compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc
+      - name: Download modules
+        run: go mod download
+      - name: Verify formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [ -n "$unformatted" ]; then
+            echo "Go files need gofmt:"
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Test
+        run: go test ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Build both executables
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            LDFLAGS='-s -w -linkmode external -extldflags=-static'
+          else
+            LDFLAGS='-s -w'
+          fi
+          go build -trimpath -ldflags="$LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
+          go build -trimpath -ldflags="$LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
+      - name: Run binaries and SQLite workflow
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            if [[ -n "$filtered_path" ]]; then
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
+              export PATH
+            fi
+          fi
+          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh
+      - name: Upload native test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: idios-ci-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+
+  verify-native-artifacts:
+    name: Download and run ${{ matrix.target }} CI binaries
+    needs: native-platforms
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+            exe: ''
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            exe: ''
+          - target: darwin-amd64
+            runner: macos-15-intel
+            exe: ''
+          - target: darwin-arm64
+            runner: macos-15
+            exe: ''
+          - target: windows-amd64
+            runner: windows-2025
+            exe: '.exe'
+          - target: windows-arm64
+            runner: windows-11-arm
+            exe: '.exe'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout smoke scripts
+        uses: actions/checkout@v4
+      - name: Download native build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: idios-ci-${{ matrix.target }}
+          path: dist
+      - name: Execute downloaded binaries and SQLite workflow
+        shell: bash
+        env:
+          EXE_SUFFIX: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Eiv '(msys64|mingw|ucrt64|clangarm64|gcc)' || true)"
+            if [[ -n "$filtered_path" ]]; then
+              PATH="$(printf '%s\n' "$filtered_path" | paste -sd ':' -)"
+              export PATH
+            fi
+          fi
+          IDIOS_BIN="dist/idios${EXE_SUFFIX}" IDIOS_TUI_BIN="dist/idios-tui${EXE_SUFFIX}" sh ./scripts/smoke-platform.sh

@@ -140,8 +140,9 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		for _, r := range rows {
 			sourceType, targetType, edgeType := assoc.sourceType, assoc.targetType, assoc.edgeType
 			if sourceType == "auto" {
-				// Semantic relations carry both endpoint types and the edge type in the row.
+				// Semantic relations carry both endpoint types and the actual edge type in the row.
 				sourceType, targetType = str(r, "source_type"), str(r, "target_type")
+				edgeType = str(r, "relation_type")
 			}
 			g.Edges = append(g.Edges, domain.GraphEdge{
 				Source: graphID(sourceType, str(r, assoc.sourceColumn)),

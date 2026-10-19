@@ -7,9 +7,9 @@ All notable changes to IDIOS are documented here. This file follows
 > **Release status:** IDIOS 1.0.0 has **not been released**. The section below records the
 > intended contents of the first Go Engine release. No release date or published tag is assigned.
 
-## [1.0.0] — Unreleased
+## [Unreleased]
 
-This is the planned changelog for the first Go Engine release. IDIOS 1.0.0 has not been published; no release date or Git tag is assigned yet. Before publishing, complete the release gate documented below and update this heading with the actual release date.
+**Intended target:** `1.0.0`.
 
 IDIOS 1.0.0 is a re-platforming of IDIOS into a local-first Go workspace engine. It introduces a
 repository and Issue workflow with structured dependencies, Pull Request-based completion,
@@ -131,6 +131,10 @@ former Python application, and it does not perform real Git operations or remote
   database and SQLite reports transient lock contention during journal-mode setup.
 - **Storage test portability:** avoid using `?` in the reserved-character database filename on
   Windows, where it is not a valid filename character.
+- **Semantic graph edge projection:** preserve the actual stored relation type (for example,
+  `supports`) when projecting Concept relations into graph edges.
+- **Multiline editor viewport test:** validate the caret marker separately from the underlying text
+  so an inline cursor does not make a correctly rendered line appear to be missing.
 
 ### Documentation
 
@@ -148,10 +152,13 @@ former Python application, and it does not perform real Git operations or remote
 
 - Provide Makefile targets for formatting checks, tests, vetting, and building both `idios` and
   `idios-tui` executables.
-- Configure release automation for Linux amd64, macOS arm64, and Windows amd64 bundles.
-- A full release gate must still run `gofmt`/format checks, `go test ./...`, `go vet ./...`, and
-  `make build` under the declared Go 1.25+ toolchain with CGO and a supported C compiler before
-  tagging or publishing 1.0.0.
+- Configure native CI and release automation for Linux amd64/arm64, macOS amd64/arm64, and Windows
+  amd64/arm64. Each target runs tests, builds both executables with CGO, and executes a SQLite-backed
+  smoke workflow on its native runner. After publishing, CI downloads each actual release bundle on
+  the matching runner, checks its SHA-256 checksum, extracts it, and reruns the runtime smoke test.
+- The full release gate runs format checks, `go test ./...`, `go vet ./...`, both native builds, and
+  post-publish download/execute verification under Go 1.25+ with CGO and an architecture-matched C
+  compiler before a release is considered verified.
 
 ### Migration and compatibility notes
 
@@ -217,7 +224,7 @@ historical context. They are separate from the Go Engine's `1.x` version line.
   on every push.
 
 ### Added
-- `docs/COMMANDS.md`: every command with examples.
+- `docs/user/CLI_REFERENCE.md`: every command with examples.
 
 ### Fixed
 - Reminders from cron: `notify-send` now gets the user's session bus and `DISPLAY`; under WSL the

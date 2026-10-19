@@ -69,6 +69,34 @@ IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting cl
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
+## Downloads and supported platforms
+
+Once a version tag passes the release workflow, assets are published for the following 64-bit desktop targets:
+
+| Platform | Architectures | Asset format |
+| --- | --- | --- |
+| Linux | x86-64 (`amd64`), ARM64 (`arm64`) | `.tar.gz` |
+| macOS | Intel (`amd64`), Apple Silicon (`arm64`) | `.tar.gz` |
+| Windows | x86-64 (`amd64`), ARM64 (`arm64`) | `.zip` |
+
+Assets follow the naming pattern `idios-<tag>-<target>.<archive>`, such as
+`idios-v1.0.0-linux-amd64.tar.gz` or `idios-v1.0.0-windows-arm64.zip`. Each bundle contains both
+`idios` (CLI) and `idios-tui` (interactive terminal UI), plus the license and core user guides.
+When a release is available, download the asset matching both your operating system and CPU
+architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying
+integrity. The release pipeline builds and tests on native OS/architecture runners, then downloads
+the published asset again on the corresponding runner and executes the included binaries and a
+SQLite-backed workflow. This catches packaging and runtime-loader issues before the release
+pipeline reports success.
+
+After extraction, run `./idios help` to confirm the CLI starts. In PowerShell, use `.\idios.exe help`.
+Run `./idios-tui` from an interactive terminal (PowerShell: `.\idios-tui.exe`). The binaries
+are placed at the archive root, alongside the license and user guides.
+
+The SQLite driver uses CGO. Building from source therefore requires Go 1.25+ and a supported C
+compiler; the prebuilt release bundles do not require a Go toolchain to run. Releases cover 64-bit
+x86 and ARM only; 32-bit targets are not currently provided.
+
 ## Development checks
 
 ```sh

@@ -42,8 +42,8 @@ check: fmt-check test vet ## Run the fast local quality gate.
 
 ci: check test-race build smoke ## Run the full local CI gate (PSX is a separate optional target).
 
-smoke: build ## Exercise a cross-Repository workflow end-to-end.
-	sh ./scripts/smoke.sh
+smoke: build ## Smoke-test both executables and exercise a cross-Repository SQLite workflow.
+	IDIOS_BIN=$(BIN_DIR)/idios IDIOS_TUI_BIN=$(BIN_DIR)/idios-tui sh ./scripts/smoke-platform.sh
 
 psx-check: ## Check repository structure and documentation with PSX v3.
 	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found. Install github.com/m-mdy-m/psx/cmd/psx or skip this optional check." >&2; exit 2; }
