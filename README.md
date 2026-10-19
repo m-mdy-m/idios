@@ -21,23 +21,17 @@ go run ./cmd/idios --help
 # Launch the clean interactive workspace (no sample data is inserted)
 go run ./cmd/idios-tui
 
-# Launch a separate demo UI; its own database is seeded automatically
-go run ./cmd/idios-tui-demo
-
-# Explicitly seed whichever database is selected for the CLI (use with care)
-go run ./cmd/idios --db ./idios-demo.sqlite3 seed demo
 ```
 
-Or build all three entry points:
+Or build the CLI and clean TUI:
 
 ```sh
 make build
 ./dist/idios --help
 ./dist/idios-tui
-./dist/idios-tui-demo
 ```
 
-The clean TUI database defaults to `~/.idios/idios-engine.sqlite3`; the demo TUI defaults to `~/.idios/demo/idios-demo.sqlite3`. Set `IDIOS_DB` for the standard workspace or `IDIOS_DEMO_DB` for the demo workspace. Both accept an explicit `--db PATH` override. TUI preferences are stored in `~/.idios/config.json`; set `IDIOS_CONFIG` to choose a different configuration file.
+The TUI database defaults to `~/.idios/idios-engine.sqlite3` and can be changed with `IDIOS_DB` or an explicit `--db PATH` override. TUI preferences are stored in `~/.idios/config.json`; set `IDIOS_CONFIG` to choose a different configuration file.
 
 ## What you can do
 
@@ -54,16 +48,9 @@ The clean TUI database defaults to `~/.idios/idios-engine.sqlite3`; the demo TUI
 - **Jobs and notifications:** configure local reminders, review the notification inbox, and inspect UI logs. Scheduled reminders run while the TUI is open; they are not an OS background service.
 - **Customization:** select a theme, change layout density, edit semantic color tokens, configure `REPOSITORY_TEMPLATE`, `ISSUE_TEMPLATE` and `PULL_REQUEST_TEMPLATE`, and customize keyboard shortcuts without changing Go source.
 
-## Clean and demo TUI variants
+## Workspace data
 
-IDIOS ships two entry points that share the same UI and application engine but never share a default database:
-
-- **`idios-tui`** is the normal, clean workspace. A new database receives only the schema migrations; IDIOS does not load sample repositories, issues, notes, or quotes. Its default path is `~/.idios/idios-engine.sqlite3`, with `IDIOS_DB` or `--db PATH` available to select another workspace.
-- **`idios-tui-demo`** is a demonstration build. On startup it seeds a realistic, connected sample workspace into `~/.idios/demo/idios-demo.sqlite3`. It uses `IDIOS_DEMO_DB` or `--db PATH` for an explicit database override and intentionally ignores `IDIOS_DB` when choosing its default. Seed data is atomic and idempotent.
-
-Both variants include the Intro and quick guide, but neither has a **Load Demo Workspace** button. The demo is selected by launching the demo executable, not by mutating the normal workspace from inside the UI. `make tui` runs the clean UI and `make tui-demo` runs the demo UI. The `--check` flag initializes/checks the selected database without opening the interactive terminal; for the demo binary, that also ensures demo data is present.
-
-The CLI command `idios seed demo` remains available for advanced users who intentionally want to seed the database selected by `IDIOS_DB` or `--db`. It can mix sample data into real work, so prefer the demo TUI or a separate database path. Existing database files are never automatically cleared or rewritten to remove older sample records.
+The standard TUI opens a clean workspace and never inserts sample records automatically. A new database receives only the schema migrations. Existing database files and records are never automatically cleared or rewritten.
 
 ## Important scope notes
 
@@ -80,7 +67,7 @@ IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting cl
 
 ## Downloads and supported platforms
 
-Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). Each installation format includes all three entry points: `idios` (CLI), `idios-tui` (clean workspace with an empty database), and `idios-tui-demo` (demo workspace using its isolated sample database).
+Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). Each installation format includes `idios` (CLI) and `idios-tui` (the clean interactive workspace). Developer-only demo tooling is not included in user-facing release assets.
 
 | Platform | Architectures | Installable formats | Portable format |
 | --- | --- | --- | --- |
@@ -110,11 +97,11 @@ On Fedora, RHEL or another RPM-based distribution, install the matching `.rpm` p
 sudo dnf install ./idios-v1.0.0-linux-amd64.rpm
 ```
 
-On macOS, open the matching `.pkg` directly, or open the `.dmg` and launch the `.pkg` included inside. The installer places the executables in `/usr/local/bin` and user guides in `/usr/local/share/doc/idios`. The current pipeline does not have Apple Developer ID signing/notarization credentials, so macOS may display a security warning for these packages.
+On macOS, open the matching `.pkg` directly, or open the `.dmg` and launch the `.pkg` included inside. The installer places the executables in `/usr/local/bin` and includes only the README and license under `/usr/local/share/doc/idios`. The current pipeline does not have Apple Developer ID signing/notarization credentials, so macOS may display a security warning for these packages.
 
-On Windows, run the matching `-setup.exe`. It installs the three executables per-user under `%LOCALAPPDATA%\\Programs\\IDIOS` and offers Start Menu shortcuts. The `.zip` remains available for portable use without an installer. The setup executable is not Authenticode-signed by this pipeline, so Windows SmartScreen may warn about an unknown publisher.
+On Windows, run the matching `-setup.exe`. It installs the CLI and clean TUI per-user under `%LOCALAPPDATA%\\Programs\\IDIOS` and offers Start Menu shortcuts. The `.zip` remains available for portable use without an installer. The setup executable is not Authenticode-signed by this pipeline, so Windows SmartScreen may warn about an unknown publisher.
 
-The portable `.tar.gz` and `.zip` bundles remain available and contain all three executables, the license and core user guides. After extracting a portable bundle, run `./idios help` (PowerShell: `.\\idios.exe help`). Run `./idios-tui` for a clean workspace or `./idios-tui-demo` for the isolated sample workspace; the full-screen variants need an interactive terminal.
+The portable `.tar.gz` and `.zip` bundles contain only the CLI, clean TUI, README and license. After extracting a portable bundle, run `./idios help` (PowerShell: `.\\idios.exe help`). Run `./idios-tui` to open your workspace; the full-screen UI needs an interactive terminal.
 
 The SQLite driver uses CGO. Building from source requires Go 1.25+ and a supported C compiler; the prebuilt packages and portable bundles do not require a Go toolchain to run. Releases cover 64-bit x86 and ARM only; 32-bit targets are not currently provided.
 
