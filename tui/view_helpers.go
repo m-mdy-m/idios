@@ -1,9 +1,10 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"idios/internal/domain"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *model) currentRepository() (domain.Repository, bool) {
