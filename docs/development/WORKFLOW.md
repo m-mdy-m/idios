@@ -43,11 +43,11 @@ amd64/arm64 runners. CI and release builds use the current Go 1.27.x toolchain; 
 Go 1.25.0 as the module's minimum. Windows jobs install an architecture-matched C compiler because
 the SQLite driver uses CGO.
 
-Pushing a semantic version tag such as `v1.0.0` starts the release workflow. Each native runner builds
+Pushing a semantic version tag such as `v1.0.2` starts the release workflow. Each native runner builds
 and smoke-tests the CLI, clean TUI and demo TUI before packaging them. Linux and macOS assets are `.tar.gz`; Windows
 assets are `.zip`. Linux release bundles are built on Ubuntu 22.04 as a conservative glibc baseline.
 The artifacts are named `idios-<tag>-<target>.<archive>`, for example
-`idios-v1.0.0-linux-amd64.tar.gz` and `idios-v1.0.0-windows-arm64.zip`.
+`idios-v1.0.2-linux-amd64.tar.gz` and `idios-v1.0.2-windows-arm64.zip`.
 
 Before publication, a separate native runner downloads each Actions artifact, extracts it without
 installing the build toolchain, and executes all three bundled programs plus the SQLite-backed smoke
@@ -60,4 +60,4 @@ The matrix uses `ubuntu-24.04-arm` in push/PR CI, `ubuntu-22.04-arm` for Linux A
 and `windows-11-arm` for Windows ARM64. These GitHub-hosted ARM64 runner labels and the matching C
 toolchains must remain available to the repository. If a runner or compiler image is unavailable,
 the matrix should fail explicitly rather than silently claiming ARM64 support. The release workflow
-must be green before publishing `1.0.0` as stable.
+must be green before publishing a stable release.

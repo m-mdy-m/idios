@@ -2,11 +2,11 @@
 
 ## 1. Launch IDIOS
 
-From a source checkout, choose one of the two TUI entry points:
+After installation, run `idios` to open the normal interactive workspace. Commands with explicit arguments (for example, `idios version` or `idios --help`) remain scriptable CLI commands. For a source checkout, use:
 
 ```sh
 # Normal workspace: starts with no sample records in a new database
-go run ./cmd/idios-tui
+go run ./cmd/idios
 
 # Demo workspace: creates sample data in a separate database automatically
 go run ./cmd/idios-tui-demo
@@ -14,7 +14,7 @@ go run ./cmd/idios-tui-demo
 
 The standard TUI opens in Intro and does not include a “Load Demo Workspace” button. Launch the demo executable when you want to explore sample repositories, linked issues, concepts, projects, pull requests and graph relationships. The two apps share the interface but use different default database paths.
 
-For prebuilt binaries, run `make build`, then launch `dist/idios-tui` or `dist/idios-tui-demo` (Windows: `dist\idios-tui.exe` or `dist\idios-tui-demo.exe`).
+For prebuilt development binaries, run `make build`, then launch `dist/idios` or `dist/idios-tui-demo` (Windows: `dist\idios.exe` or `dist\idios-tui-demo.exe`).
 
 ## 2. Choose a database
 
@@ -90,5 +90,8 @@ matches your operating system and processor:
 - macOS: `darwin-amd64` for Intel or `darwin-arm64` for Apple Silicon (`.tar.gz`)
 - Windows: `windows-amd64` or `windows-arm64` (`.zip`)
 
-Extract the archive and run `./idios help` (PowerShell: `.\idios.exe help`) to confirm that the CLI launches.
-Run `./idios-tui` for the clean workspace or `./idios-tui-demo` for the isolated sample workspace (PowerShell: `.\idios-tui.exe` or `.\idios-tui-demo.exe`). The release archive includes the CLI and both TUI variants. `SHA256SUMS.txt` is published alongside the archives for integrity checks.
+For user-local installation and automatic in-app updates, use `curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh` on Linux/macOS or `irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex` on Windows. To use a portable bundle, extract it and run `./idios` (PowerShell: `.\idios.exe`) to open the normal workspace; use `./idios help` for CLI help and `./idios-tui-demo` for the isolated sample workspace. The release archive includes the CLI and the clean TUI; the demo TUI is provided for development/source use only. `SHA256SUMS.txt` is published alongside the archives for integrity checks.
+
+## In-app upgrades
+
+The standard TUI checks GitHub Releases on startup. When a newer stable release is found, use the small **Upgrade** control in the lower-right corner to view the version changelog and start a verified upgrade. The updater checks the release archive against `SHA256SUMS.txt`, stages the new CLI and TUI together, then relaunches the app. User-local installs are recommended for one-click upgrades; system-owned `.deb`, `.rpm`, and `.pkg` installs may require the OS package manager or administrator permission.

@@ -5,10 +5,13 @@ The TUI is a full-screen Bubble Tea v2 application with Lip Gloss v2 styling, ke
 ## Run and build
 
 ```sh
+# Preferred application entry point; no arguments opens the TUI
+go run ./cmd/idios
+# Or run the standalone TUI entry point directly
 go run ./cmd/idios-tui
-# or
+# Build release-style local binaries
 make build
-./dist/idios-tui
+./dist/idios
 ```
 
 Go 1.25+ and a working C toolchain are required. The default database is `~/.idios/idios-engine.sqlite3`; preferences are in `~/.idios/config.json`. `IDIOS_DB`, `--db PATH`, `IDIOS_CONFIG` and `--no-color` can be used to override defaults where supported.
@@ -25,6 +28,10 @@ Go 1.25+ and a working C toolchain are required. The default database is `~/.idi
 - `view_overview.go`, `view_details.go`, `view_workspace.go`: focused screen renderers.
 - `scheduler.go`, `logging.go`: scheduler tick and local diagnostics.
 - `content/en.json`: embedded editable-at-source UI prose, not end-user preferences.
+
+## Release updates
+
+The normal, non-demo TUI starts a non-blocking check against the latest stable GitHub Release. When a newer version is available, the lower-right **Upgrade** control opens the release changelog. The updater downloads the matching OS/architecture bundle, verifies `SHA256SUMS.txt`, stages both binaries beside the installed executable, then hands off replacement to a small OS-native helper after the TUI exits. Keep system-owned package locations managed by the OS package manager; one-click updates are intended for user-writable installs.
 
 ## State and effects
 

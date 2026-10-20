@@ -1,10 +1,13 @@
 # CLI reference
 
-The CLI and both TUI variants use the same Application Engine but have different default database paths. CLI commands and the clean TUI use `IDIOS_DB`; the demo TUI uses `IDIOS_DEMO_DB` and seeds only its separate database by default. Every CLI command and both TUI binaries can accept `--db PATH` to explicitly select a database. Add `--json` for machine-readable output and use `idios help COMMAND...` to see accepted options.
+Running `idios` with no arguments opens the normal interactive workspace and checks GitHub Releases for a newer version. Explicit arguments such as `idios version`, `idios --help`, or `idios issue list` continue to run the scriptable CLI. The standalone `idios-tui` and `idios-tui-demo` entry points remain available. The CLI and both TUI variants use the same Application Engine but have different default database paths. CLI commands and the clean TUI use `IDIOS_DB`; the demo TUI uses `IDIOS_DEMO_DB` and seeds only its separate database by default. Every CLI command and both TUI binaries can accept `--db PATH` to explicitly select a database. Add `--json` for machine-readable output and use `idios help COMMAND...` to see accepted options.
 
 ## Common commands
 
 ```sh
+# Start the normal interactive workspace
+go run ./cmd/idios
+
 # General help and version
 go run ./cmd/idios --help
 go run ./cmd/idios version
