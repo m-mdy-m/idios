@@ -4,7 +4,11 @@ All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.1] — Unreleased
+## [1.0.2] — 2026-10-20
+
+- **Launch command:** running `idios` without arguments opens the normal interactive workspace, while explicit CLI commands such as `idios version` remain unchanged. `make install` and `make install-user` install the named executables on Unix-like systems and Windows; release builds include user-level Linux/macOS and Windows installers that put `idios` on PATH.
+- **Cross-platform updates:** the TUI checks the latest stable GitHub Release in the background at startup. A lower-right Upgrade control opens the release changelog; the updater verifies `SHA256SUMS.txt`, stages both executables, replaces the old build after the current process exits, and relaunches the updated application. A responsive `IDIOS UPGRADE` animation shows download, verification and hand-off activity.
+- **Windows PATH:** the native setup installer and the local Make installer add their per-user install directory to PATH and remove only the path entry they added when uninstalled. The Windows Make targets now use PowerShell rather than Unix-only `install` and `rm` commands, and stage/rollback both binaries during replacement.
 
 ### Added
 

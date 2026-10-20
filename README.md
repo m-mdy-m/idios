@@ -15,10 +15,13 @@ IDIOS is a terminal issue tracker for your own projects. It works like repositor
 ### Run IDIOS from source
 
 ```sh
-# Open the command-line interface help
+# Launch the normal interactive workspace (no sample data is inserted)
+go run ./cmd/idios
+
+# Explicit arguments continue to use the CLI
 go run ./cmd/idios --help
 
-# Launch the clean interactive workspace (no sample data is inserted)
+# The TUI also remains available as a standalone executable
 go run ./cmd/idios-tui
 
 ```
@@ -27,8 +30,9 @@ Or build the CLI and clean TUI:
 
 ```sh
 make build
-./dist/idios --help
-./dist/idios-tui
+./dist/idios                  # opens the interactive workspace
+./dist/idios --help           # CLI help
+./dist/idios-tui              # standalone TUI entry point
 ```
 
 The TUI database defaults to `~/.idios/idios-engine.sqlite3` and can be changed with `IDIOS_DB` or an explicit `--db PATH` override. TUI preferences are stored in `~/.idios/config.json`; set `IDIOS_CONFIG` to choose a different configuration file.
@@ -67,7 +71,7 @@ IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting cl
 
 ## Downloads and supported platforms
 
-Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). Each installation format includes `idios` (CLI) and `idios-tui` (the clean interactive workspace). Developer-only demo tooling is not included in user-facing release assets.
+Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). The `idios` command opens the clean interactive workspace when run without arguments and remains the scriptable CLI when arguments are supplied; `idios-tui` is also shipped as a standalone TUI entry point. Developer-only demo tooling is not included in user-facing release assets.
 
 | Platform | Architectures | Installable formats | Portable format |
 | --- | --- | --- | --- |
@@ -77,31 +81,45 @@ Release assets are built and tested on native 64-bit runners for both x86-64 (`a
 
 Asset names use the release tag and target architecture, for example:
 
-- Linux: `idios-v1.0.0-linux-amd64.deb` and `idios-v1.0.0-linux-arm64.rpm`
-- macOS: `idios-v1.0.0-darwin-arm64.pkg` and `idios-v1.0.0-darwin-arm64.dmg`
-- Windows: `idios-v1.0.0-windows-amd64-setup.exe` and `idios-v1.0.0-windows-arm64-setup.exe`
+- Linux: `idios-v1.0.2-linux-amd64.deb` and `idios-v1.0.2-linux-arm64.deb` (matching `.rpm` packages are also published)
+- macOS: `idios-v1.0.2-darwin-arm64.pkg` and `idios-v1.0.2-darwin-arm64.dmg`
+- Windows: `idios-v1.0.2-windows-amd64-setup.exe` and `idios-v1.0.2-windows-arm64-setup.exe`
 
-Choose the asset that matches both your operating system and CPU architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying all downloadable assets. The release workflow checks package contents and checksums, installs the Linux DEB and Windows setup package on native runners, and executes the included binaries against a SQLite-backed smoke workflow before and after publishing.
+Choose the asset that matches both your operating system and CPU architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying downloadable assets. Each release also publishes user-level `install.sh` and `install.ps1` installers, which verify the archive checksum, replace older binaries, and place `idios` on PATH.
 
 ### Install
+
+**Recommended for automatic in-app upgrades** — user-local installation on Linux/macOS:
+
+```sh
+curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh
+```
+
+On Windows, run this in PowerShell:
+
+```powershell
+irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex
+```
+
+The scripts install into a user-writable directory by default, so the in-app updater can replace both `idios` and `idios-tui` without administrator access. Reopen the terminal if PATH does not refresh automatically.
 
 On Debian or Ubuntu, install the matching `.deb` package:
 
 ```sh
-sudo apt install ./idios-v1.0.0-linux-amd64.deb
+sudo apt install ./idios-v1.0.2-linux-amd64.deb
 ```
 
 On Fedora, RHEL or another RPM-based distribution, install the matching `.rpm` package:
 
 ```sh
-sudo dnf install ./idios-v1.0.0-linux-amd64.rpm
+sudo dnf install ./idios-v1.0.2-linux-amd64.rpm
 ```
 
 On macOS, open the matching `.pkg` directly, or open the `.dmg` and launch the `.pkg` included inside. The installer places the executables in `/usr/local/bin` and includes only the README and license under `/usr/local/share/doc/idios`. The current pipeline does not have Apple Developer ID signing/notarization credentials, so macOS may display a security warning for these packages.
 
 On Windows, run the matching `-setup.exe`. It installs the CLI and clean TUI per-user under `%LOCALAPPDATA%\\Programs\\IDIOS` and offers Start Menu shortcuts. The `.zip` remains available for portable use without an installer. The setup executable is not Authenticode-signed by this pipeline, so Windows SmartScreen may warn about an unknown publisher.
 
-The portable `.tar.gz` and `.zip` bundles contain only the CLI, clean TUI, README and license. After extracting a portable bundle, run `./idios help` (PowerShell: `.\\idios.exe help`). Run `./idios-tui` to open your workspace; the full-screen UI needs an interactive terminal.
+The portable `.tar.gz` and `.zip` bundles contain only the CLI, clean TUI, README and license. After extracting a portable bundle, run `./idios` (PowerShell: `.\idios.exe`) to open your workspace, or `./idios help` (PowerShell: `.\idios.exe help`) for CLI help. `idios-tui` remains available as a standalone TUI entry point; the full-screen UI needs an interactive terminal.
 
 The SQLite driver uses CGO. Building from source requires Go 1.25+ and a supported C compiler; the prebuilt packages and portable bundles do not require a Go toolchain to run. Releases cover 64-bit x86 and ARM only; 32-bit targets are not currently provided.
 
