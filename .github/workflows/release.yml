@@ -137,10 +137,11 @@ jobs:
           else
             BASE_LDFLAGS='-s -w'
           fi
-          CLI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/cli.Version=${VERSION}"
+          CLI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/cli.Version=${VERSION} -X idios/internal/updater.Version=${VERSION}"
+          TUI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/updater.Version=${VERSION}"
           go build -trimpath -ldflags="$CLI_LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
-          go build -trimpath -ldflags="$BASE_LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
-          go build -trimpath -ldflags="$BASE_LDFLAGS" -o "dist/idios-tui-demo${EXE_SUFFIX}" ./cmd/idios-tui-demo
+          go build -trimpath -ldflags="$TUI_LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
+          go build -trimpath -ldflags="$TUI_LDFLAGS" -o "dist/idios-tui-demo${EXE_SUFFIX}" ./cmd/idios-tui-demo
       - name: Smoke-test native executables
         shell: bash
         env:
@@ -426,12 +427,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout installer scripts
+        uses: actions/checkout@v4
       - name: Download all native bundles
         uses: actions/download-artifact@v4
         with:
           pattern: idios-*
           path: release-assets
           merge-multiple: true
+      - name: Add cross-platform user installers
+        run: |
+          cp scripts/install.sh release-assets/install.sh
+          cp scripts/install.ps1 release-assets/install.ps1
       - name: Generate SHA-256 checksums
         working-directory: release-assets
         run: sha256sum idios-* > SHA256SUMS.txt

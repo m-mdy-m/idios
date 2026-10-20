@@ -34,6 +34,7 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/idios-release-smoke.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 CONFIG_PATH="$TMP/config.json"
 CLEAN_DB="$TMP/clean.sqlite3"
+
 case "$(uname -s 2>/dev/null || true)" in
   MINGW*|MSYS*|CYGWIN*)
     if command -v cygpath >/dev/null 2>&1; then
@@ -42,6 +43,17 @@ case "$(uname -s 2>/dev/null || true)" in
     fi
     ;;
 esac
+
+# With no arguments, `idios` is the interactive application entry point.
+set +e
+IDIOS_CONFIG="$CONFIG_PATH" TERM=dumb "$CLI" >"$TMP/idios-no-args.out" 2>&1
+interactive_status=$?
+set -e
+if [ "$interactive_status" -ne 2 ] || ! grep -qi 'needs an interactive terminal' "$TMP/idios-no-args.out"; then
+  echo "FAIL: running idios without arguments did not enter the interactive TUI path (exit=$interactive_status)." >&2
+  cat "$TMP/idios-no-args.out" >&2
+  exit 1
+fi
 
 clean_out=$(IDIOS_CONFIG="$CONFIG_PATH" "$TUI" --check --db "$CLEAN_DB")
 printf '%s\n' "$clean_out" | grep -q 'READY mode=idios-tui repositories=0' || {
