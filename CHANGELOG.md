@@ -3,7 +3,9 @@
 All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
+## [1.0.4] — 2026-10-20
+### Fixed
+- show view upgrade
 ## [1.0.3] — 2026-10-20
 ### Fixed
 - fix build in powershell
