@@ -163,8 +163,18 @@ func (m *model) View() tea.View {
 		footer.lineText(p.muted().Render("Ready"))
 	}
 	lines = append(lines, footer.lines...)
-	help := newCanvas(width, 0, m.height-1, nil, p)
-	help.lineText(m.footerHints(p, width))
+	help := newCanvas(width, 0, m.height-1, &m.hits, p)
+	if m.availableUpdate != nil && m.page != pageUpgrade && !m.upgradeHandedOff {
+		label := "↑ Upgrade"
+		buttonWidth := lipgloss.Width(p.button(m.upgradeFrame%8 < 4).Render(label))
+		hintsWidth := max(1, width-buttonWidth-2)
+		help.raw(truncateVisible(m.footerHints(p, hintsWidth), hintsWidth))
+		help.space(max(1, width-help.x-buttonWidth))
+		help.button(label, "upgrade:open", m.upgradeFrame%8 < 4)
+		help.end()
+	} else {
+		help.lineText(m.footerHints(p, width))
+	}
 	lines = append(lines, help.lines...)
 
 	if len(lines) > m.height {
@@ -304,6 +314,8 @@ func (m *model) renderMain(c *canvas, p palette) {
 		m.renderForm(c, p)
 	case pageHelp:
 		m.renderHelp(c, p)
+	case pageUpgrade:
+		m.renderUpgrade(c, p)
 	default:
 		c.title("Page not found")
 		c.buttonRow(buttonSpec{"Go to overview", "nav:overview", true})
@@ -324,6 +336,8 @@ func (m *model) footerHints(p palette, width int) string {
 		hints = []hint{{"Enter", "apply filter"}, {"Esc", "clear filter"}}
 	case m.page == pageIntro:
 		hints = []hint{{"Enter", "open overview"}, {"?", "guide"}, {"q", "quit"}}
+	case m.page == pageUpgrade:
+		hints = []hint{{"Enter", "upgrade"}, {"Esc", "back"}, {"q", "quit"}}
 	default:
 		hints = []hint{
 			{"↑/↓", "select"}, {"Enter", "open"}, {"Esc", "back"},

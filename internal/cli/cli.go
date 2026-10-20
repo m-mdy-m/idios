@@ -15,7 +15,7 @@ import (
 )
 
 // Version is set to the source version by default and overridden by release builds via -ldflags.
-var Version = "1.0.0"
+var Version = "1.0.2"
 
 // config holds the global flags, which may appear anywhere in the argument list.
 type config struct {

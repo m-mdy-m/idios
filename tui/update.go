@@ -3,7 +3,10 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"idios/internal/updater"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +15,45 @@ import (
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case updateCheckMsg:
+		if msg.err != nil {
+			m.logEvent("WARN", "update check unavailable: "+msg.err.Error())
+			return m, nil
+		}
+		if msg.release != nil {
+			m.availableUpdate = msg.release
+			m.status, m.statusError = fmt.Sprintf("IDIOS %s is available · choose Upgrade in the lower-right corner", msg.release.Version), false
+			m.logEvent("INFO", "new release available: "+msg.release.Version)
+		}
+		return m, nil
+	case updatePreparedMsg:
+		if msg.err != nil {
+			m.upgradeInstalling = false
+			m.upgradeError = msg.err.Error()
+			m.status, m.statusError = "IDIOS upgrade failed: "+msg.err.Error(), true
+			m.logEvent("ERROR", m.status)
+			return m, nil
+		}
+		if err := updater.Schedule(msg.prepared, os.Getpid()); err != nil {
+			m.upgradeInstalling = false
+			m.upgradeError = err.Error()
+			m.status, m.statusError = "IDIOS upgrade could not be started: "+err.Error(), true
+			m.logEvent("ERROR", m.status)
+			return m, nil
+		}
+		m.upgradeHandedOff = true
+		m.upgradeHandoffAt = time.Now()
+		m.upgradeFrame = 0
+		return m, upgradeAnimationTickCmd()
+	case updateAnimationTickMsg:
+		m.upgradeFrame++
+		if m.upgradeHandedOff && time.Since(m.upgradeHandoffAt) >= 900*time.Millisecond {
+			return m, tea.Quit
+		}
+		if m.upgradeInstalling || m.upgradeHandedOff {
+			return m, upgradeAnimationTickCmd()
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 		m.clampViewport()
@@ -213,6 +255,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.handleAction("job-action:new")
 			case "mark_notifications_read":
 				return m, m.handleAction("notification-action:read-all")
+			case "upgrade":
+				return m, m.handleAction("upgrade:open")
 			case "quit":
 				return m, tea.Quit
 			}
@@ -253,6 +297,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.buttonFocus && m.focusAction != "" {
 				action := m.focusAction
 				return m, m.handleAction(action)
+			}
+			if m.page == pageUpgrade {
+				return m, m.handleAction("upgrade:start")
 			}
 			return m, m.openCursor()
 		case "/":
@@ -299,6 +346,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func checkUpdateCmd(ctx context.Context) tea.Cmd {
+	return func() tea.Msg {
+		release, err := updater.Check(ctx, updater.Version)
+		return updateCheckMsg{release: release, err: err}
+	}
+}
+
+func upgradeAnimationTickCmd() tea.Cmd {
+	return tea.Tick(110*time.Millisecond, func(time.Time) tea.Msg { return updateAnimationTickMsg{} })
+}
+
+func prepareUpgradeCmd(ctx context.Context, release updater.Release) tea.Cmd {
+	return func() tea.Msg {
+		executable, err := os.Executable()
+		if err != nil {
+			return updatePreparedMsg{err: fmt.Errorf("locate installed IDIOS executable: %w", err)}
+		}
+		prepared, err := updater.Prepare(ctx, release, executable)
+		return updatePreparedMsg{prepared: prepared, err: err}
+	}
 }
 
 func (m *model) rebindDetails() {

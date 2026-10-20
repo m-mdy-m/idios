@@ -21,6 +21,32 @@ func (m *model) handleAction(action string) tea.Cmd {
 	}
 	kind, value := parts[0], parts[1]
 	switch kind {
+	case "upgrade":
+		switch value {
+		case "open":
+			if m.availableUpdate == nil {
+				return nil
+			}
+			m.page = pageUpgrade
+			m.cursor, m.scroll = 0, 0
+			m.upgradeError = ""
+		case "later":
+			m.page = pageOverview
+			m.cursor, m.scroll = 0, 0
+		case "start":
+			if m.availableUpdate == nil || m.upgradeInstalling {
+				return nil
+			}
+			m.page = pageUpgrade
+			m.upgradeInstalling = true
+			m.upgradeHandedOff = false
+			m.upgradeFrame = 0
+			m.upgradeStartedAt = time.Now()
+			m.upgradeError = ""
+			m.status, m.statusError = "Preparing IDIOS upgrade…", false
+			return tea.Batch(prepareUpgradeCmd(m.ctx, *m.availableUpdate), upgradeAnimationTickCmd())
+		}
+		return nil
 	case "nav":
 		m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
 		m.repoContext = ""

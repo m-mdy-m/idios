@@ -8,6 +8,7 @@ import (
 	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/domain"
+	"idios/internal/updater"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -49,6 +50,7 @@ const (
 	pageConceptDetail         page = "concept-detail"
 	pageForm                  page = "form"
 	pageHelp                  page = "help"
+	pageUpgrade               page = "upgrade"
 )
 
 const (
@@ -113,6 +115,18 @@ type snapshot struct {
 }
 
 type snapshotMsg snapshot
+
+type updateCheckMsg struct {
+	release *updater.Release
+	err     error
+}
+
+type updatePreparedMsg struct {
+	prepared updater.Prepared
+	err      error
+}
+
+type updateAnimationTickMsg struct{}
 
 // actionClickMsg routes mouse events through the same Bubble Tea update loop as key actions.
 type actionClickMsg string
@@ -179,6 +193,14 @@ type model struct {
 	selectedJobID    string
 	activeNoteLabel  string
 	schedulerChecked bool
+
+	availableUpdate   *updater.Release
+	upgradeInstalling bool
+	upgradeHandedOff  bool
+	upgradeFrame      int
+	upgradeStartedAt  time.Time
+	upgradeHandoffAt  time.Time
+	upgradeError      string
 
 	selectedIssueRef string
 	selectedPRRef    string
@@ -259,7 +281,11 @@ func newModel(ctx context.Context, app *application.Service, dbPath string, opts
 
 func (m *model) Init() tea.Cmd {
 	interval := time.Duration(m.config.Notifications.PollIntervalMinutes) * time.Minute
-	return tea.Batch(loadSnapshotCmd(m.ctx, m.app, true), schedulerTickCmd(interval))
+	commands := []tea.Cmd{loadSnapshotCmd(m.ctx, m.app, true), schedulerTickCmd(interval)}
+	if !m.demoMode {
+		commands = append(commands, checkUpdateCmd(m.ctx))
+	}
+	return tea.Batch(commands...)
 }
 
 func loadSnapshotCmd(ctx context.Context, app *application.Service, rotateQuote ...bool) tea.Cmd {
