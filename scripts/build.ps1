@@ -19,4 +19,4 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 go build -trimpath -ldflags "$tuiLdflags" -o "dist/idios-tui-demo.exe" ./cmd/idios-tui-demo
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Built IDIOS v$version: dist/idios.exe, dist/idios-tui.exe, and dist/idios-tui-demo.exe"
+Write-Host "Built IDIOS v${version}: dist/idios.exe, dist/idios-tui.exe, and dist/idios-tui-demo.exe"
