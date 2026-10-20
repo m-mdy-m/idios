@@ -227,8 +227,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE." }
           $installer = "idios-$env:GITHUB_REF_NAME-$env:ASSET-setup.exe"
           if (-not (Test-Path $installer)) { throw "Expected installer was not created: $installer" }
-      - name: Upload release bundles and native installers
-        uses: actions/upload-artifact@v4
+      # ArtifactService/CreateArtifact can time out transiently on GitHub-hosted runners.
+      # Retry the entire upload and overwrite a partially-created artifact if needed.
+      - name: Upload release bundles and native installers (attempt 1)
+        id: upload_release_artifacts_attempt_1
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
         with:
           name: idios-${{ matrix.asset }}
           path: |
@@ -236,6 +240,39 @@ jobs:
             idios-${{ github.ref_name }}-${{ matrix.asset }}-setup.exe
           if-no-files-found: error
           retention-days: 5
+          compression-level: 6
+          overwrite: true
+          include-hidden-files: false
+
+      - name: Retry release artifact upload (attempt 2)
+        id: upload_release_artifacts_attempt_2
+        if: ${{ steps.upload_release_artifacts_attempt_1.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: idios-${{ matrix.asset }}
+          path: |
+            idios-${{ github.ref_name }}-${{ matrix.asset }}.*
+            idios-${{ github.ref_name }}-${{ matrix.asset }}-setup.exe
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 6
+          overwrite: true
+          include-hidden-files: false
+
+      - name: Retry release artifact upload (attempt 3)
+        if: ${{ steps.upload_release_artifacts_attempt_2.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: idios-${{ matrix.asset }}
+          path: |
+            idios-${{ github.ref_name }}-${{ matrix.asset }}.*
+            idios-${{ github.ref_name }}-${{ matrix.asset }}-setup.exe
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 6
+          overwrite: true
+          include-hidden-files: false
 
   verify-bundles:
     name: Download and execute pre-release ${{ matrix.asset }} bundle
@@ -274,7 +311,7 @@ jobs:
       - name: Checkout source for smoke scripts
         uses: actions/checkout@v4
       - name: Download this platform's packaged artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: idios-${{ matrix.asset }}
           path: artifact
@@ -430,7 +467,7 @@ jobs:
       - name: Checkout installer scripts
         uses: actions/checkout@v4
       - name: Download all native bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: idios-*
           path: release-assets
