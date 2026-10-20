@@ -76,7 +76,7 @@ body:
     attributes:
       label: IDIOS version or commit
       description: Output of `idios --version`, or the commit hash if built from source.
-      placeholder: "1.0.1 / a1b2c3d"
+      placeholder: "1.0.2 / a1b2c3d"
     validations:
       required: true
 
