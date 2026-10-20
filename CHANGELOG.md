@@ -4,6 +4,9 @@ All notable changes to IDIOS are documented here. This file follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] — 2026-10-20
+### Fixed
+- fix build in powershell
 ## [1.0.2] — 2026-10-20
 
 - **Launch command:** running `idios` without arguments opens the normal interactive workspace, while explicit CLI commands such as `idios version` remain unchanged. `make install` and `make install-user` install the named executables on Unix-like systems and Windows; release builds include user-level Linux/macOS and Windows installers that put `idios` on PATH.
