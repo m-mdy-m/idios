@@ -11,21 +11,21 @@
   },
   "themes": {
     "midnight": {
-      "background": "#0b0f17",
-      "foreground": "#e6ebf5",
-      "muted": "#8e9bb3",
-      "accent": "#4cc9f0",
-      "accent_background": "#0a6c94",
-      "on_accent": "#ffffff",
-      "surface": "#121826",
-      "surface_alt": "#1c2538",
-      "border": "#2c3a57",
-      "success": "#4ade80",
-      "success_background": "#0f3a22",
-      "warning": "#fbbf24",
-      "warning_background": "#3d2e05",
-      "danger": "#fb7185",
-      "danger_background": "#46121d"
+      "background": "#101318",
+      "foreground": "#E8ECF2",
+      "muted": "#9AA4B2",
+      "accent": "#8BA4FF",
+      "accent_background": "#27365C",
+      "on_accent": "#FFFFFF",
+      "surface": "#171B22",
+      "surface_alt": "#202632",
+      "border": "#303846",
+      "success": "#7DD3A7",
+      "success_background": "#1B382D",
+      "warning": "#F2C879",
+      "warning_background": "#3A3020",
+      "danger": "#F08B91",
+      "danger_background": "#402328"
     },
     "ocean": {
       "background": "#061418",
@@ -115,7 +115,13 @@
   },
   "notifications": {
     "enabled": true,
-    "poll_interval_minutes": 1
+    "poll_interval_minutes": 1,
+    "quote_reminders": {
+      "enabled": true,
+      "desktop_enabled": true,
+      "min_interval_minutes": 60,
+      "max_interval_minutes": 240
+    }
   },
   "keyboard": {
     "new": "ctrl+n",
@@ -147,7 +153,11 @@
     "new_note": "ctrl+alt+n",
     "new_quote": "ctrl+alt+q",
     "new_job": "ctrl+alt+j",
-    "mark_notifications_read": "ctrl+alt+m"
+    "mark_notifications_read": "ctrl+alt+m",
+    "bulk_issues": "ctrl+alt+i",
+    "bulk_quotes": "ctrl+alt+u",
+    "bulk_jobs": "ctrl+alt+b",
+    "command_palette": "ctrl+k"
   },
   "REPOSITORY_TEMPLATE": {
     "description": "# {{repository}}\n\n## Purpose\n\nDescribe what this repository is for and the outcome it supports.\n\n## Scope\n\n- In scope:\n- Out of scope:\n\n## Getting started\n\n1. Add the first concrete step needed to work in this repository.\n\n## Architecture and decisions\n\nRecord important design choices and their rationale. Link related Issues, Projects, and Concepts in IDIOS.\n"

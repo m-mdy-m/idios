@@ -19,6 +19,9 @@ func (s *Service) Ping(ctx context.Context) error { return s.store.Ping(ctx) }
 func (s *Service) CreateRepository(ctx context.Context, name, description string) (domain.Repository, error) {
 	return s.store.CreateRepository(ctx, name, description)
 }
+func (s *Service) DeleteRepository(ctx context.Context, ref string) error {
+	return s.store.DeleteRepository(ctx, ref)
+}
 func (s *Service) GetRepository(ctx context.Context, ref string) (domain.Repository, error) {
 	return s.store.GetRepository(ctx, ref)
 }
@@ -36,6 +39,9 @@ func (s *Service) GetRepositorySettings(ctx context.Context, repo string) ([]dom
 }
 func (s *Service) CreateProject(ctx context.Context, name, description string) (domain.Project, error) {
 	return s.store.CreateProject(ctx, name, description)
+}
+func (s *Service) DeleteProject(ctx context.Context, ref string) error {
+	return s.store.DeleteProject(ctx, ref)
 }
 func (s *Service) GetProject(ctx context.Context, ref string) (domain.Project, error) {
 	return s.store.GetProject(ctx, ref)
@@ -86,6 +92,9 @@ func (s *Service) CreateIssue(ctx context.Context, repo, title, description, par
 		duePtr = &due
 	}
 	return s.store.CreateIssue(ctx, domain.Issue{RepositoryID: r.ID, Title: title, Description: description, ParentIssueID: parentID, DueDate: duePtr, Priority: priority, Status: domain.IssueOpen})
+}
+func (s *Service) DeleteIssue(ctx context.Context, ref string) error {
+	return s.store.DeleteIssue(ctx, ref)
 }
 func (s *Service) GetIssue(ctx context.Context, ref string) (domain.Issue, error) {
 	i, err := s.store.GetIssue(ctx, ref)
@@ -225,6 +234,9 @@ func (s *Service) CreatePullRequest(ctx context.Context, issue, title, descripti
 	}
 	return s.store.CreatePullRequest(ctx, i.ID, title, description)
 }
+func (s *Service) DeletePullRequest(ctx context.Context, ref string) error {
+	return s.store.DeletePullRequest(ctx, ref)
+}
 func (s *Service) GetPullRequest(ctx context.Context, ref string) (domain.PullRequest, error) {
 	return s.store.GetPullRequest(ctx, ref)
 }
@@ -277,6 +289,9 @@ func (s *Service) ListCompletions(ctx context.Context, repo string) ([]domain.Co
 func (s *Service) CreateConcept(ctx context.Context, name, description string) (domain.Concept, error) {
 	return s.store.CreateConcept(ctx, name, description)
 }
+func (s *Service) DeleteConcept(ctx context.Context, ref string) error {
+	return s.store.DeleteConcept(ctx, ref)
+}
 func (s *Service) GetConcept(ctx context.Context, ref string) (domain.Concept, error) {
 	return s.store.GetConcept(ctx, ref)
 }
@@ -291,6 +306,9 @@ func (s *Service) LinkIssueConcept(ctx context.Context, issue, concept string) e
 }
 func (s *Service) CreateLabel(ctx context.Context, name, scope, repo, description, color string) (domain.Label, error) {
 	return s.store.CreateLabel(ctx, name, scope, repo, description, color)
+}
+func (s *Service) DeleteLabel(ctx context.Context, ref string) error {
+	return s.store.DeleteLabel(ctx, ref)
 }
 func (s *Service) ListLabels(ctx context.Context, scope string) ([]domain.Label, error) {
 	return s.store.ListLabels(ctx, scope)
@@ -310,6 +328,9 @@ func (s *Service) CreateMilestone(ctx context.Context, scopeType, scopeRef, titl
 		ptr = &due
 	}
 	return s.store.CreateMilestone(ctx, scopeType, scopeRef, title, description, ptr)
+}
+func (s *Service) DeleteMilestone(ctx context.Context, ref string) error {
+	return s.store.DeleteMilestone(ctx, ref)
 }
 func (s *Service) ListMilestones(ctx context.Context, scopeType, scopeRef string) ([]domain.Milestone, error) {
 	return s.store.ListMilestones(ctx, scopeType, scopeRef)
@@ -440,6 +461,15 @@ func (s *Service) CreateQuote(ctx context.Context, quote, author string) (domain
 	}
 	return s.store.CreateQuote(ctx, quote, author)
 }
+func (s *Service) CreateQuoteWithSource(ctx context.Context, quote domain.Quote) (domain.Quote, error) {
+	if strings.TrimSpace(quote.Text) == "" {
+		return domain.Quote{}, fmt.Errorf("%w: quote text is required", domain.ErrInvalid)
+	}
+	return s.store.CreateQuoteWithSource(ctx, quote)
+}
+func (s *Service) DeleteQuote(ctx context.Context, id string) error {
+	return s.store.DeleteQuote(ctx, id)
+}
 func (s *Service) NextQuote(ctx context.Context) (domain.Quote, error) { return s.store.NextQuote(ctx) }
 func (s *Service) GetWorkspaceProfile(ctx context.Context) (domain.WorkspaceProfile, error) {
 	return s.store.GetWorkspaceProfile(ctx)
@@ -524,6 +554,15 @@ func (s *Service) ProcessDueJobs(ctx context.Context, now time.Time, notificatio
 }
 func (s *Service) ListNotifications(ctx context.Context, limit int) ([]domain.Notification, error) {
 	return s.store.ListNotifications(ctx, limit)
+}
+func (s *Service) CreateNotification(ctx context.Context, title, body, level string) (domain.Notification, error) {
+	if strings.TrimSpace(title) == "" {
+		return domain.Notification{}, fmt.Errorf("%w: notification title is required", domain.ErrInvalid)
+	}
+	return s.store.CreateNotification(ctx, title, body, level)
+}
+func (s *Service) DeleteNotification(ctx context.Context, id string) error {
+	return s.store.DeleteNotification(ctx, id)
 }
 func (s *Service) MarkNotificationsRead(ctx context.Context) error {
 	return s.store.MarkNotificationsRead(ctx)

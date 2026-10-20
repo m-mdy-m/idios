@@ -50,6 +50,7 @@ The TUI database defaults to `~/.idios/idios-engine.sqlite3` and can be changed 
 - **Concepts and graph:** link reusable knowledge and inspect the different relationship types.
 - **Notes and quotes:** capture thoughts, link notes to work or the graph, and rotate saved quotes on startup.
 - **Jobs and notifications:** configure local reminders, review the notification inbox, and inspect UI logs. Scheduled reminders run while the TUI is open; they are not an OS background service.
+- **Sourced quote library:** start with attributed quotations from software engineering, programming, computing and mathematics, with source links retained in SQLite. Optional randomized quote reminders can send native desktop notifications and also appear in the local inbox; the TUI must remain open.
 - **Customization:** select a theme, change layout density, edit semantic color tokens, configure `REPOSITORY_TEMPLATE`, `ISSUE_TEMPLATE` and `PULL_REQUEST_TEMPLATE`, and customize keyboard shortcuts without changing Go source.
 
 ## Workspace data

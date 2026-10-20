@@ -31,7 +31,7 @@ func TestWorkspaceViewLooksLikePersistentFullScreenUI(t *testing.T) {
 	if v.MouseMode != tea.MouseModeCellMotion {
 		t.Fatal("mouse mode should be enabled for clickable controls")
 	}
-	for _, want := range []string{"IDIOS", "Overview", "Repositories", "Projects", "Issues", "Pull requests", "Graph", "Concepts", "Settings", "CPU", "ARLIZ"} {
+	for _, want := range []string{"IDIOS", "Overview", "Repositories", "Issues", "Jobs", "CPU", "ARLIZ"} {
 		if !strings.Contains(v.Content, want) {
 			t.Errorf("rendered workspace does not contain %q", want)
 		}
@@ -43,6 +43,7 @@ func TestWorkspaceViewLooksLikePersistentFullScreenUI(t *testing.T) {
 
 func TestMouseClickNavigatesUsingTheEventLoop(t *testing.T) {
 	m := newModel(context.Background(), nil, "", Options{NoColor: true})
+	m.page = pageIssues // the workspace sidebar contains the Projects destination
 	m.width, m.height = 110, 32
 	v := m.View()
 
@@ -74,7 +75,7 @@ func TestNarrowTerminalWrapsTabsInsteadOfHidingThem(t *testing.T) {
 	m := newModel(context.Background(), nil, "", Options{NoColor: true})
 	m.width, m.height = 64, 34
 	view := m.View()
-	for _, want := range []string{"Repositories", "Projects", "Pull requests", "Graph", "Concepts", "Settings"} {
+	for _, want := range []string{"Overview", "Repositories", "Issues", "Jobs", "Commands"} {
 		if !strings.Contains(view.Content, want) {
 			t.Errorf("tab %q disappeared at narrow terminal width", want)
 		}

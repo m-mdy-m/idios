@@ -28,6 +28,9 @@ Go 1.25+ and a working C toolchain are required. The default database is `~/.idi
 - `view_overview.go`, `view_details.go`, `view_workspace.go`: focused screen renderers.
 - `scheduler.go`, `logging.go`: scheduler tick and local diagnostics.
 - `content/en.json`: embedded editable-at-source UI prose, not end-user preferences.
+- `batch.go`: newline-based bulk create validation, item-by-item results and retry-only-failures behavior.
+- `commands.go`: searchable command palette and global command routing.
+- `lifecycle.go`: quit confirmation and terminal-friendly shutdown flow.
 
 ## Release updates
 
@@ -71,7 +74,11 @@ The Graph page is a presentation of the graph returned by `Application.Graph`; i
 
 ## Keyboard and interaction
 
-Shortcut bindings are user-configurable in the `keyboard` object. `Update` dispatches a configured action before applying normal navigation keys. Avoid ambiguous duplicate bindings; the action order in `shortcutAction` defines precedence. Every primary destination should remain usable without a mouse.
+Shortcut bindings are user-configurable in the `keyboard` object. `Update` dispatches a configured action before applying normal navigation keys. Avoid ambiguous duplicate bindings; the action order in `shortcutAction` defines precedence. Every primary destination should remain usable without a mouse. The top bar keeps Overview, Repositories, Issues and Jobs visible. The `MORE` rail contains supplementary destinations plus quick-create actions; it deliberately does not repeat the primary tabs or duplicate a repository index. The searchable Command Palette (`Ctrl+K` by default) is the fallback navigation/action surface on narrow terminals. It does not interrupt an open form or a running batch: finish/cancel the form or stop the batch safely first.
+
+Bulk Issue, quote and scheduled-job forms use one non-empty line per new record and share the other fields across the batch. They are capped at 100 records per batch. The first submit validates and shows a count; a second `Ctrl+Enter` confirms the write. Each record then succeeds or fails independently. Results distinguish retryable failures; **Retry failed only** recreates the form using only those failures, not the successful records. Duplicate Issue titles inside one batch are skipped after the first occurrence and marked non-retryable to avoid accidental duplicates. Long progress and result lists support Up/Down for line-by-line scrolling and PgUp/PgDn (or Ctrl+B/Ctrl+F) for paging. This is not a database-wide transaction: successful items remain saved if later items fail.
+
+Press `q` or `Ctrl+Q` to open the quit confirmation, or choose **Exit IDIOS** from the rail where it is shown. `Enter` confirms and `Esc` returns to the prior screen. `Ctrl+C` remains an emergency graceful exit path. Leaving an open form discards its unsaved draft. During a batch, shutdown waits for the current write, marks remaining items as not run, preserves completed records, and then exits. The in-app scheduled-job processor stops when IDIOS exits and does not register OS background tasks.
 
 ## Local scheduling and logging
 

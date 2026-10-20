@@ -15,7 +15,7 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 	}
 	c.title(issue.Title)
 	c.muted(fmt.Sprintf(copyText.text("%s  ·  Issue #%d  ·  created %s"), issue.RepositoryName, issue.Number, issue.CreatedAt.Format("2006-01-02")))
-	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open repository", "repo:" + issue.RepositoryName, false}, buttonSpec{"View graph", "issue-action:graph", false}, buttonSpec{"Mark important", "pin:issue:" + issueRef(*issue), false})
+	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open repository", "repo:" + issue.RepositoryName, false}, buttonSpec{"View graph", "issue-action:graph", false}, buttonSpec{"Mark important", "pin:issue:" + issueRef(*issue), false}, buttonSpec{"Remove Issue…", "remove:select:issue|" + issue.ID, false})
 	statusToneValue := statusTone(string(issue.Status), issue.Blocked)
 	c.panel("STATUS", p.badge(statusToneValue, string(issue.Status)), fmt.Sprintf(copyText.text("Priority: %s"), fallback(issue.Priority, "normal")), "Blocked: "+yesNo(issue.Blocked))
 	c.panel("DESCRIPTION", fallback(issue.Description, "No description."))
@@ -85,7 +85,7 @@ func (m *model) renderPRDetail(c *canvas, p palette) {
 	}
 	c.title(pr.Title)
 	c.muted(fmt.Sprintf(copyText.text("%s  ·  Pull request #%d  ·  Issue %s#%d"), pr.RepositoryName, pr.Number, pr.RepositoryName, pr.IssueNumber))
-	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open linked Issue", "pr-action:issue", false}, buttonSpec{"Open repository", "repo:" + pr.RepositoryName, false})
+	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open linked Issue", "pr-action:issue", false}, buttonSpec{"Open repository", "repo:" + pr.RepositoryName, false}, buttonSpec{"Remove PR…", "remove:select:pull_request|" + pr.ID, false})
 	c.panel("REVIEW STATUS", p.badge(statusTone(string(pr.Status), false), string(pr.Status)), "Target branch: "+pr.TargetBranchName, "Open: you can still edit it. Accepting it marks the issue done.")
 	c.panel("WORK EXPLANATION", fallback(pr.Description, "No description."))
 	if pr.Status == domain.PRPending {
@@ -116,7 +116,7 @@ func (m *model) renderProjectDetail(c *canvas, p palette) {
 	}
 	c.title(project.Name)
 	c.muted(project.Description)
-	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"+ Add Issue", "project-action:add-issue", true})
+	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"+ Add Issue", "project-action:add-issue", true}, buttonSpec{"Remove project…", "remove:select:project|" + project.ID, false})
 	c.panel("PROGRESS", fmt.Sprintf(copyText.text("%d / %d Issues done · %s"), done, len(issues), progressText(done, len(issues))))
 	for _, issue := range issues {
 		c.button(issueRef(issue), "issue:"+issueRef(issue), false)
@@ -139,7 +139,7 @@ func (m *model) renderConceptDetail(c *canvas, p palette) {
 	}
 	c.title("◇ " + concept.Name)
 	c.muted("Concept")
-	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"View connected graph", "graph:focus-concept:" + concept.Name, true})
+	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"View connected graph", "graph:focus-concept:" + concept.Name, true}, buttonSpec{"Remove concept…", "remove:select:concept|" + concept.ID, false})
 	c.panel("DESCRIPTION", fallback(concept.Description, "No description yet."))
 	c.title("Connections")
 	g, err := m.app.Graph(m.ctx, "concept:"+concept.Name, 2)
@@ -169,6 +169,44 @@ func (m *model) renderConceptDetail(c *canvas, p palette) {
 func (m *model) renderForm(c *canvas, p palette) {
 	c.title(m.formTitle)
 	c.muted("Tab / Shift+Tab changes fields · Enter adds a line in a multiline field · Ctrl+Enter saves · Esc cancels")
+	if m.form == formDeleteRepositoryConfirm {
+		c.panel("FINAL CONFIRMATION", "Repository deletion cannot be undone.", "The typed name must exactly match: "+m.deleteTarget.Label, "Type the name, then press Ctrl+Enter. Any mismatch cancels the deletion.")
+	}
+	if isBulkForm(m.form) && m.batchConfirm {
+		count := batchItemCount(m.form, m.formFields)
+		c.panel("BATCH PREVIEW", fmt.Sprintf("Ready to create %d item(s). Press Ctrl+Enter again to confirm.", count), "Blank lines are ignored; failed items are reported separately; Retry failed excludes successful items.")
+		inputIndex := batchInputIndex(m.form)
+		items := []string(nil)
+		if inputIndex >= 0 && inputIndex < len(m.formFields) {
+			items = batchLines(m.formFields[inputIndex].value)
+		}
+		for i, item := range items {
+			if i == 5 {
+				c.muted(fmt.Sprintf("… and %d more item(s)", len(items)-i))
+				break
+			}
+			c.lineText(fmt.Sprintf("%2d. %s", i+1, truncateVisible(item, max(8, c.width-6))))
+		}
+		switch m.form {
+		case formBulkIssues:
+			c.muted("Target: " + m.formFields[0].value + " · Priority: " + fallback(strings.ToLower(m.formFields[3].value), "normal"))
+		case formBulkQuotes:
+			author := strings.TrimSpace(m.formFields[1].value)
+			if author == "" {
+				author = "not specified"
+			}
+			c.muted("Shared attribution: " + author)
+		case formBulkJobs:
+			job, err := parseScheduledJobFields(m.formFields[1].value, m.formFields[2].value)
+			schedule := m.formFields[1].value + " · " + m.formFields[2].value
+			if err == nil {
+				schedule = scheduleSummary(job)
+			}
+			c.muted("Shared schedule: " + schedule + " · " + strings.ToLower(m.formFields[3].value))
+		}
+	} else if isBulkForm(m.form) {
+		c.muted("Bulk entry: paste a newline-separated list. Review the count before creating anything.")
+	}
 	if m.formError != "" {
 		c.lineText(p.danger().Render("! " + m.formError))
 	}
@@ -253,6 +291,24 @@ func (m *model) renderForm(c *canvas, p palette) {
 		submit = "Create project"
 	case formConcept:
 		submit = "Create concept"
+	case formBulkIssues:
+		if m.batchConfirm {
+			submit = fmt.Sprintf("Create %d Issues", batchItemCount(m.form, m.formFields))
+		} else {
+			submit = "Review batch"
+		}
+	case formBulkQuotes:
+		if m.batchConfirm {
+			submit = fmt.Sprintf("Save %d quotes", batchItemCount(m.form, m.formFields))
+		} else {
+			submit = "Review batch"
+		}
+	case formBulkJobs:
+		if m.batchConfirm {
+			submit = fmt.Sprintf("Create %d jobs", batchItemCount(m.form, m.formFields))
+		} else {
+			submit = "Review batch"
+		}
 	}
 	c.buttonRow(buttonSpec{submit, "form-action:submit", m.formFocus >= len(m.formFields)}, buttonSpec{"Cancel", "form-action:cancel", false})
 }
@@ -270,7 +326,8 @@ func (m *model) renderHelp(c *canvas, p palette) {
 		{"overview", "Overview"}, {"repositories", "Repositories"}, {"projects", "Projects"}, {"issues", "Issues"},
 		{"pull_requests", "Pull requests"}, {"graph", "Knowledge graph"}, {"notes", "Notes"}, {"quotes", "Quotes"},
 		{"jobs", "Scheduled jobs"}, {"notifications", "Notification inbox"}, {"logs", "Logs"}, {"settings", "Settings"},
-		{"profile", "Edit profile"}, {"refresh", "Refresh data"}, {"quit", "Quit"},
+		{"profile", "Edit profile"}, {"refresh", "Refresh data"}, {"command_palette", "Open command palette"},
+		{"bulk_issues", "Create multiple Issues"}, {"bulk_quotes", "Save multiple quotes"}, {"bulk_jobs", "Create multiple scheduled jobs"}, {"quit", "Open quit menu"},
 	}
 	for _, shortcut := range shortcuts {
 		key := strings.TrimSpace(m.config.Keyboard[shortcut.action])

@@ -1,9 +1,54 @@
 # Changelog
 
-All notable changes to IDIOS are documented here. This file follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the Go Engine uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [1.0.4] — 2026-10-20
+# Changelog
+
+All notable changes to IDIOS are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.0] - 2026-10-20
+
+### Added
+
+- **Bulk operations:** Introduced batch creation for Issues, Quotes, and Scheduled Jobs, supporting up to 100 items per batch.
+- **Batch validation and preview:** Added pre-execution validation, duplicate detection, shared settings, and a review step before creating items.
+- **Batch execution results:** Added per-item status reporting, partial-failure handling, and retry support for eligible failed items without repeating successful operations.
+- **Command palette:** Added a searchable command palette accessible with `Ctrl+K`.
+- **Removal Center:** Introduced a unified interface for removing supported entities, including Repositories, Issues, Pull Requests, Projects, Concepts, Notes, Quotes, Scheduled Jobs, Labels, Milestones, and Notifications.
+- **Removal safeguards:** Added confirmation flows, exact-name confirmation for Repository removal, and protections for entities with relevant dependencies or completion history.
+- **Quote library:** Added 11 sourced quotations from notable figures in software engineering, computer science, mathematics, and statistics.
+- **Quote attribution:** Added source metadata and reference links for seeded quotations.
+- **Random quote reminders:** Introduced configurable, randomized Quote of the Moment notifications, with a default interval of 60–240 minutes.
+- **Desktop notifications:** Added native notification integrations for Windows, macOS, and Linux, with an internal notification inbox as a fallback for retaining reminders.
+- **Graceful shutdown:** Added keyboard-driven exit flows, shutdown feedback, and resource cleanup while retaining `Ctrl+C` as an emergency exit path.
+- **UI tests:** Added tests covering batch operations, retry behavior, command palette behavior, shutdown flows, and related UI functionality.
+- **Database tests:** Added coverage for relevant persistence and migration behavior.
+
+### Changed
+
+- **Navigation:** Removed the redundant Repository list from the sidebar and streamlined primary navigation.
+- **Visual design:** Introduced the Midnight theme with improved contrast, clearer status indicators, and reduced visual clutter.
+- **Keyboard interaction:** Improved keyboard navigation, batch-result scrolling, and access to common actions.
+- **Notification settings:** Added controls for enabling quote reminders and configuring their delivery intervals.
+- **Persistence:** Extended database migrations and settings to support quote attribution and reminder functionality while preserving existing user data.
+- **Documentation:** Updated relevant TUI development guidance and feature documentation.
+
+### Fixed
+
+- Prevented batch retries from recreating items that had already succeeded.
+- Improved handling of partial batch failures so one failed item does not invalidate unrelated successful operations.
+- Added safeguards against destructive removal when relevant dependencies or completion history exist.
+- Improved shutdown handling and terminal restoration during normal application exit.
+- Improved feedback when desktop notification delivery fails.
+
+### Notes
+
+- Random quote reminders currently operate while IDIOS is running; they do not install a persistent background service or operating-system scheduled task.
+- Desktop notification delivery depends on platform capabilities and available system utilities.
+- Full project compilation and test-suite verification must be completed with the Go version required by the project.
+
+## [1.0.4]
+
 ### Fixed
 - show view upgrade
 ## [1.0.3] — 2026-10-20

@@ -57,8 +57,20 @@ type AppearanceConfig struct {
 }
 
 type NotificationConfig struct {
-	Enabled             bool `json:"enabled"`
-	PollIntervalMinutes int  `json:"poll_interval_minutes"`
+	Enabled             bool                `json:"enabled"`
+	PollIntervalMinutes int                 `json:"poll_interval_minutes"`
+	QuoteReminders      QuoteReminderConfig `json:"quote_reminders"`
+}
+
+// QuoteReminderConfig controls random quote reminders while the interactive TUI is running.
+// NextAt and LastQuoteID are persisted scheduler state, not user-facing preferences.
+type QuoteReminderConfig struct {
+	Enabled            bool   `json:"enabled"`
+	DesktopEnabled     bool   `json:"desktop_enabled"`
+	MinIntervalMinutes int    `json:"min_interval_minutes"`
+	MaxIntervalMinutes int    `json:"max_interval_minutes"`
+	NextAt             string `json:"next_at,omitempty"`
+	LastQuoteID        string `json:"last_quote_id,omitempty"`
 }
 
 // DefaultAppConfig returns a fresh copy of the packaged defaults.
@@ -156,6 +168,22 @@ func LoadAppConfig() (AppConfig, error) {
 	}
 	if cfg.Notifications.PollIntervalMinutes < 1 {
 		cfg.Notifications.PollIntervalMinutes = 1
+	}
+	const maxQuoteReminderMinutes = 525600 // one year; also bounds time.Duration arithmetic.
+	if cfg.Notifications.QuoteReminders.MinIntervalMinutes < 1 {
+		cfg.Notifications.QuoteReminders.MinIntervalMinutes = defaults.Notifications.QuoteReminders.MinIntervalMinutes
+	}
+	if cfg.Notifications.QuoteReminders.MinIntervalMinutes > maxQuoteReminderMinutes {
+		cfg.Notifications.QuoteReminders.MinIntervalMinutes = maxQuoteReminderMinutes
+	}
+	if cfg.Notifications.QuoteReminders.MaxIntervalMinutes < cfg.Notifications.QuoteReminders.MinIntervalMinutes {
+		cfg.Notifications.QuoteReminders.MaxIntervalMinutes = defaults.Notifications.QuoteReminders.MaxIntervalMinutes
+	}
+	if cfg.Notifications.QuoteReminders.MaxIntervalMinutes < cfg.Notifications.QuoteReminders.MinIntervalMinutes {
+		cfg.Notifications.QuoteReminders.MaxIntervalMinutes = cfg.Notifications.QuoteReminders.MinIntervalMinutes
+	}
+	if cfg.Notifications.QuoteReminders.MaxIntervalMinutes > maxQuoteReminderMinutes {
+		cfg.Notifications.QuoteReminders.MaxIntervalMinutes = maxQuoteReminderMinutes
 	}
 	return cfg, nil
 }

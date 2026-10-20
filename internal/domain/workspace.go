@@ -26,6 +26,9 @@ type Quote struct {
 	ID        string    `json:"id"`
 	Text      string    `json:"text"`
 	Author    string    `json:"author,omitempty"`
+	Source    string    `json:"source,omitempty"`
+	SourceURL string    `json:"source_url,omitempty"`
+	Category  string    `json:"category,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

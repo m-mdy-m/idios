@@ -17,6 +17,9 @@ func TestLoadAppConfigCreatesDefaultsAndMergesSmallOverrides(t *testing.T) {
 	if cfg.Appearance.Theme != "midnight" || len(cfg.Themes) < 3 || cfg.Keyboard["overview"] == "" {
 		t.Fatalf("first-run config is missing defaults: %+v", cfg)
 	}
+	if !cfg.Notifications.QuoteReminders.Enabled || !cfg.Notifications.QuoteReminders.DesktopEnabled || cfg.Notifications.QuoteReminders.MinIntervalMinutes != 60 || cfg.Notifications.QuoteReminders.MaxIntervalMinutes != 240 {
+		t.Fatalf("first-run config has unexpected quote reminder defaults: %+v", cfg.Notifications.QuoteReminders)
+	}
 	if cfg.RepositoryTemplate.Description == "" || cfg.IssueTemplate.Templates["task"].Body == "" || cfg.IssueTemplate.Templates["bug"].Body == "" || cfg.PullRequestTemplate.Body == "" {
 		t.Fatal("first-run config is missing Repository, Issue, or Pull Request templates")
 	}

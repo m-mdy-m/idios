@@ -253,7 +253,7 @@ func (m *model) renderRepositories(c *canvas, p palette) {
 		c.text("  " + truncateVisible(repo.Description, max(8, c.width-36)))
 		c.end()
 		c.muted(fmt.Sprintf(copyText.text("     %d issues · %d done · %d open PRs"), count, done, openPR))
-		c.buttonRow(buttonSpec{"Open repository →", "repo:" + repo.Name, false}, buttonSpec{"Create Issue", "form:" + string(formIssue), false}, buttonSpec{"Mark important", "pin:repository:" + repo.Name, false})
+		c.buttonRow(buttonSpec{"Open repository →", "repo:" + repo.Name, false}, buttonSpec{"Create Issue", "form:" + string(formIssue), false}, buttonSpec{"Mark important", "pin:repository:" + repo.Name, false}, buttonSpec{"Remove…", "remove:select:repository|" + repo.ID, false})
 		c.rule()
 	}
 }
@@ -279,7 +279,7 @@ func (m *model) renderProjects(c *canvas, p palette) {
 		c.text("  " + truncateVisible(project.Description, max(6, c.width-30)))
 		c.end()
 		c.muted(fmt.Sprintf(copyText.text("     %d Issues · %d done · %s"), len(issues), done, progressText(done, len(issues))))
-		c.buttonRow(buttonSpec{"Open project →", "project:" + project.Name, false}, buttonSpec{"Add Issue", "project-add-issue:" + project.Name, false})
+		c.buttonRow(buttonSpec{"Open project →", "project:" + project.Name, false}, buttonSpec{"Add Issue", "project-add-issue:" + project.Name, false}, buttonSpec{"Remove…", "remove:select:project|" + project.ID, false})
 		c.rule()
 	}
 }
@@ -291,7 +291,7 @@ func (m *model) renderIssues(c *canvas, p palette, scoped bool) {
 	}
 	c.title(title)
 	c.muted("open → in progress → done. An issue becomes done when its pull request is accepted. BLOCKED means it is waiting for a prerequisite.")
-	c.buttonRow(buttonSpec{"+ New Issue", "form:" + string(formIssue), true}, buttonSpec{"Refresh", "refresh:now", false})
+	c.buttonRow(buttonSpec{"+ New Issue", "form:" + string(formIssue), true}, buttonSpec{"+ Bulk create", "form:" + string(formBulkIssues), false}, buttonSpec{"Refresh", "refresh:now", false})
 	items := m.filteredIssues()
 	if len(items) == 0 {
 		c.panel("NO ISSUES FOUND", "Choose “+ New Issue”. You need a repository first.")
@@ -336,6 +336,7 @@ func (m *model) renderIssues(c *canvas, p palette, scoped bool) {
 		if len(metadata) > 0 {
 			c.muted("     " + strings.Join(metadata, "  ·  "))
 		}
+		c.buttonRow(buttonSpec{"Open", "issue:" + issueRef(issue), false}, buttonSpec{"Remove…", "remove:select:issue|" + issue.ID, false})
 		c.rule()
 	}
 }
@@ -361,7 +362,7 @@ func (m *model) renderPullRequests(c *canvas, p palette, scoped bool) {
 		c.text("  " + truncateVisible(pr.Title, max(8, c.width-lipgloss.Width(prRef(pr))-22)))
 		c.end()
 		c.muted(fmt.Sprintf(copyText.text("     Issue %s#%d · target %s"), pr.RepositoryName, pr.IssueNumber, pr.TargetBranchName))
-		c.buttonRow(buttonSpec{"Review details →", "pr:" + prRef(pr), false}, buttonSpec{"Edit", "pr-edit:" + prRef(pr), pr.Status == domain.PRPending}, buttonSpec{"Accept (issue done)", "pr-accept:" + prRef(pr), false})
+		c.buttonRow(buttonSpec{"Review details →", "pr:" + prRef(pr), false}, buttonSpec{"Edit", "pr-edit:" + prRef(pr), pr.Status == domain.PRPending}, buttonSpec{"Accept (issue done)", "pr-accept:" + prRef(pr), false}, buttonSpec{"Remove…", "remove:select:pull_request|" + pr.ID, false})
 		c.rule()
 	}
 }
@@ -421,6 +422,7 @@ func (m *model) renderRepositoryOverview(c *canvas, p palette) {
 		buttonSpec{"Activity", "repo-tab:" + string(pageRepoActivity), false},
 		buttonSpec{"Settings", "repo-tab:" + string(pageRepoSettings), false},
 		buttonSpec{"Mark important", "pin:repository:" + repo.Name, false},
+		buttonSpec{"Remove repository…", "remove:select:repository|" + repo.ID, false},
 	)
 	c.panel("REPOSITORY AT A GLANCE",
 		fmt.Sprintf("%d Issues  ·  %d open  ·  %d in progress  ·  %d done", len(issues), open, inProgress, done),
@@ -534,6 +536,7 @@ func (m *model) renderLabels(c *canvas, p palette) {
 			c.text("   " + l.Description)
 		}
 		c.end()
+		c.buttonRow(buttonSpec{"Remove label…", "remove:select:label|" + l.ID, false})
 	}
 }
 
@@ -551,6 +554,7 @@ func (m *model) renderMilestones(c *canvas, p palette) {
 			due = "due " + *ms.DueDate
 		}
 		c.panel(ms.Title, ms.Description, due)
+		c.buttonRow(buttonSpec{"Remove milestone…", "remove:select:milestone|" + ms.ID, false})
 	}
 }
 
@@ -612,7 +616,7 @@ func (m *model) renderConcepts(c *canvas, p palette) {
 		c.button("◇ "+concept.Name, "concept:"+concept.Name, idx == m.cursor)
 		c.text("  " + truncateVisible(concept.Description, max(8, c.width-lipgloss.Width(concept.Name)-8)))
 		c.end()
-		c.buttonRow(buttonSpec{"Open concept →", "concept:" + concept.Name, false}, buttonSpec{"View graph", "graph:focus-concept:" + concept.Name, false})
+		c.buttonRow(buttonSpec{"Open concept →", "concept:" + concept.Name, false}, buttonSpec{"View graph", "graph:focus-concept:" + concept.Name, false}, buttonSpec{"Remove…", "remove:select:concept|" + concept.ID, false})
 		c.rule()
 	}
 }
@@ -642,6 +646,20 @@ func (m *model) renderSettings(c *canvas, p palette) {
 	c.title("Notifications & scheduled jobs")
 	c.panel("REMINDERS", fmt.Sprintf(copyText.text("Notifications: %s · check interval: every %d minute(s)"), onOff(m.config.Notifications.Enabled), m.config.Notifications.PollIntervalMinutes), "Reminders run only while IDIOS is open. There is no background service.")
 	c.buttonRow(buttonSpec{"Notification settings", "settings-action:notifications-page", true}, buttonSpec{"Scheduled jobs", "nav:jobs", false}, buttonSpec{"Notification inbox", "nav:notifications", false})
+	c.blank()
+	c.title("Random quote notifications")
+	quoteReminder := m.config.Notifications.QuoteReminders
+	quoteNext := "not scheduled"
+	if next, err := time.Parse(time.RFC3339Nano, quoteReminder.NextAt); err == nil {
+		quoteNext = next.Local().Format("Mon Jan 02 · 15:04")
+	}
+	c.panel("QUOTE OF THE MOMENT",
+		"Random reminders: "+onOff(quoteReminder.Enabled),
+		fmt.Sprintf("Random interval: %d–%d minute(s)", quoteReminder.MinIntervalMinutes, quoteReminder.MaxIntervalMinutes),
+		"Desktop delivery: "+onOff(quoteReminder.DesktopEnabled),
+		"Next reminder: "+quoteNext,
+		"The TUI must be running; IDIOS does not install a background service.")
+	c.buttonRow(buttonSpec{"Toggle quote reminders", "settings-action:quote-reminders", true}, buttonSpec{"Change interval range", "settings-action:quote-interval", false}, buttonSpec{"Desktop delivery", "settings-action:quote-desktop", false}, buttonSpec{"Send test notification", "settings-action:test-quote-reminder", false})
 	c.blank()
 	c.title("Diagnostics")
 	c.panel("LOGGING", "Debug logging: "+onOff(m.config.Debug), "Log file: "+logFilePath(), "Errors are always logged. DEBUG lines are recorded only while Debug is on.")
@@ -675,10 +693,18 @@ func (m *model) renderSettings(c *canvas, p palette) {
 
 func (m *model) renderNotificationSettings(c *canvas, p palette) {
 	c.title("Settings / Notifications")
-	c.muted("Turn reminders on or off and set how often IDIOS checks for due jobs.")
-	c.panel("DELIVERY", "Notifications appear in the inbox inside IDIOS.", "Jobs run only while IDIOS is open.")
-	c.panel("GLOBAL SWITCH", "Scheduled notifications: "+onOff(m.config.Notifications.Enabled), "When off, due jobs still run and move to their next time, but no message is added to the inbox.")
-	c.buttonRow(buttonSpec{"Toggle notifications", "settings-action:notifications", true}, buttonSpec{fmt.Sprintf(copyText.text("Check interval: %d minute(s) → next"), m.config.Notifications.PollIntervalMinutes), "settings-action:poll-interval", false}, buttonSpec{"Open inbox", "nav:notifications", false}, buttonSpec{"Manage scheduled jobs", "nav:jobs", false})
+	c.muted("Control scheduled reminders and randomized quote notifications independently.")
+	c.panel("SCHEDULED JOBS", "Global job notifications: "+onOff(m.config.Notifications.Enabled), "When off, due jobs still run and move to their next time, but no job message is added to the IDIOS inbox.")
+	c.buttonRow(buttonSpec{"Toggle job notifications", "settings-action:notifications", true}, buttonSpec{fmt.Sprintf(copyText.text("Check interval: %d minute(s) → next"), m.config.Notifications.PollIntervalMinutes), "settings-action:poll-interval", false}, buttonSpec{"Open inbox", "nav:notifications", false}, buttonSpec{"Manage scheduled jobs", "nav:jobs", false})
+	c.blank()
+	r := m.config.Notifications.QuoteReminders
+	next := "not scheduled"
+	if at, err := time.Parse(time.RFC3339Nano, r.NextAt); err == nil {
+		next = at.Local().Format("Mon Jan 02 15:04:05")
+	}
+	c.title("Random quote reminders")
+	c.panel("QUOTE OF THE MOMENT", "Enabled: "+onOff(r.Enabled), fmt.Sprintf("Random interval: %d–%d minutes", r.MinIntervalMinutes, r.MaxIntervalMinutes), "System notification: "+onOff(r.DesktopEnabled), "Next reminder: "+next, "Uses the curated quote collection and avoids showing the same quote twice in a row when possible.", "Delivery runs only while IDIOS is open; the reminder is also recorded in the IDIOS inbox.")
+	c.buttonRow(buttonSpec{"Toggle quote reminders", "settings-action:quote-reminders", true}, buttonSpec{"Change random interval", "settings-action:quote-interval", false}, buttonSpec{"Toggle desktop delivery", "settings-action:quote-desktop", false}, buttonSpec{"Send test quote notification", "settings-action:test-quote-reminder", false})
 	c.blank()
 	c.title("Current scheduled jobs")
 	if len(m.jobs) == 0 {
@@ -707,6 +733,9 @@ func (m *model) renderNew(c *canvas, p palette) {
 	c.title("Create something new")
 	c.muted("Choose what to create.")
 	c.buttonRow(buttonSpec{"Repository", "form:" + string(formRepository), true}, buttonSpec{"Project", "form:" + string(formProject), false})
-	c.buttonRow(buttonSpec{"Issue", "form:" + string(formIssue), false}, buttonSpec{"Concept", "form:" + string(formConcept), false})
-	c.panel("WHICH ONE?", "Repository: a separate area of work, such as CPU or ARLIZ.", "Project: a goal that collects issues from several repositories.", "Issue: one task. A sub-issue belongs to a parent issue.", "Concept: a topic you can link from many issues.")
+	c.buttonRow(buttonSpec{"Issue", "form:" + string(formIssue), false}, buttonSpec{"Bulk Issues", "form:" + string(formBulkIssues), false})
+	c.buttonRow(buttonSpec{"Concept", "form:" + string(formConcept), false}, buttonSpec{"Quote", "quote-action:new", false})
+	c.buttonRow(buttonSpec{"Bulk quotes", "form:" + string(formBulkQuotes), false}, buttonSpec{"Scheduled job", "job-action:new", false})
+	c.buttonRow(buttonSpec{"Bulk jobs", "form:" + string(formBulkJobs), false})
+	c.panel("CHOOSE THE RIGHT FLOW", "Use single-item forms when records need different details.", "Use Bulk Issues / Bulk quotes / Bulk jobs when many records share the same settings; paste one item per line, review the batch, then confirm.")
 }

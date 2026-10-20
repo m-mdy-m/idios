@@ -202,6 +202,18 @@ func (s *Store) DeleteNote(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: note ID is required", domain.ErrInvalid)
 	}
 	return s.run(ctx, func(p provider) error {
+		// Remove polymorphic graph links and detach any other note that points to this one.
+		// Notes are intentionally retained by their own delete operation only when they are
+		// not the selected target; a dangling note-to-note edge is never left behind.
+		if _, err := p.changes(ctx, `UPDATE notes SET linked_entity_type='',linked_entity_id='',graph_visible=0,updated_at=? WHERE linked_entity_type='note' AND linked_entity_id=? AND id<>?`, nowText(), id, id); err != nil {
+			return err
+		}
+		if _, err := p.changes(ctx, `DELETE FROM relations WHERE (source_type='note' AND source_id=?) OR (target_type='note' AND target_id=?)`, id, id); err != nil {
+			return err
+		}
+		if _, err := p.changes(ctx, `DELETE FROM workspace_pins WHERE entity_type='note' AND entity_id=?`, id); err != nil {
+			return err
+		}
 		changed, err := p.changes(ctx, `DELETE FROM notes WHERE id=?`, id)
 		if err != nil {
 			return err
@@ -248,11 +260,15 @@ func (s *Store) LinkNote(ctx context.Context, noteID, entityType, entityRef stri
 }
 
 func quoteFrom(r Row) domain.Quote {
-	return domain.Quote{ID: str(r, "id"), Text: str(r, "text"), Author: str(r, "author"), CreatedAt: parseTime(r["created_at"])}
+	return domain.Quote{
+		ID: str(r, "id"), Text: str(r, "text"), Author: str(r, "author"),
+		Source: str(r, "source"), SourceURL: str(r, "source_url"), Category: str(r, "category"),
+		CreatedAt: parseTime(r["created_at"]),
+	}
 }
 
 func (s *Store) ListQuotes(ctx context.Context) ([]domain.Quote, error) {
-	rows, err := s.p().all(ctx, `SELECT id,text,author,created_at FROM quotes ORDER BY created_at,id`)
+	rows, err := s.p().all(ctx, `SELECT id,text,author,source,source_url,category,created_at FROM quotes ORDER BY created_at,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -260,16 +276,25 @@ func (s *Store) ListQuotes(ctx context.Context) ([]domain.Quote, error) {
 }
 
 func (s *Store) CreateQuote(ctx context.Context, text, author string) (domain.Quote, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
+	return s.CreateQuoteWithSource(ctx, domain.Quote{Text: text, Author: author})
+}
+
+func (s *Store) CreateQuoteWithSource(ctx context.Context, quote domain.Quote) (domain.Quote, error) {
+	quote.Text = strings.TrimSpace(quote.Text)
+	quote.Author = strings.TrimSpace(quote.Author)
+	quote.Source = strings.TrimSpace(quote.Source)
+	quote.SourceURL = strings.TrimSpace(quote.SourceURL)
+	quote.Category = strings.TrimSpace(quote.Category)
+	if quote.Text == "" {
 		return domain.Quote{}, fmt.Errorf("%w: quote text is required", domain.ErrInvalid)
 	}
-	id, now := domain.NewID(), nowText()
-	if _, err := s.p().changes(ctx, `INSERT INTO quotes(id,text,author,created_at) VALUES(?,?,?,?)`, id, text, strings.TrimSpace(author), now); err != nil {
+	quote.ID = domain.NewID()
+	quote.CreatedAt = time.Now().UTC()
+	if _, err := s.p().changes(ctx, `INSERT INTO quotes(id,text,author,source,source_url,category,created_at) VALUES(?,?,?,?,?,?,?)`, quote.ID, quote.Text, quote.Author, quote.Source, quote.SourceURL, quote.Category, timeText(quote.CreatedAt)); err != nil {
 		return domain.Quote{}, err
 	}
-	_ = s.RecordActivity(ctx, "quote", id, "quote.created", "")
-	r, err := s.p().must(ctx, "quote", `SELECT id,text,author,created_at FROM quotes WHERE id=?`, id)
+	_ = s.RecordActivity(ctx, "quote", quote.ID, "quote.created", "")
+	r, err := s.p().must(ctx, "quote", `SELECT id,text,author,source,source_url,category,created_at FROM quotes WHERE id=?`, quote.ID)
 	if err != nil {
 		return domain.Quote{}, err
 	}
@@ -281,7 +306,7 @@ func (s *Store) CreateQuote(ctx context.Context, text, author string) (domain.Qu
 func (s *Store) NextQuote(ctx context.Context) (domain.Quote, error) {
 	var result domain.Quote
 	err := s.run(ctx, func(p provider) error {
-		rows, err := p.all(ctx, `SELECT id,text,author,created_at FROM quotes ORDER BY created_at,id`)
+		rows, err := p.all(ctx, `SELECT id,text,author,source,source_url,category,created_at FROM quotes ORDER BY created_at,id`)
 		if err != nil {
 			return err
 		}
@@ -619,6 +644,22 @@ func (s *Store) RunScheduledJobNow(ctx context.Context, id string, now time.Time
 
 func notificationFrom(r Row) domain.Notification {
 	return domain.Notification{ID: str(r, "id"), Title: str(r, "title"), Body: str(r, "body"), Level: str(r, "level"), ReadAt: ptrTime(r["read_at"]), CreatedAt: parseTime(r["created_at"])}
+}
+
+func (s *Store) CreateNotification(ctx context.Context, title, body, level string) (domain.Notification, error) {
+	title, body, level = strings.TrimSpace(title), strings.TrimSpace(body), strings.TrimSpace(level)
+	if title == "" {
+		return domain.Notification{}, fmt.Errorf("%w: notification title is required", domain.ErrInvalid)
+	}
+	if level == "" {
+		level = "info"
+	}
+	n := domain.Notification{ID: domain.NewID(), Title: title, Body: body, Level: level, CreatedAt: time.Now().UTC()}
+	if _, err := s.p().changes(ctx, `INSERT INTO notifications(id,title,body,level,created_at) VALUES(?,?,?,?,?)`, n.ID, n.Title, n.Body, n.Level, timeText(n.CreatedAt)); err != nil {
+		return domain.Notification{}, err
+	}
+	_ = s.RecordActivity(ctx, "notification", n.ID, "notification.created", n.Title)
+	return n, nil
 }
 
 func (s *Store) ListNotifications(ctx context.Context, limit int) ([]domain.Notification, error) {

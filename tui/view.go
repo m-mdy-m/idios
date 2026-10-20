@@ -34,22 +34,18 @@ func (m *model) View() tea.View {
 	}
 	header.space(1)
 	header.button("+ New", "new:menu", m.page == pageNew)
+	header.space(1)
+	header.button("⌘ Commands  Ctrl+K", "commands:open", m.page == pageCommands)
 	header.end()
 
 	// Profile-style tabs. A Repository replaces these with its own tab bar below the hero.
 	header.tabRow(
 		buttonSpec{"Overview", "nav:overview", m.page == pageOverview && m.repoContext == ""},
 		buttonSpec{fmt.Sprintf(copyText.text("Repositories · %d"), len(m.repositories)), "nav:repositories", m.page == pageRepositories},
-		buttonSpec{fmt.Sprintf(copyText.text("Projects · %d"), len(m.projects)), "nav:projects", m.page == pageProjects},
 		buttonSpec{fmt.Sprintf(copyText.text("Issues · %d"), len(m.issues)), "nav:issues", m.page == pageIssues},
-		buttonSpec{fmt.Sprintf(copyText.text("Pull requests · %d"), len(m.pullRequests)), "nav:pull-requests", m.page == pagePullRequests},
-		buttonSpec{"Graph", "nav:graph", m.page == pageGraph},
-		buttonSpec{"Concepts", "nav:concepts", m.page == pageConcepts},
-		buttonSpec{"Notes", "nav:notes", m.page == pageNotes},
-		buttonSpec{"Jobs", "nav:jobs", m.page == pageJobs},
-		buttonSpec{"Settings", "nav:settings", m.page == pageSettings},
+		buttonSpec{fmt.Sprintf(copyText.text("Jobs · %d"), len(m.jobs)), "nav:jobs", m.page == pageJobs},
 	)
-	if m.page != pageOverview && m.page != pageIntro {
+	if m.page != pageOverview && m.page != pageIntro && m.page != pageDeleteConfirm && m.page != pageForm {
 		header.rule()
 		if m.repoContext != "" {
 			header.raw(p.title().Render("◈ " + m.repoContext))
@@ -74,7 +70,7 @@ func (m *model) View() tea.View {
 	bodyHeight := max(1, m.height-bodyTop-3)
 	m.bodyTop, m.bodyHeight = bodyTop, bodyHeight
 	sideWidth := 23
-	showSidebar := width >= 88 && m.page != pageOverview && m.page != pageIntro
+	showSidebar := width >= 88 && m.page != pageOverview && m.page != pageIntro && m.page != pageForm && m.page != pageQuit && m.page != pageBatchProgress && m.page != pageBatchResults && m.page != pageCommands && m.page != pageDeleteConfirm
 	if !showSidebar {
 		sideWidth = 0
 	}
@@ -87,32 +83,30 @@ func (m *model) View() tea.View {
 	if showSidebar {
 		side := newCanvas(sideWidth, 0, bodyTop, &m.hits, p)
 		side.focusAction = m.focusAction
-		side.title("WORKSPACE")
+		side.title("MORE")
+		// Keep destinations that are not already available in the persistent top tabs.
+		// This rail is a useful secondary index, not a second copy of the primary nav.
 		for _, nav := range []struct {
 			label string
 			page  page
 		}{
-			{"◫  Overview", pageOverview}, {"▦  Repositories", pageRepositories}, {"▤  Projects", pageProjects},
-			{"○  Issues", pageIssues}, {"⑂  Pull requests", pagePullRequests}, {"◎  Knowledge graph", pageGraph}, {"◇  Concepts", pageConcepts}, {"✎  Notes", pageNotes}, {"◷  Jobs", pageJobs}, {"⚙  Settings", pageSettings},
+			{"▤  Projects", pageProjects}, {"⑂  Pull requests", pagePullRequests},
+			{"◎  Knowledge graph", pageGraph}, {"◇  Concepts", pageConcepts}, {"✎  Notes", pageNotes},
+			{"❝  Quotes", pageQuotes}, {"⌫  Remove items", pageRemove}, {"◉  Notifications", pageNotifications}, {"≡  Logs", pageLogs}, {"⚙  Settings", pageSettings},
 		} {
 			side.buttonRow(buttonSpec{nav.label, "nav:" + string(nav.page), m.page == nav.page && m.repoContext == ""})
 		}
 		side.blank()
-		side.title("YOUR REPOSITORIES")
-		if len(m.repositories) == 0 {
-			side.muted("No repositories yet")
-		} else {
-			for i, repo := range m.repositories {
-				if i >= 8 {
-					side.muted(fmt.Sprintf(copyText.text("+ %d more"), len(m.repositories)-i))
-					break
-				}
-				label := "◇ " + repo.Name
-				side.buttonRow(buttonSpec{label, "repo:" + repo.Name, m.repoContext == repo.Name})
-			}
-		}
+		side.title("QUICK CREATE")
+		side.buttonRow(buttonSpec{"+ Issue", "form:" + string(formIssue), false})
+		side.buttonRow(buttonSpec{"+ Issues (bulk)", "form:" + string(formBulkIssues), false})
+		side.buttonRow(buttonSpec{"+ Quote", "form:" + string(formQuote), false})
+		side.buttonRow(buttonSpec{"+ Quotes (bulk)", "form:" + string(formBulkQuotes), false})
+		side.buttonRow(buttonSpec{"+ Job", "job-action:new", false})
+		side.buttonRow(buttonSpec{"+ Jobs (bulk)", "form:" + string(formBulkJobs), false})
 		side.blank()
-		side.buttonRow(buttonSpec{"+ Create repository", "form:" + string(formRepository), false})
+		side.muted(fmt.Sprintf("%d repositories · %d open issues", len(m.repositories), len(m.issues)))
+		side.buttonRow(buttonSpec{"Exit IDIOS", "quit:confirm", false})
 		sideLines = side.lines
 	}
 
@@ -234,7 +228,7 @@ func (m *model) compactView(p palette) tea.View {
 		"",
 		"Resize it to at least 48 columns × 18 rows.",
 		"",
-		"Q / Ctrl+C  Quit",
+		"Q / Ctrl+Q  Quit · Ctrl+C emergency",
 	}
 	for i, line := range lines {
 		lines[i] = fitLine(line, width)
@@ -317,6 +311,18 @@ func (m *model) renderMain(c *canvas, p palette) {
 		m.renderHelp(c, p)
 	case pageUpgrade:
 		m.renderUpgrade(c, p)
+	case pageQuit:
+		m.renderQuitConfirmation(c, p)
+	case pageBatchResults:
+		m.renderBatchResults(c, p)
+	case pageBatchProgress:
+		m.renderBatchProgress(c, p)
+	case pageCommands:
+		m.renderCommandPalette(c, p)
+	case pageRemove:
+		m.renderRemoveCenter(c, p)
+	case pageDeleteConfirm:
+		m.renderDeleteConfirmation(c, p)
 	default:
 		c.title("Page not found")
 		c.buttonRow(buttonSpec{"Go to overview", "nav:overview", true})
@@ -332,7 +338,25 @@ func (m *model) footerHints(p palette, width int) string {
 	var hints []hint
 	switch {
 	case m.page == pageForm:
-		hints = []hint{{"Tab", "next field"}, {"Ctrl+Enter", "save"}, {"Ctrl+U", "clear field"}, {"Esc", "cancel"}}
+		if isBulkForm(m.form) && !m.batchConfirm {
+			hints = []hint{{"Tab", "next field"}, {"Ctrl+Enter", "review batch"}, {"Ctrl+U", "clear field"}, {"Esc", "cancel"}}
+		} else if isBulkForm(m.form) {
+			hints = []hint{{"Ctrl+Enter", "create batch"}, {"Tab", "edit fields"}, {"Esc", "cancel"}}
+		} else {
+			hints = []hint{{"Tab", "next field"}, {"Ctrl+Enter", "save"}, {"Ctrl+U", "clear field"}, {"Esc", "cancel"}}
+		}
+	case m.page == pageQuit:
+		hints = []hint{{"Enter", "exit safely"}, {"Esc", "stay"}}
+	case m.page == pageBatchResults:
+		hints = []hint{{"↑/↓", "scroll"}, {"PgUp/Dn", "page"}, {"Ctrl+Tab", "focus actions"}, {"Q", "quit"}, {"Esc", "overview"}}
+	case m.page == pageBatchProgress:
+		hints = []hint{{"Esc", "cancel after current item"}, {"↑/↓", "scroll"}, {"PgUp/Dn", "page"}, {"Ctrl+Tab", "focus cancel"}, {"Q", "quit menu"}}
+	case m.page == pageCommands:
+		hints = []hint{{"Type", "filter commands"}, {"↑/↓", "select"}, {"Enter", "run"}, {"Esc", "close"}}
+	case m.page == pageRemove:
+		hints = []hint{{"/", "filter"}, {"Enter", "select"}, {"Esc", "back"}, {"Ctrl+K", "commands"}}
+	case m.page == pageDeleteConfirm:
+		hints = []hint{{"Enter", "confirm"}, {"Esc", "cancel"}, {"Ctrl+Q", "quit menu"}}
 	case m.searchMode:
 		hints = []hint{{"Enter", "apply filter"}, {"Esc", "clear filter"}}
 	case m.page == pageIntro:
@@ -345,7 +369,8 @@ func (m *model) footerHints(p palette, width int) string {
 			{prettyKey(m.config.Keyboard["search"], "/"), "filter"},
 			{prettyKey(m.config.Keyboard["new"], "Ctrl+N"), "new"},
 			{prettyKey(m.config.Keyboard["help"], "?"), "help"},
-			{prettyKey(m.config.Keyboard["quit"], "q"), "quit"},
+			{prettyKey(m.config.Keyboard["quit"], "q"), "quit menu"},
+			{"Ctrl+Q", "quit menu"},
 		}
 	}
 	var out strings.Builder

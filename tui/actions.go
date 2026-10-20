@@ -20,6 +20,19 @@ func (m *model) handleAction(action string) tea.Cmd {
 		return nil
 	}
 	kind, value := parts[0], parts[1]
+	// Do not silently hide a running batch or replace a live form because a
+	// navigation control was clicked. Explicit cancel/submit/quit actions remain available.
+	if m.batchRun != nil && kind != "quit" && !(kind == "batch" && value == "cancel") {
+		m.status, m.statusError = "A batch is running. Cancel it safely or let it finish before navigating.", true
+		return nil
+	}
+	if m.form != "" {
+		switch kind {
+		case "nav", "repo", "new", "form", "commands", "command", "job-action", "quote-action", "note-action", "remove":
+			m.status, m.statusError = "Finish or cancel the current form before navigating or starting another action.", true
+			return nil
+		}
+	}
 	switch kind {
 	case "upgrade":
 		switch value {
@@ -51,6 +64,9 @@ func (m *model) handleAction(action string) tea.Cmd {
 		m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
 		m.repoContext = ""
 		m.page = page(value)
+		if value == string(pageRemove) {
+			m.removeKind = ""
+		}
 		if value == string(pageGraph) {
 			m.graphFrom = ""
 			g, err := m.app.Graph(m.ctx, "", 0)
@@ -100,6 +116,24 @@ func (m *model) handleAction(action string) tea.Cmd {
 		m.repoContext = ""
 	case "form":
 		m.beginForm(formKind(value))
+	case "batch":
+		switch value {
+		case "retry-failed":
+			m.retryFailedBatch()
+		case "cancel":
+			m.requestBatchCancel()
+		}
+	case "commands":
+		if value == "open" {
+			m.openCommandPalette()
+		} else if value == "close" {
+			m.closeCommandPalette()
+		}
+	case "command":
+		// Restore the prior view before running the command so forms return to the right page.
+		command := value
+		m.closeCommandPalette()
+		return m.handleAction(command)
 	case "form-issue":
 		m.repoContext = value
 		m.beginForm(formIssue)
@@ -239,6 +273,53 @@ func (m *model) handleAction(action string) tea.Cmd {
 			return m.handleAction("nav:jobs")
 		case "notifications-page":
 			return m.handleAction("nav:settings-notifications")
+		case "quote-reminders":
+			r := &m.config.Notifications.QuoteReminders
+			r.Enabled = !r.Enabled
+			if r.Enabled {
+				r.NextAt = nextQuoteReminderAt(time.Now(), *r).Format(time.RFC3339Nano)
+			} else {
+				r.NextAt = ""
+			}
+			if err := config.SaveAppConfig(m.config); err != nil {
+				m.status, m.statusError = err.Error(), true
+			} else {
+				m.status, m.statusError = "Random quote reminders "+onOff(r.Enabled)+".", false
+				m.logEvent("INFO", m.status)
+			}
+		case "quote-desktop":
+			r := &m.config.Notifications.QuoteReminders
+			r.DesktopEnabled = !r.DesktopEnabled
+			if err := config.SaveAppConfig(m.config); err != nil {
+				m.status, m.statusError = err.Error(), true
+			} else {
+				m.status, m.statusError = "Desktop quote notifications "+onOff(r.DesktopEnabled)+".", false
+				m.logEvent("INFO", m.status)
+			}
+		case "quote-interval":
+			type intervalRange struct{ min, max int }
+			presets := []intervalRange{{1, 5}, {15, 60}, {30, 120}, {60, 240}, {180, 720}}
+			r := &m.config.Notifications.QuoteReminders
+			index := -1
+			for i, preset := range presets {
+				if preset.min == r.MinIntervalMinutes && preset.max == r.MaxIntervalMinutes {
+					index = i
+					break
+				}
+			}
+			preset := presets[(index+1)%len(presets)]
+			r.MinIntervalMinutes, r.MaxIntervalMinutes = preset.min, preset.max
+			if r.Enabled {
+				r.NextAt = nextQuoteReminderAt(time.Now(), *r).Format(time.RFC3339Nano)
+			}
+			if err := config.SaveAppConfig(m.config); err != nil {
+				m.status, m.statusError = err.Error(), true
+			} else {
+				m.status, m.statusError = fmt.Sprintf("Random quote interval set to %d–%d minutes.", r.MinIntervalMinutes, r.MaxIntervalMinutes), false
+				m.logEvent("INFO", m.status)
+			}
+		case "test-quote-reminder":
+			return sendTestQuoteCmd(m.ctx, m.app, m.config.Notifications.QuoteReminders.LastQuoteID)
 		case "poll-interval":
 			values := []int{1, 5, 15, 60}
 			index := 0
@@ -249,6 +330,7 @@ func (m *model) handleAction(action string) tea.Cmd {
 				}
 			}
 			m.config.Notifications.PollIntervalMinutes = values[(index+1)%len(values)]
+			m.nextJobsCheckAt = time.Now().Add(time.Duration(m.config.Notifications.PollIntervalMinutes) * time.Minute)
 			if err := config.SaveAppConfig(m.config); err != nil {
 				m.status, m.statusError = err.Error(), true
 			} else {
@@ -284,7 +366,7 @@ func (m *model) handleAction(action string) tea.Cmd {
 		case "delete":
 			if m.selectedNoteID != "" {
 				id := m.selectedNoteID
-				return m.runOperation("Note deleted.", func() error { return m.app.DeleteNote(m.ctx, id) })
+				return m.handleAction("remove:select:note|" + id)
 			}
 		case "graph":
 			for _, n := range m.notes {
@@ -317,7 +399,7 @@ func (m *model) handleAction(action string) tea.Cmd {
 		return m.runOperation("Scheduled job ran now.", func() error { return app.RunScheduledJobNow(ctx, id, time.Now(), notificationsEnabled) })
 	case "job-delete":
 		id := value
-		return m.runOperation("Scheduled job deleted.", func() error { return m.app.DeleteScheduledJob(m.ctx, id) })
+		return m.handleAction("remove:select:job|" + id)
 	case "job-action":
 		if value == "new" {
 			m.selectedJobID = ""
@@ -343,6 +425,42 @@ func (m *model) handleAction(action string) tea.Cmd {
 					message = "Added to Important items."
 				}
 				return operationMsg{message: message, err: err}
+			}
+		}
+	case "remove-kind":
+		m.removeKind = value
+		m.page, m.cursor, m.scroll = pageRemove, 0, 0
+		m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
+	case "remove":
+		switch {
+		case value == "categories":
+			m.removeKind = ""
+			m.page, m.cursor, m.scroll = pageRemove, 0, 0
+		case value == "cancel":
+			m.deleteTarget = deleteTarget{}
+			m.page, m.cursor, m.scroll = pageRemove, 0, 0
+		case value == "confirm":
+			if m.deleteTarget.ID == "" {
+				m.status, m.statusError = "No deletion target is selected.", true
+				return nil
+			}
+			if m.deleteTarget.TypeNameRequired {
+				m.beginRepositoryDeleteConfirmation()
+				return nil
+			}
+			return m.runDeleteTarget()
+		case strings.HasPrefix(value, "select:"):
+			kindAndID := strings.TrimPrefix(value, "select:")
+			kind, id, ok := strings.Cut(kindAndID, "|")
+			if !ok || kind == "" || id == "" {
+				m.status, m.statusError = "Invalid removal target.", true
+				return nil
+			}
+			if m.beginRemoveTarget(kind, id) {
+				if m.deleteTarget.TypeNameRequired {
+					// First show the impact and require a deliberate second action before typing.
+					m.page = pageDeleteConfirm
+				}
 			}
 		}
 	case "graph":
@@ -403,6 +521,8 @@ func (m *model) handleAction(action string) tea.Cmd {
 			return m.submitForm()
 		case "cancel":
 			m.form, m.formFields, m.formError = "", nil, ""
+			m.batchConfirm = false
+			m.batchRetrying, m.batchCarryResults = false, nil
 			m.page = m.formReturnPage
 			m.repoContext = m.formReturnRepo
 		}
@@ -449,7 +569,13 @@ func (m *model) handleAction(action string) tea.Cmd {
 	case "refresh":
 		return loadSnapshotCmd(m.ctx, m.app)
 	case "quit":
-		return tea.Quit
+		if value == "confirm" || value == "now" {
+			m.openQuitConfirmation()
+		} else if value == "cancel" {
+			m.cancelQuitConfirmation()
+		} else if value == "exit" {
+			return m.startExitAnimation()
+		}
 	}
 	return nil
 }
@@ -464,7 +590,9 @@ func (m *model) beginForm(kind formKind) {
 	m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
 	m.formReturnPage, m.formReturnRepo = m.page, m.repoContext
 	m.form, m.formFocus, m.formError = kind, 0, ""
+	m.batchConfirm = false
 	m.formTitle = formTitle(kind)
+	m.batchRetrying, m.batchCarryResults = false, nil
 	m.activeIssueTemplate = m.config.IssueTemplate.Default
 	m.page = pageForm
 	m.formFields = m.fieldsFor(kind)
@@ -488,6 +616,9 @@ func (m *model) fieldsFor(kind formKind) []formField {
 	issueRepoDefault := m.repoContext
 	if issueRepoDefault == "" && len(m.repositories) > 0 {
 		issueRepoDefault = m.repositories[0].Name
+	}
+	if kind == formDeleteRepositoryConfirm {
+		return []formField{{label: "Type the repository name", placeholder: m.deleteTarget.Label, helper: repositoryDeleteConfirmItem(m.deleteTarget)}}
 	}
 	if kind == formRepository {
 		return []formField{
@@ -633,6 +764,24 @@ func (m *model) fieldsFor(kind formKind) []formField {
 				{label: "Send notification?", value: "yes", placeholder: "yes / no", helper: "The global notification switch must also be on."},
 			}
 		}(),
+		formBulkIssues: {
+			{label: "Repository", value: issueRepoDefault, placeholder: "IDIOS", helper: "All Issues in this batch go to this repository."},
+			{label: "Issue titles", placeholder: "One Issue title per line", helper: "Paste a list; blank lines are ignored. Up to 100 Issues per batch.", multiline: true},
+			{label: "Shared description", placeholder: "Optional context shared by every Issue", helper: "Use this for common instructions; add specific details later on each Issue.", multiline: true},
+			{label: "Priority", value: "normal", placeholder: "low / normal / high", helper: "Applied to every Issue in the batch."},
+		},
+		formBulkQuotes: {
+			{label: "Quotes", placeholder: "One quote per line", helper: "Each non-empty line becomes a separate quote. Up to 100 per batch.", multiline: true},
+			{label: "Author / source", placeholder: "Optional shared attribution", helper: "Applied to every quote in this batch."},
+		},
+		formBulkJobs: {
+			{label: "Job names", placeholder: "Weekly review\nRead later\nPlan tomorrow", helper: "One scheduled job per line. Up to 100 jobs; the schedule below is shared.", multiline: true},
+			{label: "Schedule type", value: "interval", placeholder: "interval / once / daily / weekly / monthly", helper: "All jobs use this schedule."},
+			{label: "Schedule details", value: "1h", placeholder: "1h | 2026-10-25 14:30 | 09:00 | Mon 09:00 | 15 09:00", helper: "interval: 1h/30m/2d; once: YYYY-MM-DD HH:MM; daily: HH:MM; weekly: Mon HH:MM; monthly: 15 09:00."},
+			{label: "Reminder kind", value: "custom-reminder", placeholder: "daily-plan / weekly-review / blocked-issues / open-issues / custom-reminder", helper: "Applied to every job."},
+			{label: "Extra note", placeholder: "Optional shared reminder note", helper: "Shown with each reminder; mainly for custom-reminder."},
+			{label: "Send notification?", value: "yes", placeholder: "yes / no", helper: "The global notification switch must also be on."},
+		},
 		formProfile: {
 			{label: "Username", value: m.profile.Username, placeholder: "workspace-owner", helper: "Shown in your Overview profile block."},
 			{label: "Display name", value: m.profile.FullName, placeholder: "Workspace owner", helper: "Shown as the heading on Overview."},
@@ -703,6 +852,52 @@ func (m *model) submitForm() tea.Cmd {
 			return ""
 		}
 		return fields[i]
+	}
+	if kind == formDeleteRepositoryConfirm {
+		if m.deleteTarget.ID == "" || m.deleteTarget.Kind != "repository" {
+			m.formError = "There is no repository selected for deletion."
+			return nil
+		}
+		if get(0) != m.deleteTarget.Label {
+			m.formError = "The name must match exactly. Nothing has been deleted."
+			return nil
+		}
+		m.formError = ""
+		return m.runDeleteTarget()
+	}
+	if isBulkForm(kind) {
+		if !m.batchConfirm {
+			count, err := validateBulkForm(kind, fields, m.repositories)
+			if err != nil {
+				m.formError = err.Error()
+				return nil
+			}
+			m.batchConfirm = true
+			m.formError = ""
+			m.status = fmt.Sprintf("Preview ready: %d item(s). Press Ctrl+Enter again to create the batch.", count)
+			m.statusError = false
+			return nil
+		}
+		if !m.batchRetrying {
+			m.batchCarryResults = nil
+		}
+		m.lastBatchForm = kind
+		m.lastBatchFields = append([]formField(nil), m.formFields...)
+		m.batchConfirm = false
+		m.batchTitle = map[formKind]string{formBulkIssues: "Issue batch", formBulkQuotes: "Quote batch", formBulkJobs: "Scheduled job batch"}[kind]
+		inputIndex := batchInputIndex(kind)
+		items := batchLines(get(inputIndex))
+		seen := map[string]bool{}
+		if kind == formBulkIssues {
+			seen = map[string]bool{}
+		}
+		m.batchRun = &batchRunState{kind: kind, items: items, fields: append([]string(nil), fields...), seen: seen}
+		m.batchResults = nil
+		m.form, m.formFields, m.formError = "", nil, ""
+		m.page = pageBatchProgress
+		m.cursor, m.scroll = 0, 0
+		m.status, m.statusError = fmt.Sprintf("Starting batch: %d item(s)…", len(items)), false
+		return m.nextBatchItemCmd()
 	}
 	app, ctx, repoContext, selectedProject, selectedPR, selectedNoteID, selectedJobID := m.app, m.ctx, m.repoContext, m.selectedProject, m.selectedPRRef, m.selectedNoteID, m.selectedJobID
 	appConfig := m.config

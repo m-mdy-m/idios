@@ -19,7 +19,7 @@ func (m *model) goBack() {
 }
 
 func (m *model) cycleNavigation(direction int) {
-	nav := []page{pageOverview, pageRepositories, pageProjects, pageIssues, pagePullRequests, pageGraph, pageConcepts, pageNotes, pageQuotes, pageJobs, pageNotifications, pageLogs, pageSettings}
+	nav := []page{pageOverview, pageRepositories, pageProjects, pageIssues, pagePullRequests, pageGraph, pageConcepts, pageNotes, pageQuotes, pageJobs, pageRemove, pageNotifications, pageLogs, pageSettings}
 	index := 0
 	for i, p := range nav {
 		if p == m.page {
@@ -142,6 +142,20 @@ func (m *model) cursorItems() []cursorItem {
 		for _, n := range m.currentGraphLayout().order {
 			items = append(items, cursorItem{graphNodeRef(n), "graph-node:" + n.ID})
 		}
+	case pageCommands:
+		for _, entry := range m.filteredCommandEntries() {
+			items = append(items, cursorItem{entry.title, "command:" + entry.action})
+		}
+	case pageRemove:
+		if m.removeKind == "" {
+			for _, category := range m.filteredRemoveCategories() {
+				items = append(items, cursorItem{removeCategoryLabel(category.kind), "remove-kind:" + category.kind})
+			}
+		} else {
+			for _, item := range m.removableItems(m.removeKind) {
+				items = append(items, cursorItem{item.Label, "remove:select:" + m.removeKind + "|" + item.ID})
+			}
+		}
 	case pageNew:
 		for _, f := range []formKind{formRepository, formProject, formIssue, formConcept} {
 			items = append(items, cursorItem{string(f), "form:" + string(f)})
@@ -220,7 +234,7 @@ func (m *model) findGraphNode(id string) *domain.GraphNode {
 func (m *model) shortcutAction(key string) string {
 	// Explicit order avoids map iteration randomness if a user accidentally configures two
 	// actions with the same key. First match wins and the Settings page documents defaults.
-	for _, action := range []string{"quit", "new", "search", "help", "overview", "repositories", "projects", "issues", "pull_requests", "graph", "concepts", "settings", "notes", "quotes", "jobs", "notifications", "logs", "profile", "edit_profile", "theme", "density", "debug", "toggle_notifications", "intro", "poll_interval", "new_note", "new_quote", "new_job", "mark_notifications_read", "refresh"} {
+	for _, action := range []string{"quit", "new", "search", "help", "overview", "repositories", "projects", "issues", "pull_requests", "graph", "concepts", "settings", "notes", "quotes", "jobs", "notifications", "logs", "profile", "edit_profile", "theme", "density", "debug", "toggle_notifications", "intro", "poll_interval", "new_note", "new_quote", "new_job", "mark_notifications_read", "bulk_issues", "bulk_quotes", "bulk_jobs", "command_palette", "refresh"} {
 		if shortcut := strings.TrimSpace(m.config.Keyboard[action]); shortcut != "" && shortcut == key {
 			return action
 		}
@@ -238,11 +252,12 @@ func onOff(value bool) string {
 func formTitle(kind formKind) string {
 	titles := map[formKind]string{
 		formRepository: "Create repository", formProject: "Create project", formIssue: "Create issue",
+		formBulkIssues: "Create multiple Issues", formBulkQuotes: "Save multiple quotes", formBulkJobs: "Create multiple scheduled jobs",
 		formConcept: "Create concept", formPullRequest: "Create pull request", formAcceptPR: "Accept pull request", formEditPR: "Edit pull request",
 		formDependency: "Add blocking prerequisite", formConceptLink: "Link issue to concept", formProjectIssue: "Add issue to project",
 		formRepoSetting: "Edit repository setting", formLabel: "Create label", formMilestone: "Create milestone",
 		formAssignLabel: "Assign label", formAssignMilestone: "Assign milestone", formNote: "Write a note",
-		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Create scheduled job", formProfile: "Edit workspace profile",
+		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Create scheduled job", formProfile: "Edit workspace profile", formDeleteRepositoryConfirm: "Confirm repository deletion",
 	}
 	if title := titles[kind]; title != "" {
 		return title

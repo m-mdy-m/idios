@@ -289,3 +289,51 @@ func TestDueOneTimeJobRunsExactlyOnceAndDoesNotRepeat(t *testing.T) {
 		t.Fatalf("one-time notifications = %d err=%v; want one", len(notifications), err)
 	}
 }
+
+func TestSourcedQuotesPersistTheirProvenanceAndNotificationsReachInbox(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "quote-provenance.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	want := domain.Quote{
+		Text: "A sourced quotation.", Author: "Ada Lovelace",
+		Source: "Notes on the Analytical Engine", SourceURL: "https://example.org/source",
+		Category: "Computing",
+	}
+	created, err := store.CreateQuoteWithSource(ctx, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotes, err := store.ListQuotes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *domain.Quote
+	for i := range quotes {
+		if quotes[i].ID == created.ID {
+			found = &quotes[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("created quote %q was not returned by ListQuotes", created.ID)
+	}
+	if found.Text != want.Text || found.Author != want.Author || found.Source != want.Source || found.SourceURL != want.SourceURL || found.Category != want.Category {
+		t.Fatalf("quote provenance did not round-trip: got %+v, want %+v", *found, want)
+	}
+
+	notification, err := store.CreateNotification(ctx, "Quote of the moment", "A sourced quotation. — Ada Lovelace", "quote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox, err := store.ListNotifications(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inbox) != 1 || inbox[0].ID != notification.ID || inbox[0].Title != notification.Title || inbox[0].Body != notification.Body || inbox[0].Level != "quote" {
+		t.Fatalf("quote reminder was not persisted to the inbox: notification=%+v inbox=%+v", notification, inbox)
+	}
+}

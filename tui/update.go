@@ -5,6 +5,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"idios/internal/config"
+	"idios/internal/domain"
 	"idios/internal/updater"
 	"os"
 	"strings"
@@ -54,6 +56,41 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, upgradeAnimationTickCmd()
 		}
 		return m, nil
+	case batchItemDoneMsg:
+		if m.batchRun == nil {
+			return m, nil
+		}
+		run := m.batchRun
+		run.results = append(run.results, msg.result)
+		run.index++
+		if run.cancelRequested {
+			for _, item := range run.items[run.index:] {
+				run.results = append(run.results, batchItemResult{Item: item, Retryable: true, NotRun: true, Detail: "Not attempted because the batch was cancelled before this item ran."})
+			}
+			refresh := m.finishBatch(true)
+			if m.exitAfterBatch {
+				m.exitAfterBatch = false
+				// No fresh read is needed during shutdown; avoid racing the
+				// application's database close with a background snapshot command.
+				return m, m.startExitAnimation()
+			}
+			return m, refresh
+		}
+		if run.index >= len(run.items) {
+			return m, m.finishBatch(false)
+		}
+		m.status = fmt.Sprintf("Batch progress: %d/%d processed…", run.index, len(run.items))
+		m.statusError = false
+		return m, m.nextBatchItemCmd()
+	case exitAnimationTickMsg:
+		m.exitFrame++
+		if m.exitFrame >= 3 {
+			return m, tea.Quit
+		}
+		if m.exitAnimating {
+			return m, exitAnimationTickCmd()
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 		m.clampViewport()
@@ -81,11 +118,65 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case schedulerTickMsg:
-		interval := time.Duration(m.config.Notifications.PollIntervalMinutes) * time.Minute
+		commands := []tea.Cmd{schedulerTickCmd(time.Minute)}
 		if m.app == nil {
-			return m, schedulerTickCmd(interval)
+			return m, commands[0]
 		}
-		return m, tea.Batch(processDueJobsCmd(m.ctx, m.app, msg.at, m.config.Notifications.Enabled), schedulerTickCmd(interval))
+		pollInterval := time.Duration(max(1, m.config.Notifications.PollIntervalMinutes)) * time.Minute
+		if m.nextJobsCheckAt.IsZero() || !msg.at.Before(m.nextJobsCheckAt) {
+			m.nextJobsCheckAt = msg.at.Add(pollInterval)
+			commands = append(commands, processDueJobsCmd(m.ctx, m.app, msg.at, m.config.Notifications.Enabled))
+		}
+		if quoteReminderDue(m.config.Notifications.QuoteReminders, msg.at) {
+			commands = append(commands, quoteReminderCmd(m.ctx, m.app, m.config.Notifications.QuoteReminders, msg.at))
+		}
+		return m, tea.Batch(commands...)
+	case quoteReminderMsg:
+		if !msg.nextAt.IsZero() {
+			m.config.Notifications.QuoteReminders.NextAt = msg.nextAt.Format(time.RFC3339Nano)
+			if msg.quote.ID != "" {
+				m.config.Notifications.QuoteReminders.LastQuoteID = msg.quote.ID
+			}
+			if err := config.SaveAppConfig(m.config); err != nil {
+				m.logEvent("ERROR", "save next quote reminder state: "+err.Error())
+			}
+		}
+		if msg.notification.ID != "" {
+			m.notifications = append([]domain.Notification{msg.notification}, m.notifications...)
+			if len(m.notifications) > 50 {
+				m.notifications = m.notifications[:50]
+			}
+		}
+		if msg.err != nil {
+			m.status, m.statusError = "Quote reminder could not be fully recorded: "+msg.err.Error(), true
+			m.logEvent("ERROR", m.status)
+		} else if msg.desktopErr != nil {
+			m.status, m.statusError = "Quote saved to the IDIOS inbox, but desktop delivery failed: "+msg.desktopErr.Error(), true
+			m.logEvent("WARN", m.status)
+		} else if msg.quote.ID != "" {
+			if m.config.Notifications.QuoteReminders.DesktopEnabled {
+				m.status, m.statusError = "Quote notification sent · "+msg.quote.Author, false
+			} else {
+				m.status, m.statusError = "Quote reminder added to the IDIOS inbox · "+msg.quote.Author, false
+			}
+			m.logEvent("INFO", m.status)
+			if items, err := m.app.ListNotifications(m.ctx, 50); err == nil {
+				m.notifications = items
+			}
+		}
+		return m, nil
+	case quoteTestMsg:
+		if msg.err != nil {
+			m.status, m.statusError = msg.err.Error(), true
+			m.logEvent("ERROR", m.status)
+		} else if msg.desktopErr != nil {
+			m.status, m.statusError = "Test quote could not be delivered to the desktop: "+msg.desktopErr.Error(), true
+			m.logEvent("WARN", m.status)
+		} else {
+			m.status, m.statusError = "Test quote notification sent · "+msg.quote.Author, false
+			m.logEvent("INFO", m.status)
+		}
+		return m, nil
 	case schedulerProcessedMsg:
 		if msg.err != nil {
 			m.logEvent("ERROR", "scheduled job processor: "+msg.err.Error())
@@ -122,6 +213,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.openPage != "" {
 			m.page = msg.openPage
 		}
+		if msg.clearDeleteTarget {
+			m.deleteTarget = deleteTarget{}
+			m.removeKind = ""
+			m.selectedNoteID = ""
+			m.selectedJobID = ""
+		}
 		if msg.openRepo != "" {
 			m.repoContext, m.page = msg.openRepo, pageRepository
 		}
@@ -143,6 +240,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.openJob != "" {
 			m.selectedJobID, m.page = msg.openJob, pageJobs
 		}
+		if len(msg.batchResults) > 0 {
+			m.batchResults = append([]batchItemResult(nil), msg.batchResults...)
+			m.page = pageBatchResults
+			m.cursor, m.scroll = 0, 0
+		}
 		if msg.err == nil && msg.message == "Note deleted." {
 			m.selectedNoteID = ""
 		}
@@ -163,6 +265,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.search += strings.ReplaceAll(content, "\n", " ")
 			m.cursor, m.scroll = 0, 0
 		} else if m.form != "" && m.formFocus < len(m.formFields) {
+			m.batchConfirm = false
 			field := &m.formFields[m.formFocus]
 			if !field.multiline {
 				content = strings.ReplaceAll(content, "\n", " ")
@@ -181,6 +284,161 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		key := msg.String()
+		// Ctrl+Q opens the same explicit exit flow from any screen, including forms.
+		if key == "ctrl+q" {
+			m.openQuitConfirmation()
+			return m, nil
+		}
+		// Ctrl+C remains an emergency path, but still runs a brief, graceful UI shutdown.
+		if key == "ctrl+c" {
+			return m, m.startExitAnimation()
+		}
+		if m.shortcutAction(key) == "command_palette" {
+			m.openCommandPalette()
+			return m, nil
+		}
+		if m.page == pageCommands {
+			switch key {
+			case "esc":
+				m.closeCommandPalette()
+				return m, nil
+			case "enter":
+				return m, m.openCursor()
+			case "up", "ctrl+p":
+				m.moveCursor(-1)
+				return m, nil
+			case "down", "ctrl+n":
+				m.moveCursor(1)
+				return m, nil
+			case "backspace":
+				m.commandQuery = trimLastRune(m.commandQuery)
+				m.cursor, m.scroll = 0, 0
+				return m, nil
+			case "ctrl+u":
+				m.commandQuery = ""
+				m.cursor, m.scroll = 0, 0
+				return m, nil
+			default:
+				if key == "space" {
+					key = " "
+				}
+				if isPrintableKey(key) {
+					m.commandQuery += key
+					m.cursor, m.scroll = 0, 0
+				}
+				return m, nil
+			}
+		}
+		if m.page == pageBatchProgress {
+			if m.shortcutAction(key) == "quit" {
+				m.openQuitConfirmation()
+				return m, nil
+			}
+			switch key {
+			case "pgdown", "ctrl+f":
+				m.scrollBatchContent(1)
+				return m, nil
+			case "pgup", "ctrl+b":
+				m.scrollBatchContent(-1)
+				return m, nil
+			case "down", "j":
+				if m.buttonFocus {
+					m.cycleButtonFocus(1)
+				} else {
+					m.scroll++
+					m.clampViewport()
+				}
+				return m, nil
+			case "up", "k":
+				if m.buttonFocus {
+					m.cycleButtonFocus(-1)
+				} else {
+					m.scroll = max(0, m.scroll-1)
+					m.clampViewport()
+				}
+				return m, nil
+			case "esc":
+				m.requestBatchCancel()
+				return m, nil
+			case "q":
+				m.openQuitConfirmation()
+				return m, nil
+			case "ctrl+tab", "ctrl+right", "f6":
+				m.cycleButtonFocus(1)
+				return m, nil
+			case "ctrl+shift+tab", "ctrl+left", "shift+f6":
+				m.cycleButtonFocus(-1)
+				return m, nil
+			case "enter", "space":
+				if m.buttonFocus && m.focusAction != "" {
+					return m, m.handleAction(m.focusAction)
+				}
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+		if m.page == pageBatchResults {
+			switch key {
+			case "pgdown", "ctrl+f":
+				m.scrollBatchContent(1)
+				return m, nil
+			case "pgup", "ctrl+b":
+				m.scrollBatchContent(-1)
+				return m, nil
+			case "down", "j":
+				if m.buttonFocus {
+					m.cycleButtonFocus(1)
+				} else {
+					m.scroll++
+					m.clampViewport()
+				}
+				return m, nil
+			case "up", "k":
+				if m.buttonFocus {
+					m.cycleButtonFocus(-1)
+				} else {
+					m.scroll = max(0, m.scroll-1)
+					m.clampViewport()
+				}
+				return m, nil
+			}
+		}
+		if m.page == pageDeleteConfirm {
+			switch key {
+			case "enter", "space":
+				if m.buttonFocus && m.focusAction != "" {
+					return m, m.handleAction(m.focusAction)
+				}
+				return m, m.handleAction("remove:confirm")
+			case "y", "Y":
+				return m, m.handleAction("remove:confirm")
+			case "esc", "n", "N":
+				return m, m.handleAction("remove:cancel")
+			case "q":
+				m.openQuitConfirmation()
+				return m, nil
+			case "ctrl+tab", "ctrl+right", "f6", "down", "j":
+				m.cycleButtonFocus(1)
+				return m, nil
+			case "ctrl+shift+tab", "ctrl+left", "shift+f6", "up", "k":
+				m.cycleButtonFocus(-1)
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+		if m.page == pageQuit {
+			switch key {
+			case "enter", "y", "Y":
+				return m, m.startExitAnimation()
+			case "esc", "n", "N", "q":
+				m.cancelQuitConfirmation()
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
 		if m.searchMode {
 			return m, m.handleSearchKey(key)
 		}
@@ -253,18 +511,35 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.handleAction("quote-action:new")
 			case "new_job":
 				return m, m.handleAction("job-action:new")
+			case "bulk_issues":
+				return m, m.handleAction("form:" + string(formBulkIssues))
+			case "bulk_quotes":
+				return m, m.handleAction("form:" + string(formBulkQuotes))
+			case "bulk_jobs":
+				return m, m.handleAction("form:" + string(formBulkJobs))
+			case "command_palette":
+				m.openCommandPalette()
+				return m, nil
 			case "mark_notifications_read":
 				return m, m.handleAction("notification-action:read-all")
 			case "upgrade":
 				return m, m.handleAction("upgrade:open")
 			case "quit":
-				return m, tea.Quit
+				m.openQuitConfirmation()
+				return m, nil
 			}
 		}
 		switch key {
-		case "ctrl+c", "q":
-			return m, tea.Quit
+		case "q":
+			m.openQuitConfirmation()
+			return m, nil
 		case "esc":
+			if m.page == pageRemove && m.removeKind != "" {
+				m.removeKind = ""
+				m.cursor, m.scroll = 0, 0
+				m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
+				return m, nil
+			}
 			if m.buttonFocus {
 				m.buttonFocus, m.focusAction, m.focusIndex = false, "", -1
 				return m, nil
@@ -415,6 +690,9 @@ func (m *model) handleSearchKey(key string) tea.Cmd {
 }
 
 func (m *model) handleFormKey(key string) tea.Cmd {
+	if isBulkForm(m.form) && key != "ctrl+enter" && key != "ctrl+s" {
+		m.batchConfirm = false
+	}
 	focusedField := func() *formField {
 		if m.formFocus < 0 || m.formFocus >= len(m.formFields) {
 			return nil
@@ -431,6 +709,7 @@ func (m *model) handleFormKey(key string) tea.Cmd {
 	switch key {
 	case "esc":
 		m.form, m.formFields, m.formError = "", nil, ""
+		m.batchRetrying, m.batchCarryResults = false, nil
 		m.page, m.repoContext = m.formReturnPage, m.formReturnRepo
 		return nil
 	case "tab":
@@ -463,6 +742,7 @@ func (m *model) handleFormKey(key string) tea.Cmd {
 		return nil
 	case "enter":
 		if field := focusedField(); field != nil && field.multiline {
+			m.batchConfirm = false
 			field.value = insertAtRune(field.value, m.formCaret, "\n")
 			m.formCaret++
 			return nil

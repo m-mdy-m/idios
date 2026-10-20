@@ -174,8 +174,8 @@ func (m *model) selectedNote() *domain.Note {
 
 func (m *model) renderQuotes(c *canvas, p palette) {
 	c.title("Quotes")
-	c.muted("Saved quotes. IDIOS shows one on the Overview and picks the next one at every start.")
-	c.buttonRow(buttonSpec{"+ Save a quote", "quote-action:new", true}, buttonSpec{"Back to Overview", "nav:overview", false})
+	c.muted("Curated quotations and your own saved lines. Each sourced quote includes its original work and reference link.")
+	c.buttonRow(buttonSpec{"+ Save a quote", "quote-action:new", true}, buttonSpec{"+ Save many", "form:" + string(formBulkQuotes), false}, buttonSpec{"Reminder settings", "settings-action:notifications-page", false}, buttonSpec{"Back to Overview", "nav:overview", false})
 	if len(m.quotes) == 0 {
 		c.panel("NO SAVED QUOTES", "Choose “+ Save a quote” to add one.")
 		return
@@ -185,7 +185,14 @@ func (m *model) renderQuotes(c *canvas, p palette) {
 			c.muted(fmt.Sprintf(copyText.text("And %d more…"), len(m.quotes)-i))
 			break
 		}
-		c.panel("“"+q.Text+"”", fallback(q.Author, "No source"), "Saved "+q.CreatedAt.Format("2006-01-02"))
+		c.panel("“"+q.Text+"”", fallback(q.Author, "No attribution"), fallback(q.Category, "Personal quote"), "Saved "+q.CreatedAt.Format("2006-01-02"))
+		if q.Source != "" {
+			c.muted("Source: " + q.Source)
+		}
+		if q.SourceURL != "" {
+			c.muted("Reference: " + q.SourceURL)
+		}
+		c.buttonRow(buttonSpec{"Remove quote…", "remove:select:quote|" + q.ID, false})
 		c.blank()
 	}
 }
@@ -193,7 +200,7 @@ func (m *model) renderQuotes(c *canvas, p palette) {
 func (m *model) renderJobs(c *canvas, p palette) {
 	c.title("Scheduled jobs")
 	c.muted("Create, reschedule, pause, run or delete reminders. Jobs are processed while IDIOS is open; all schedule dates/times use your local timezone.")
-	c.buttonRow(buttonSpec{"+ Add job", "job-action:new", true}, buttonSpec{"Notification settings", "settings-action:notifications-page", false}, buttonSpec{"View notifications", "nav:notifications", false})
+	c.buttonRow(buttonSpec{"+ Add job", "job-action:new", true}, buttonSpec{"+ Add many", "form:" + string(formBulkJobs), false}, buttonSpec{"Notification settings", "settings-action:notifications-page", false}, buttonSpec{"View notifications", "nav:notifications", false})
 	if len(m.jobs) == 0 {
 		c.panel("NO SCHEDULED JOBS", copyText.JobsEmpty, "Examples: every 1h, once at a date/time, daily at 09:00 or every Monday at 10:30.")
 		return
@@ -292,6 +299,7 @@ func (m *model) renderNotifications(c *canvas, p palette) {
 		c.title(marker + " " + n.Title)
 		c.muted(n.CreatedAt.Local().Format("2006-01-02 15:04") + " · " + n.Level)
 		c.lineText(n.Body)
+		c.buttonRow(buttonSpec{"Remove notification…", "remove:select:notification|" + n.ID, false})
 		c.blank()
 	}
 }
