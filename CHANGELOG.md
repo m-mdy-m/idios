@@ -48,7 +48,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Full project compilation and test-suite verification must be completed with the Go version required by the project.
 
 ## [1.0.4]
-
 ### Fixed
 - show view upgrade
 ## [1.0.3] — 2026-10-20
