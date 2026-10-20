@@ -8,6 +8,7 @@ import (
 	"idios/internal/domain"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -134,6 +135,8 @@ func (m *model) handleAction(action string) tea.Cmd {
 		switch value {
 		case "accept":
 			m.beginForm(formAcceptPR)
+		case "edit":
+			m.beginForm(formEditPR)
 		case "close":
 			return m.runOperation("Pull request closed.", func() error { _, err := m.app.ClosePullRequest(m.ctx, m.selectedPRRef); return err })
 		case "issue":
@@ -264,14 +267,34 @@ func (m *model) handleAction(action string) tea.Cmd {
 				}
 			}
 		}
+	case "note-filter":
+		m.activeNoteLabel = ""
+		if value != "all" {
+			m.activeNoteLabel = value
+		}
+		m.selectedNoteID = ""
+		m.cursor, m.scroll = 0, 0
 	case "quote-action":
 		if value == "new" {
 			m.beginForm(formQuote)
 		}
 	case "job":
 		return m.runOperation("Scheduled job toggled.", func() error { _, err := m.app.ToggleScheduledJob(m.ctx, value); return err })
+	case "job-edit":
+		m.selectedJobID = value
+		m.beginForm(formJob)
+	case "job-toggle":
+		return m.runOperation("Scheduled job state updated.", func() error { _, err := m.app.ToggleScheduledJob(m.ctx, value); return err })
+	case "job-run":
+		id := value
+		ctx, app, notificationsEnabled := m.ctx, m.app, m.config.Notifications.Enabled
+		return m.runOperation("Scheduled job ran now.", func() error { return app.RunScheduledJobNow(ctx, id, time.Now(), notificationsEnabled) })
+	case "job-delete":
+		id := value
+		return m.runOperation("Scheduled job deleted.", func() error { return m.app.DeleteScheduledJob(m.ctx, id) })
 	case "job-action":
 		if value == "new" {
+			m.selectedJobID = ""
 			m.beginForm(formJob)
 		}
 	case "notification-action":
@@ -298,6 +321,21 @@ func (m *model) handleAction(action string) tea.Cmd {
 		}
 	case "graph":
 		switch {
+		case value == "structure":
+			m.graphStructure = !m.graphStructure
+			m.cursor, m.scroll = 0, 0
+		case value == "depth":
+			// 1 → 2 → 3 → 1: how many links away from the focused node are still drawn.
+			m.graphDepth = m.graphDepth%3 + 1
+			m.cursor, m.scroll = 0, 0
+			if m.graphFrom != "" {
+				g, err := m.app.Graph(m.ctx, m.graphFrom, m.graphDepth)
+				if err != nil {
+					m.status, m.statusError = err.Error(), true
+				} else {
+					m.graph = g
+				}
+			}
 		case value == "all":
 			m.graphFrom = ""
 			m.page = pageGraph
@@ -327,6 +365,9 @@ func (m *model) handleAction(action string) tea.Cmd {
 				m.graph = g
 			}
 		}
+	case "pr-edit":
+		m.selectedPRRef = value
+		m.beginForm(formEditPR)
 	case "pr-accept":
 		m.selectedPRRef = value
 		m.beginForm(formAcceptPR)
@@ -406,6 +447,9 @@ func (m *model) beginForm(kind formKind) {
 			m.formTitle = "Create Issue · " + fallback(definition.Name, m.activeIssueTemplate)
 		}
 	}
+	if kind == formJob && m.selectedJobID != "" {
+		m.formTitle = "Edit scheduled job"
+	}
 	m.formCaret = 0
 	if len(m.formFields) > 0 {
 		m.formCaret = len([]rune(m.formFields[0].value))
@@ -421,8 +465,8 @@ func (m *model) fieldsFor(kind formKind) []formField {
 	}
 	if kind == formRepository {
 		return []formField{
-			{label: "Repository name", placeholder: "CPU", helper: "A unique workspace repository; the main branch is created automatically."},
-			{label: "README / repository overview", value: m.config.RepositoryTemplate.Description, placeholder: "Purpose, scope, getting started and architecture", helper: "A structured overview shown on the Repository page. Edit REPOSITORY_TEMPLATE in config.json to change the starter content.", multiline: true},
+			{label: "Repository name", placeholder: "CPU", helper: "Must be unique. Used in references such as CPU#4. A main branch is created for you."},
+			{label: "README / repository overview", value: m.config.RepositoryTemplate.Description, placeholder: "Purpose, scope, how to get started", helper: "Shown on the repository page. To change the starting text, edit REPOSITORY_TEMPLATE in config.json.", multiline: true},
 		}
 	}
 	if kind == formIssue {
@@ -433,12 +477,12 @@ func (m *model) fieldsFor(kind formKind) []formField {
 		}
 		m.activeIssueTemplate = key
 		return []formField{
-			{label: "Issue template", value: key, placeholder: "task / bug / feature / research", helper: "Type a configured template key, then press Enter to apply it. Available: " + strings.Join(issueTemplateKeys(m.config), ", ")},
-			{label: "Repository", value: issueRepoDefault, placeholder: "CPU", helper: "The Repository that owns this Issue."},
-			{label: "Issue title", value: definition.TitlePrefix, placeholder: "One clear, actionable outcome", helper: "Keep the title specific. A template prefix is added automatically when configured."},
-			{label: "Description / issue brief", value: definition.Body, placeholder: "Describe the context and acceptance criteria", helper: "This is a multiline template. Enter adds a line; Tab changes fields; Ctrl+Enter creates the Issue.", multiline: true},
-			{label: "Priority", value: "normal", placeholder: "low / normal / high", helper: "Use low, normal, or high."},
-			{label: "Parent Issue", placeholder: "CPU#3 (optional)", helper: "Creates a Sub-issue. Cross-repository prerequisites use depends_on instead."},
+			{label: "Issue template", value: key, placeholder: "task / bug / feature / research", helper: "Type a template name and press Enter to load it. Available: " + strings.Join(issueTemplateKeys(m.config), ", ")},
+			{label: "Repository", value: issueRepoDefault, placeholder: "CPU", helper: "The repository this issue belongs to."},
+			{label: "Issue title", value: definition.TitlePrefix, placeholder: "What should be true when this is done?", helper: "Be specific. The template may add a prefix such as [Bug]:."},
+			{label: "Description / issue brief", value: definition.Body, placeholder: "Context and how to tell it is done", helper: "Enter adds a line. Tab moves to the next field. Ctrl+Enter creates the issue.", multiline: true},
+			{label: "Priority", value: "normal", placeholder: "low / normal / high", helper: "low, normal or high."},
+			{label: "Parent Issue", placeholder: "CPU#3 (optional)", helper: "Makes this a sub-issue of that issue (same repository only). For work in other repositories use a prerequisite."},
 		}
 	}
 	if kind == formPullRequest {
@@ -447,68 +491,87 @@ func (m *model) fieldsFor(kind formKind) []formField {
 			title = strings.TrimSpace(m.config.PullRequestTemplate.TitlePrefix + selected.Title)
 		}
 		return []formField{
-			{label: "Related Issue", value: issueRef, placeholder: "CPU#3", helper: "The Issue must be in progress and have no unfinished blockers."},
-			{label: "Pull request title", value: title, placeholder: "Describe the reviewed change", helper: "Keep this aligned with the related Issue and the actual outcome."},
-			{label: "Pull request description", value: m.config.PullRequestTemplate.Body, placeholder: "Summary, verification, risks and reviewer notes", helper: "Explain what changed, how it was verified, and any remaining risk. Enter adds a line; Tab changes fields; Ctrl+Enter creates the PR.", multiline: true},
+			{label: "Related Issue", value: issueRef, placeholder: "CPU#3", helper: "The issue must be in progress and have no unfinished prerequisites."},
+			{label: "Pull request title", value: title, placeholder: "What was done", helper: "Should match the issue and what you actually did."},
+			{label: "Pull request description", value: m.config.PullRequestTemplate.Body, placeholder: "What changed, how you checked it, what is left", helper: "Explain what changed, how you verified it, and any remaining risk. Enter adds a line; Tab changes fields; Ctrl+Enter creates the PR.", multiline: true},
+		}
+	}
+	if kind == formEditPR {
+		title, description := "", ""
+		if pr := m.findPR(prRefValue); pr != nil {
+			title, description = pr.Title, pr.Description
+		}
+		return []formField{
+			{label: "Pull request", value: prRefValue, placeholder: "CPU!2", helper: "Only open pull requests can be edited."},
+			{label: "Pull request title", value: title, placeholder: "What was done", helper: "Change it if the scope of the work changed."},
+			{label: "Pull request description", value: description, placeholder: "What you have done so far", helper: "Update this as you make progress. Enter adds a line; Tab changes fields; Ctrl+Enter saves.", multiline: true},
 		}
 	}
 	fields := map[formKind][]formField{
 		formProject: {
-			{label: "Project name", placeholder: "OS research", helper: "Projects can group Issues from multiple repositories."},
-			{label: "Description", placeholder: "Outcome or goal", helper: "Optional."},
+			{label: "Project name", placeholder: "OS research", helper: "A project can contain issues from several repositories."},
+			{label: "Description", placeholder: "The goal of this project", helper: "Optional."},
 		},
 		formConcept: {
-			{label: "Concept name", placeholder: "Virtual memory", helper: "Concepts can connect knowledge across repositories."},
-			{label: "Description", placeholder: "Definition or notes", helper: "Optional."},
+			{label: "Concept name", placeholder: "Virtual memory", helper: "A topic you can link from issues in any repository."},
+			{label: "Description", placeholder: "Short definition or notes", helper: "Optional."},
 		},
 		formAcceptPR: {
-			{label: "Pull request", value: prRefValue, placeholder: "CPU!2", helper: "Accepting records completion on main and marks its Issue done."},
-			{label: "Completion summary", placeholder: "Outcome and useful notes", helper: "Optional; the PR remains the full explanation."},
+			{label: "Pull request", value: prRefValue, placeholder: "CPU!2", helper: "Accepting marks its issue done."},
+			{label: "Completion summary", placeholder: "One-line result", helper: "Optional. The pull request keeps the full description."},
 		},
 		formDependency: {
-			{label: "Issue that is blocked", value: issueRef, placeholder: "ARLIZ#3", helper: "This Issue cannot start before the prerequisite is complete."},
-			{label: "Prerequisite Issue", placeholder: "CPU#4", helper: "May belong to another repository."},
+			{label: "Issue that is blocked", value: issueRef, placeholder: "ARLIZ#3", helper: "This issue cannot start until the prerequisite is done."},
+			{label: "Prerequisite Issue", placeholder: "CPU#4", helper: "The issue that must finish first. It can be in another repository."},
 		},
 		formConceptLink: {
-			{label: "Issue reference", value: issueRef, placeholder: "ARLIZ#3", helper: "Semantic links do not block work."},
-			{label: "Concept", placeholder: "Electricity or a Concept ID", helper: "Connect the Issue to existing knowledge."},
+			{label: "Issue reference", value: issueRef, placeholder: "ARLIZ#3", helper: "A concept link never blocks work."},
+			{label: "Concept", placeholder: "Electricity or a Concept ID", helper: "Name of an existing concept."},
 		},
 		formProjectIssue: {
-			{label: "Project", value: m.selectedProject, placeholder: "OS research", helper: "The selected Project receives the Issue."},
-			{label: "Issue reference", placeholder: "CPU#4", helper: "Issues from other repositories are supported."},
+			{label: "Project", value: m.selectedProject, placeholder: "OS research", helper: "The issue is added to this project."},
+			{label: "Issue reference", placeholder: "CPU#4", helper: "Any repository works."},
 		},
 		formRepoSetting: {
-			{label: "Setting key", placeholder: "description", helper: "Saved in this repository's local settings."},
-			{label: "Value", placeholder: "New value", helper: "Use repository Settings for custom local metadata."},
+			{label: "Setting key", placeholder: "description", helper: "Stored with this repository."},
+			{label: "Value", placeholder: "New value", helper: "Any text."},
 		},
 		formLabel: {
-			{label: "Label name", placeholder: "research", helper: "A reusable filter label."},
-			{label: "Scope", value: "repository", placeholder: "global or repository", helper: "Use global for workspace-wide labels, repository for this repository."},
+			{label: "Label name", placeholder: "research", helper: "Short tag you can put on many issues."},
+			{label: "Scope", value: "repository", placeholder: "global or repository", helper: "global = usable everywhere, repository = only in this repository."},
 			{label: "Description", placeholder: "When to use this label", helper: "Optional."},
-			{label: "Color", placeholder: "optional color token", helper: "Optional label color; it does not change the application theme."},
+			{label: "Color", placeholder: "optional color token", helper: "Optional. Only changes this label."},
 		},
 		formMilestone: {
-			{label: "Title", placeholder: "Chapter 3 draft", helper: "A named checkpoint for this repository."},
-			{label: "Description", placeholder: "What does completion mean?", helper: "Optional."},
+			{label: "Title", placeholder: "v1 release", helper: "A target for this repository."},
+			{label: "Description", placeholder: "What has to be true to call it done?", helper: "Optional."},
 			{label: "Due date", placeholder: "YYYY-MM-DD", helper: "Optional."},
 		},
 		formAssignLabel: {
-			{label: "Issue reference", value: issueRef, placeholder: "CPU#4", helper: "The label is attached to this Issue."},
-			{label: "Label name or ID", placeholder: "research", helper: "Global labels and this Repository's labels are accepted."},
+			{label: "Issue reference", value: issueRef, placeholder: "CPU#4", helper: "The label is added to this issue."},
+			{label: "Label name or ID", placeholder: "research", helper: "Global labels and labels of this repository."},
 		},
 		formAssignMilestone: {
-			{label: "Issue reference", value: issueRef, placeholder: "CPU#4", helper: "The Issue must belong to a compatible scope."},
-			{label: "Milestone title or ID", placeholder: "Chapter 3 draft", helper: "Choose a Repository milestone or its stable ID."},
+			{label: "Issue reference", value: issueRef, placeholder: "CPU#4", helper: "The issue must be in the milestone's repository."},
+			{label: "Milestone title or ID", placeholder: "v1 release", helper: "Milestone title or ID."},
 		},
 		formNote: func() []formField {
 			if m.selectedNoteID != "" {
 				for _, n := range m.notes {
 					if n.ID == m.selectedNoteID {
-						return []formField{{label: "Title", value: n.Title, placeholder: "A thought worth keeping"}, {label: "Note", value: n.Content, placeholder: "Write freely; connect it later.", helper: "Enter adds a line; Ctrl+Enter saves.", multiline: true}}
+						return []formField{
+							{label: "Title", value: n.Title, placeholder: "A thought worth keeping"},
+							{label: "Note", value: n.Content, placeholder: "Write the note", helper: "Enter adds a line; Ctrl+Enter saves.", multiline: true},
+							{label: "Labels", value: noteLabelNames(n.Labels), placeholder: "research, idea, read-later", helper: "Comma-separated tags. Reusing a name groups notes under the same label."},
+						}
 					}
 				}
 			}
-			return []formField{{label: "Title", placeholder: "A thought worth keeping", helper: "A short name makes notes searchable."}, {label: "Note", placeholder: "Write freely; connect it later.", helper: "Keep raw thoughts here, then link them to work or the graph. Enter adds a line; Ctrl+Enter saves.", multiline: true}}
+			return []formField{
+				{label: "Title", placeholder: "Short title", helper: "Used when searching and in lists."},
+				{label: "Note", placeholder: "Write the note", helper: "Keep raw thoughts here, then link them to work or the graph. Enter adds a line; Ctrl+Enter saves.", multiline: true},
+				{label: "Labels", placeholder: "research, idea, read-later", helper: "Add several comma-separated labels; existing labels are reused automatically."},
+			}
 		}(),
 		formNoteLink: {
 			{label: "Note ID", value: m.selectedNoteID, placeholder: "Select a note first", helper: "Choose an existing note from the Notes page."},
@@ -517,20 +580,38 @@ func (m *model) fieldsFor(kind formKind) []formField {
 			{label: "Show in graph?", value: "yes", placeholder: "yes / no", helper: "Set yes to make the note a node connected to the selected entity."},
 		},
 		formQuote: {
-			{label: "Quote", placeholder: "A line worth seeing again", helper: "Quotes rotate on each application launch."},
+			{label: "Quote", placeholder: "The quote", helper: "One saved quote is shown at each start."},
 			{label: "Author / source", placeholder: "Optional attribution", helper: "Leave blank for your own words."},
 		},
-		formJob: {
-			{label: "Reminder name", placeholder: "Weekly workspace review", helper: "A clear title for the notification."},
-			{label: "Schedule", value: "daily", placeholder: "hourly / daily / weekly / monthly", helper: "Supported intervals: hourly, daily, weekly or monthly."},
-			{label: "Reminder kind", value: "weekly-review", placeholder: "daily-plan / weekly-review / blocked-issues / open-issues / custom-reminder", helper: "Select the checklist IDIOS should remind you about."},
-			{label: "Extra note", placeholder: "Optional text shown with the reminder", helper: "Useful for custom-reminder."},
-		},
+		formJob: func() []formField {
+			if m.selectedJobID != "" {
+				for _, job := range m.jobs {
+					if job.ID == m.selectedJobID {
+						return []formField{
+							{label: "Job name", value: job.Name, placeholder: "Weekly review"},
+							{label: "Schedule type", value: job.ScheduleType, placeholder: "interval / once / daily / weekly / monthly", helper: "interval repeats; once runs a single time; calendar schedules use local time."},
+							{label: "Schedule details", value: jobScheduleInput(job), placeholder: "1h | 2026-10-25 14:30 | 09:00 | Mon 09:00 | 15 09:00", helper: "interval: 1h/30m/2d; once: YYYY-MM-DD HH:MM; daily: HH:MM; weekly: Mon HH:MM; monthly: DD HH:MM."},
+							{label: "Reminder kind", value: job.ActionType, placeholder: "daily-plan / weekly-review / blocked-issues / open-issues / custom-reminder"},
+							{label: "Extra note", value: job.Description, placeholder: "Optional text", helper: "Shown with the reminder; mainly for custom-reminder."},
+							{label: "Send notification?", value: yesNo(job.Notify), placeholder: "yes / no", helper: "The global notification switch must also be on."},
+						}
+					}
+				}
+			}
+			return []formField{
+				{label: "Job name", placeholder: "Weekly review", helper: "Title of the notification."},
+				{label: "Schedule type", value: "interval", placeholder: "interval / once / daily / weekly / monthly", helper: "interval repeats; once runs a single time; calendar schedules use local time."},
+				{label: "Schedule details", value: "1h", placeholder: "1h | 2026-10-25 14:30 | 09:00 | Mon 09:00 | 15 09:00", helper: "interval: 1h/30m/2d; once: YYYY-MM-DD HH:MM; daily: HH:MM; weekly: Mon HH:MM; monthly: DD HH:MM."},
+				{label: "Reminder kind", value: "custom-reminder", placeholder: "daily-plan / weekly-review / blocked-issues / open-issues / custom-reminder", helper: "What the notification should contain."},
+				{label: "Extra note", placeholder: "Optional text", helper: "Shown with the reminder; mainly for custom-reminder."},
+				{label: "Send notification?", value: "yes", placeholder: "yes / no", helper: "The global notification switch must also be on."},
+			}
+		}(),
 		formProfile: {
 			{label: "Username", value: m.profile.Username, placeholder: "workspace-owner", helper: "Shown in your Overview profile block."},
 			{label: "Display name", value: m.profile.FullName, placeholder: "Workspace owner", helper: "Shown as the heading on Overview."},
-			{label: "Bio", value: m.profile.Bio, placeholder: "What is this workspace for?", helper: "One or two lines are ideal."},
-			{label: "README / overview", value: m.profile.Readme, placeholder: "Markdown-like plain text for your workspace.", helper: "A short overview shown on your profile page."},
+			{label: "Bio", value: m.profile.Bio, placeholder: "A line about you or this workspace", helper: "One or two lines."},
+			{label: "README / overview", value: m.profile.Readme, placeholder: "Plain text; shown on the Overview", helper: "Goals, current focus, links."},
 		},
 	}
 	return append([]formField(nil), fields[kind]...)
@@ -597,9 +678,20 @@ func (m *model) submitForm() tea.Cmd {
 		}
 		return fields[i]
 	}
-	app, ctx, repoContext, selectedProject, selectedPR, selectedNoteID := m.app, m.ctx, m.repoContext, m.selectedProject, m.selectedPRRef, m.selectedNoteID
+	app, ctx, repoContext, selectedProject, selectedPR, selectedNoteID, selectedJobID := m.app, m.ctx, m.repoContext, m.selectedProject, m.selectedPRRef, m.selectedNoteID, m.selectedJobID
 	appConfig := m.config
 	activeIssueTemplate := m.activeIssueTemplate
+	selectedJobEnabled := true
+	var selectedJobLastRunAt *time.Time
+	if selectedJobID != "" {
+		for _, current := range m.jobs {
+			if current.ID == selectedJobID {
+				selectedJobEnabled = current.Enabled || current.CompletedAt != nil
+				selectedJobLastRunAt = current.LastRunAt
+				break
+			}
+		}
+	}
 	return func() tea.Msg {
 		result := operationMsg{}
 		switch kind {
@@ -672,6 +764,20 @@ func (m *model) submitForm() tea.Cmd {
 			result.err = err
 			if err == nil {
 				result.message, result.openPR = fmt.Sprintf(copyText.text("Created %s!%d."), p.RepositoryName, p.Number), fmt.Sprintf("%s!%d", p.RepositoryName, p.Number)
+			}
+		case formEditPR:
+			ref := get(0)
+			if ref == "" {
+				ref = selectedPR
+			}
+			if ref == "" {
+				result.err = fmt.Errorf("pull request reference is required")
+				break
+			}
+			p, err := app.UpdatePullRequest(ctx, ref, get(1), get(2))
+			result.err = err
+			if err == nil {
+				result.message, result.openPR = "Pull request updated.", fmt.Sprintf("%s!%d", p.RepositoryName, p.Number)
 			}
 		case formAcceptPR:
 			ref := get(0)
@@ -782,10 +888,11 @@ func (m *model) submitForm() tea.Cmd {
 				result.err = fmt.Errorf("note title is required")
 				break
 			}
+			labels := splitNoteLabels(get(2))
 			if selectedNoteID != "" {
-				n, err = app.UpdateNote(ctx, selectedNoteID, get(0), get(1))
+				n, err = app.UpdateNoteWithLabels(ctx, selectedNoteID, get(0), get(1), labels)
 			} else {
-				n, err = app.CreateNote(ctx, get(0), get(1))
+				n, err = app.CreateNoteWithLabels(ctx, get(0), get(1), labels)
 			}
 			result.err = err
 			if err == nil {
@@ -813,26 +920,38 @@ func (m *model) submitForm() tea.Cmd {
 			}
 		case formJob:
 			if get(0) == "" {
-				result.err = fmt.Errorf("reminder name is required")
+				result.err = fmt.Errorf("job name is required")
 				break
 			}
-			intervals := map[string]int{"hourly": 60, "daily": 1440, "weekly": 10080, "monthly": 43200}
-			schedule := strings.ToLower(get(1))
-			interval, ok := intervals[schedule]
-			if !ok {
-				result.err = fmt.Errorf("schedule must be hourly, daily, weekly or monthly")
+			job, err := parseScheduledJobFields(get(1), get(2))
+			if err != nil {
+				result.err = err
 				break
 			}
-			action := strings.ToLower(get(2))
+			job.ID = selectedJobID
+			job.Name = get(0)
+			job.ActionType = strings.ToLower(get(3))
+			job.Description = get(4)
+			job.Enabled = selectedJobEnabled
+			job.LastRunAt = selectedJobLastRunAt
+			job.Notify = !strings.EqualFold(get(5), "no") && !strings.EqualFold(get(5), "false") && get(5) != "0"
 			allowed := map[string]bool{"daily-plan": true, "weekly-review": true, "blocked-issues": true, "open-issues": true, "custom-reminder": true}
-			if !allowed[action] {
-				result.err = fmt.Errorf("unsupported reminder kind %q", action)
+			if !allowed[job.ActionType] {
+				result.err = fmt.Errorf("unsupported reminder kind %q", job.ActionType)
 				break
 			}
-			_, err := app.CreateScheduledJob(ctx, domain.ScheduledJob{Name: get(0), Description: get(3), ActionType: action, IntervalMinutes: interval, Enabled: true, Notify: true})
+			var saved domain.ScheduledJob
+			if selectedJobID != "" {
+				saved, err = app.UpdateScheduledJob(ctx, job)
+			} else {
+				saved, err = app.CreateScheduledJob(ctx, job)
+			}
 			result.err = err
 			if err == nil {
-				result.message, result.openPage = "Scheduled reminder created.", pageJobs
+				result.message, result.openPage, result.openJob = "Scheduled job saved.", pageJobs, saved.ID
+				if selectedJobID == "" {
+					result.message = "Scheduled job created."
+				}
 			}
 		case formProfile:
 			p, err := app.UpdateWorkspaceProfile(ctx, domain.WorkspaceProfile{Username: get(0), FullName: get(1), Bio: get(2), Readme: get(3)})

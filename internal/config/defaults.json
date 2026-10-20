@@ -11,52 +11,106 @@
   },
   "themes": {
     "midnight": {
-      "background": "#0d1117",
-      "foreground": "#e6edf3",
-      "muted": "#8b949e",
-      "accent": "#bc8cff",
-      "accent_background": "#8957e5",
-      "surface": "#161b22",
-      "surface_alt": "#21262d",
-      "border": "#3d2f50",
-      "success": "#7ee787",
-      "success_background": "#173b2a",
-      "warning": "#e3b341",
-      "warning_background": "#3d3e00",
-      "danger": "#ff7b72",
-      "danger_background": "#3d1f24"
+      "background": "#0b0f17",
+      "foreground": "#e6ebf5",
+      "muted": "#8e9bb3",
+      "accent": "#4cc9f0",
+      "accent_background": "#0a6c94",
+      "on_accent": "#ffffff",
+      "surface": "#121826",
+      "surface_alt": "#1c2538",
+      "border": "#2c3a57",
+      "success": "#4ade80",
+      "success_background": "#0f3a22",
+      "warning": "#fbbf24",
+      "warning_background": "#3d2e05",
+      "danger": "#fb7185",
+      "danger_background": "#46121d"
     },
-    "paper": {
-      "background": "#fbf8f1",
-      "foreground": "#28251f",
-      "muted": "#756e61",
-      "accent": "#7655b8",
-      "accent_background": "#7655b8",
-      "surface": "#f0eadf",
-      "surface_alt": "#e6ddcf",
-      "border": "#c9bdab",
-      "success": "#28734f",
-      "success_background": "#d5eadf",
-      "warning": "#8a6412",
-      "warning_background": "#f2e5bd",
-      "danger": "#a33b35",
-      "danger_background": "#f3d8d4"
+    "ocean": {
+      "background": "#061418",
+      "foreground": "#e3f4f4",
+      "muted": "#82a9ad",
+      "accent": "#2dd4bf",
+      "accent_background": "#0f766e",
+      "on_accent": "#ffffff",
+      "surface": "#0c2227",
+      "surface_alt": "#13363d",
+      "border": "#1f5058",
+      "success": "#86efac",
+      "success_background": "#0d3b27",
+      "warning": "#fde047",
+      "warning_background": "#423a05",
+      "danger": "#fb923c",
+      "danger_background": "#4a2208"
+    },
+    "ember": {
+      "background": "#130e0b",
+      "foreground": "#f3ebe4",
+      "muted": "#a8968a",
+      "accent": "#ff9f43",
+      "accent_background": "#b45309",
+      "on_accent": "#ffffff",
+      "surface": "#1d1511",
+      "surface_alt": "#2c201a",
+      "border": "#4a352a",
+      "success": "#a3e635",
+      "success_background": "#26360a",
+      "warning": "#fcd34d",
+      "warning_background": "#473708",
+      "danger": "#ff6b6b",
+      "danger_background": "#4d1818"
     },
     "forest": {
-      "background": "#0c1713",
-      "foreground": "#e0f0e8",
-      "muted": "#89a69a",
-      "accent": "#70d6aa",
-      "accent_background": "#1c7153",
-      "surface": "#13231c",
-      "surface_alt": "#1c3328",
-      "border": "#315545",
-      "success": "#82e0ab",
-      "success_background": "#183d2e",
+      "background": "#0b1512",
+      "foreground": "#e2efe9",
+      "muted": "#86a096",
+      "accent": "#5fd3a5",
+      "accent_background": "#1b6b4f",
+      "on_accent": "#ffffff",
+      "surface": "#12211b",
+      "surface_alt": "#1b3027",
+      "border": "#2b4a3c",
+      "success": "#86e0a6",
+      "success_background": "#17402c",
       "warning": "#e5c574",
-      "warning_background": "#463a1b",
-      "danger": "#ff9288",
-      "danger_background": "#492521"
+      "warning_background": "#43381a",
+      "danger": "#ff958b",
+      "danger_background": "#4a2420"
+    },
+    "paper": {
+      "background": "#fafaf7",
+      "foreground": "#1f2328",
+      "muted": "#5f6670",
+      "accent": "#0b62c4",
+      "accent_background": "#0b62c4",
+      "on_accent": "#ffffff",
+      "surface": "#f0f0ea",
+      "surface_alt": "#e2e2da",
+      "border": "#c4c4b8",
+      "success": "#1a7f37",
+      "success_background": "#d6efdc",
+      "warning": "#8a5a00",
+      "warning_background": "#f6e6b8",
+      "danger": "#b3261e",
+      "danger_background": "#f7d9d6"
+    },
+    "contrast": {
+      "background": "#000000",
+      "foreground": "#ffffff",
+      "muted": "#c0c0c0",
+      "accent": "#ffd60a",
+      "accent_background": "#ffd60a",
+      "on_accent": "#000000",
+      "surface": "#0a0a0a",
+      "surface_alt": "#262626",
+      "border": "#8a8a8a",
+      "success": "#3dff7f",
+      "success_background": "#003d1a",
+      "warning": "#ffc400",
+      "warning_background": "#4a3700",
+      "danger": "#ff6b6b",
+      "danger_background": "#5a0000"
     }
   },
   "notifications": {
@@ -104,27 +158,27 @@
       "task": {
         "name": "Task",
         "title_prefix": "",
-        "body": "## Goal\n\nDescribe the concrete outcome this Issue should produce. Keep the scope small enough to complete and review.\n\n## Context\n\nWhy is this work needed? Add relevant background, constraints, links, or related Concepts.\n\n## Plan\n\n- [ ] First step\n- [ ] Second step\n- [ ] Verify the result\n\n## Acceptance criteria\n\n- [ ] The expected behavior or deliverable is clear and verifiable.\n- [ ] Relevant tests, examples, or documentation are updated.\n- [ ] Related Issues and dependencies are linked.\n\n## Dependencies and notes\n\nList required prerequisites, risks, or open questions. Use the blocking-dependency action for work that must finish first.\n"
+        "body": "## Goal\n\nOne sentence: what exists or works when this is done?\n\n## Context\n\nWhy now? Background, constraints, links, related Concepts.\n\n## Plan\n\n- [ ] First step\n- [ ] Second step\n- [ ] Check the result\n\n## Done when\n\n- [ ] A checkable outcome (something you can see, run or read)\n- [ ] Tests or docs are updated if behavior changed\n\n## Depends on / risks\n\nBlocked by: (also add it with the blocking-dependency action, e.g. CPU#4)\nOpen questions:\n"
       },
       "bug": {
         "name": "Bug report",
         "title_prefix": "[Bug]: ",
-        "body": "## Summary\n\nDescribe the unexpected behavior and its impact.\n\n## Expected behavior\n\nWhat should happen instead?\n\n## Actual behavior\n\nWhat happens now? Include an error message or relevant log excerpt when available.\n\n## Steps to reproduce\n\n1. Start from this state:\n2. Perform this action:\n3. Observe this result:\n\n## Environment\n\n- IDIOS version / commit:\n- Operating system and terminal:\n- Relevant configuration:\n\n## Acceptance criteria\n\n- [ ] The cause is understood and the fix addresses it.\n- [ ] A regression test covers the failure.\n- [ ] User-facing documentation is updated when behavior changes.\n"
+        "body": "## Summary\n\nOne sentence: what is wrong, and who or what does it affect?\n\n## Expected behavior\n\nWhat should happen?\n\n## Actual behavior\n\nWhat happens instead? Paste the exact error or log line.\n\n## Steps to reproduce\n\n1. Start from this state:\n2. Do this:\n3. See this:\n\nHappens: always / sometimes / once\n\n## Environment\n\n- IDIOS version or commit:\n- OS and terminal:\n- Relevant config:\n\n## Done when\n\n- [ ] The cause is found and fixed\n- [ ] A test fails without the fix and passes with it\n- [ ] Docs are updated if behavior changed\n"
       },
       "feature": {
         "name": "Feature request",
         "title_prefix": "[Feature]: ",
-        "body": "## Problem to solve\n\nWhat limitation or user need does this address? Describe the workflow that is difficult today.\n\n## Proposed solution\n\nDescribe the desired behavior from a user's perspective. Include an example interaction if useful.\n\n## Expected impact\n\nWho benefits, and how will the improvement be recognized?\n\n## Acceptance criteria\n\n- [ ] The main user flow is described and testable.\n- [ ] Keyboard-only operation is considered where applicable.\n- [ ] Configuration and accessibility implications are considered.\n- [ ] Documentation and tests are included in the implementation plan.\n\n## Alternatives and trade-offs\n\nList other approaches considered and any known risks or open questions.\n"
+        "body": "## Problem\n\nWhat is hard or impossible today? Describe the workflow, not the solution.\n\n## Proposed behavior\n\nWhat should the user be able to do? Include an example interaction or output.\n\n## Who benefits\n\nWho needs this, and how often?\n\n## Done when\n\n- [ ] The main flow works with keyboard only\n- [ ] Empty, error and narrow-terminal states are handled\n- [ ] Tests and docs are included\n\n## Alternatives and trade-offs\n\nWhat else did you consider? What does this cost or risk?\n"
       },
       "research": {
         "name": "Research / investigation",
         "title_prefix": "[Research]: ",
-        "body": "## Question or hypothesis\n\nState the question to answer or the hypothesis to test.\n\n## Why it matters\n\nWhich decision or project depends on this research? Link related Issues or Concepts.\n\n## Investigation plan\n\n- [ ] Identify trustworthy sources or measurements.\n- [ ] Compare plausible approaches.\n- [ ] Record evidence and uncertainties.\n\n## Expected deliverable\n\nExamples: a decision record, benchmark, prototype, written explanation, or recommendation.\n\n## Findings\n\nFill this section with the evidence and conclusion when the investigation is complete.\n\n## Follow-up\n\nList the next action or Issues that should be created from the findings.\n"
+        "body": "## Question\n\nThe one question to answer, or the hypothesis to test.\n\n## Why it matters\n\nWhich decision, Issue or Project is waiting on the answer?\n\n## Approach\n\n- [ ] Where will evidence come from (sources, measurements, a prototype)?\n- [ ] Which options will be compared?\n- [ ] What would change your mind?\n\n## Deliverable\n\nA decision record, benchmark, prototype, write-up or recommendation.\n\n## Findings\n\nFill in when finished: evidence first, then the conclusion and how sure you are.\n\n## Next actions\n\nIssues to create from the findings:\n"
       }
     }
   },
   "PULL_REQUEST_TEMPLATE": {
     "title_prefix": "",
-    "body": "## Summary\n\nExplain what changed and why. Keep the summary focused on the outcome, not just a list of files.\n\n## Related Issue\n\nLink the Issue this Pull Request resolves (for example, `IDIOS#12`). Describe any partial or follow-up work.\n\n## Implementation details\n\n- Main changes:\n- Important design decisions:\n- Alternatives or trade-offs:\n\n## Verification\n\n- [ ] Relevant tests were added or updated.\n- [ ] Tests and checks were run; results are recorded below.\n- [ ] Error paths and boundary cases were considered.\n- [ ] User documentation and examples were updated when needed.\n\nCommands / results:\n\n```text\n# Add the checks you ran and their results.\n```\n\n## Risks and follow-up\n\nDescribe migration, compatibility, performance, or UX risks. List follow-up work that is intentionally out of scope.\n\n## Reviewer guide\n\nPoint reviewers to the most important files, behavior, or decisions to inspect.\n"
+    "body": "## Summary\n\nWhat changed and why, in 1-3 sentences. Lead with the outcome, not a file list.\n\nResolves: (Issue reference, e.g. IDIOS#12)\nScope: complete / partial (say what is left)\n\n## Changes\n\n- \n\n## Verification\n\n- [ ] Tests added or updated\n- [ ] Checks run (paste the real output below)\n- [ ] Main flow tried by hand\n\n```text\n$ command\nresult\n```\n\n## Risk\n\nImpact: low / medium / high\nWhat could break:\nHow to undo it:\n\n## Review focus\n\nStart with:\nSafe to skim:\nQuestions for the reviewer:\n"
   }
 }

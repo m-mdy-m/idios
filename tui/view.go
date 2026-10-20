@@ -32,15 +32,11 @@ func (m *model) View() tea.View {
 		header.button("⌕ Search  /", "search:focus", false)
 	}
 	header.space(1)
-	header.button("Issues", "nav:issues", m.page == pageIssues)
-	header.space(1)
-	header.button("Pull requests", "nav:pull-requests", m.page == pagePullRequests)
-	header.space(1)
 	header.button("+ New", "new:menu", m.page == pageNew)
 	header.end()
 
 	// Profile-style tabs. A Repository replaces these with its own tab bar below the hero.
-	header.buttonRow(
+	header.tabRow(
 		buttonSpec{"Overview", "nav:overview", m.page == pageOverview && m.repoContext == ""},
 		buttonSpec{fmt.Sprintf(copyText.text("Repositories · %d"), len(m.repositories)), "nav:repositories", m.page == pageRepositories},
 		buttonSpec{fmt.Sprintf(copyText.text("Projects · %d"), len(m.projects)), "nav:projects", m.page == pageProjects},
@@ -54,16 +50,11 @@ func (m *model) View() tea.View {
 	)
 	if m.page != pageOverview && m.page != pageIntro {
 		header.rule()
-		if m.repoContext == "" {
-			header.block(renderPanel(width, "IDIOS WORKSPACE", []string{
-				"A personal work graph for projects, knowledge and progress.",
-				"Local-first  ·  Dependency-aware  ·  One Engine, multiple interfaces",
-			}, p))
-		} else {
-			header.block(renderPanel(width, "REPOSITORY  /  "+m.repoContext, []string{
-				m.repoDescription(), "Default branch  main  ·  Repository-owned Issues, PRs, labels and milestones",
-			}, p))
-			header.buttonRow(
+		if m.repoContext != "" {
+			header.raw(p.title().Render("◈ " + m.repoContext))
+			header.raw(p.muted().Render("  ·  branch main  ·  " + m.repoDescription()))
+			header.end()
+			header.tabRow(
 				buttonSpec{"Overview", "repo-tab:" + string(pageRepository), m.page == pageRepository},
 				buttonSpec{"Issues", "repo-tab:" + string(pageRepoIssues), m.page == pageRepoIssues},
 				buttonSpec{"Pull requests", "repo-tab:" + string(pageRepoPRs), m.page == pageRepoPRs},
@@ -173,11 +164,7 @@ func (m *model) View() tea.View {
 	}
 	lines = append(lines, footer.lines...)
 	help := newCanvas(width, 0, m.height-1, nil, p)
-	helpText := "↑/↓ Navigate  ·  Enter Open  ·  Click buttons  ·  / Search  ·  N New  ·  ? Help  ·  Q Quit"
-	if width < 82 {
-		helpText = "↑↓ Move  ·  Enter Open  ·  / Search  ·  ? Help  ·  Q Quit"
-	}
-	help.lineText(p.muted().Render(helpText))
+	help.lineText(m.footerHints(p, width))
 	lines = append(lines, help.lines...)
 
 	if len(lines) > m.height {
@@ -208,7 +195,7 @@ func (m *model) View() tea.View {
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
-	v.WindowTitle = "IDIOS — Personal Work Graph"
+	v.WindowTitle = "IDIOS"
 	v.OnMouse = func(msg tea.MouseMsg) tea.Cmd {
 		mouse := msg.Mouse()
 		if mouse.Button != tea.MouseLeft {
@@ -230,11 +217,11 @@ func (m *model) View() tea.View {
 func (m *model) compactView(p palette) tea.View {
 	width, height := max(1, m.width), max(1, m.height)
 	lines := []string{
-		p.brand().Render("◈ IDIOS · Workspace"),
+		p.brand().Render("◈ IDIOS"),
 		"",
-		"The terminal window is too small for the full-screen UI.",
+		"The terminal window is too small.",
 		"",
-		"Resize to at least 48 columns × 18 rows.",
+		"Resize it to at least 48 columns × 18 rows.",
 		"",
 		"Q / Ctrl+C  Quit",
 	}
@@ -324,3 +311,61 @@ func (m *model) renderMain(c *canvas, p palette) {
 }
 
 var _ tea.Model = (*model)(nil)
+
+// footerHints shows only the keys that work on the current screen. Entries that do not fit
+// are dropped from the right, so the most important ones stay visible in narrow terminals.
+func (m *model) footerHints(p palette, width int) string {
+	type hint struct{ key, label string }
+	var hints []hint
+	switch {
+	case m.page == pageForm:
+		hints = []hint{{"Tab", "next field"}, {"Ctrl+Enter", "save"}, {"Ctrl+U", "clear field"}, {"Esc", "cancel"}}
+	case m.searchMode:
+		hints = []hint{{"Enter", "apply filter"}, {"Esc", "clear filter"}}
+	case m.page == pageIntro:
+		hints = []hint{{"Enter", "open overview"}, {"?", "guide"}, {"q", "quit"}}
+	default:
+		hints = []hint{
+			{"↑/↓", "select"}, {"Enter", "open"}, {"Esc", "back"},
+			{prettyKey(m.config.Keyboard["search"], "/"), "filter"},
+			{prettyKey(m.config.Keyboard["new"], "Ctrl+N"), "new"},
+			{prettyKey(m.config.Keyboard["help"], "?"), "help"},
+			{prettyKey(m.config.Keyboard["quit"], "q"), "quit"},
+		}
+	}
+	var out strings.Builder
+	used := 0
+	for i, h := range hints {
+		size := lipgloss.Width(h.key) + 1 + lipgloss.Width(h.label)
+		if i > 0 {
+			size += 5
+		}
+		if used+size > width-1 {
+			break
+		}
+		if i > 0 {
+			out.WriteString(p.muted().Render("  ·  "))
+		}
+		out.WriteString(p.accent().Render(h.key) + " " + p.muted().Render(h.label))
+		used += size
+	}
+	return out.String()
+}
+
+// prettyKey turns a configured binding such as "ctrl+n" into "Ctrl+N" for display.
+func prettyKey(binding, fallbackKey string) string {
+	binding = strings.TrimSpace(binding)
+	if binding == "" {
+		return fallbackKey
+	}
+	parts := strings.Split(binding, "+")
+	for i, part := range parts {
+		switch {
+		case len(part) > 1:
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		default:
+			parts[i] = strings.ToUpper(part)
+		}
+	}
+	return strings.Join(parts, "+")
+}

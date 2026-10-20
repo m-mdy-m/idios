@@ -231,6 +231,13 @@ var commands = []command{
 		},
 	},
 	{
+		name: "pr", alias: "pull-request", noun: "PR", action: []string{"edit"},
+		flags: []flagSpec{{name: "id", usage: "Repository!number or PR ID", required: true}, {name: "title", usage: "new title (optional)"}, {name: "description", usage: "new description (optional)"}},
+		run: func(ctx context.Context, s *application.Service, v values) (any, error) {
+			return s.UpdatePullRequest(ctx, v.Str("id"), v.Str("title"), v.Str("description"))
+		},
+	},
+	{
 		name: "pr", alias: "pull-request", noun: "PR", action: []string{"accept"},
 		flags: []flagSpec{{name: "id", usage: "Repository!number or PR ID", required: true}, {name: "summary", usage: "short completion result"}},
 		run: func(ctx context.Context, s *application.Service, v values) (any, error) {

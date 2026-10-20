@@ -130,6 +130,15 @@ func LoadAppConfig() (AppConfig, error) {
 		cfg.Appearance.Density = "comfortable"
 	}
 	defaults := DefaultAppConfig()
+	// Older releases copied the packaged themes into config.json, which froze the old colors.
+	// Packaged themes are therefore authoritative; personal tweaks belong in appearance.colors,
+	// and themes with other names are kept untouched.
+	if cfg.Themes == nil {
+		cfg.Themes = map[string]map[string]string{}
+	}
+	for name, theme := range defaults.Themes {
+		cfg.Themes[name] = theme
+	}
 	if cfg.Keyboard == nil {
 		cfg.Keyboard = defaults.Keyboard
 	}

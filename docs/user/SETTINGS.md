@@ -8,7 +8,7 @@ Repository, Issue and Pull Request starter templates are different: they are edi
 
 ## Themes and colors
 
-Choose **Settings → Next theme** to cycle through the packaged themes (`midnight`, `paper`, `forest`). Choose **Toggle density** to switch between comfortable and compact spacing.
+Choose **Settings → Next theme** to cycle through the packaged themes (`midnight`, `ocean`, `ember`, `forest`, `paper`, `contrast`). Choose **Toggle density** to switch between comfortable and compact spacing.
 
 To override individual tokens, edit the `appearance.colors` object in the config file. For example:
 
@@ -37,14 +37,15 @@ Supported semantic color tokens:
 | `foreground` | Main text and controls |
 | `muted` | Supporting text |
 | `accent` | Brand, interactive highlights and focus |
-| `accent_background` | Active controls and focused inputs |
+| `accent_background` | Current tab and primary buttons |
+| `on_accent` | Text drawn on `accent_background` (optional; defaults to `foreground`) |
 | `surface`, `surface_alt` | Control and secondary-surface backgrounds |
 | `border` | Panels and separators |
 | `success`, `success_background` | Completed/healthy states |
 | `warning`, `warning_background` | Attention states |
 | `danger`, `danger_background` | Blocking/error states |
 
-You do not need to change Go files to change a theme. Hex values live in the packaged defaults and the user config override. `NO_COLOR`, `TERM=dumb`, or the TUI `--no-color` flag disables ANSI styling.
+The packaged themes are always loaded from the application, so edits to them inside `config.json` are ignored; put personal color changes in `appearance.colors`, or add a theme with a new name under `themes`. You do not need to change Go files to change a theme. Hex values live in the packaged defaults and the user config override. `NO_COLOR`, `TERM=dumb`, or the TUI `--no-color` flag disables ANSI styling.
 
 **Fonts:** the terminal application controls the font family and font size. IDIOS currently configures theme colors and spacing rather than installing or bundling fonts.
 
@@ -56,9 +57,9 @@ You do not need to change Go files to change a theme. Hex values live in the pac
 
 ## Notifications and scheduled jobs
 
-Use **Settings / Notifications** to enable or disable inbox notifications and set the polling interval. The polling interval cycles through 1, 5, 15 and 60 minutes. The **Scheduled jobs** page lets you create reminders on hourly, daily, weekly or 30-day monthly intervals, enable/pause them, and choose reminder types.
+Use **Settings / Notifications** to enable or disable inbox notifications and set the polling interval. The polling interval cycles through 1, 5, 15 and 60 minutes. The **Scheduled jobs** page lets you create, edit, pause/resume, run now or delete reminders. Supported schedules are intervals (`30m`, `1h`, `2d`, `1w`), a one-time local date/time (`YYYY-MM-DD HH:MM`), daily (`09:00`), weekly (`Mon 09:00`) and monthly (`15 09:00`). Monthly dates beyond a month’s length use that month’s final day. A one-time reminder completes after its first run; edit it to schedule it again.
 
-Important limitation: jobs are evaluated while the TUI is running. Closing IDIOS stops its in-app scheduler. These are not registered with Windows Task Scheduler, cron or a remote notification service. The notification inbox is local SQLite data, not a desktop push notification.
+Important limitation: jobs are evaluated while the TUI is running. Due jobs from while IDIOS was closed are processed when it starts again, but closing IDIOS stops the in-app scheduler. These are not registered with Windows Task Scheduler, cron or a remote notification service. The notification inbox is local SQLite data, not a desktop push notification.
 
 ## Logs and debug mode
 

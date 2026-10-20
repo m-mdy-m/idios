@@ -140,3 +140,152 @@ func TestNotesQuotesAndScheduledNotifications(t *testing.T) {
 		t.Fatalf("job schedule was not advanced after running: %+v err=%v", updated, err)
 	}
 }
+
+func TestNotesCanReuseMultipleLabelsAndReplaceThemOnEdit(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "note-labels.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	first, err := store.CreateNoteWithLabels(ctx, "Read about schedulers", "A note", []string{"research", "idea", "Research", ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Labels) != 2 {
+		t.Fatalf("first note labels = %+v, want 2 distinct labels", first.Labels)
+	}
+	second, err := store.CreateNoteWithLabels(ctx, "A second thought", "Another note", []string{"idea"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Labels) != 1 || second.Labels[0].Name != "idea" {
+		t.Fatalf("second note did not reuse label: %+v", second.Labels)
+	}
+	allLabels, err := store.ListNoteLabels(ctx)
+	if err != nil || len(allLabels) != 2 {
+		t.Fatalf("reusable labels = %+v, err=%v; want research and idea", allLabels, err)
+	}
+
+	updated, err := store.UpdateNoteWithLabels(ctx, first.ID, "Scheduler design", "Updated body", []string{"read-later"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Scheduler design" || updated.Content != "Updated body" || len(updated.Labels) != 1 || updated.Labels[0].Name != "read-later" {
+		t.Fatalf("note edit did not replace title/body/labels: %+v", updated)
+	}
+	if len(second.Labels) != 1 || second.Labels[0].Name != "idea" {
+		t.Fatalf("editing one note changed another note's labels: %+v", second.Labels)
+	}
+	labelsAfterEdit, err := store.ListNoteLabels(ctx)
+	if err != nil || len(labelsAfterEdit) != 2 {
+		t.Fatalf("unused labels were not cleaned after replacement: %+v err=%v", labelsAfterEdit, err)
+	}
+	if err := store.DeleteNote(ctx, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	labelsAfterDelete, err := store.ListNoteLabels(ctx)
+	if err != nil || len(labelsAfterDelete) != 1 || labelsAfterDelete[0].Name != "read-later" {
+		t.Fatalf("unused labels were not cleaned after note deletion: %+v err=%v", labelsAfterDelete, err)
+	}
+}
+
+func TestScheduledJobsSupportEditOnceRunNowAndDelete(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "jobs.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	now := time.Now().Local().Truncate(time.Minute)
+	weekly, err := store.CreateScheduledJob(ctx, domain.ScheduledJob{
+		Name: "Weekly planning", Description: "Plan", ActionType: "weekly-review", ScheduleType: domain.ScheduleWeekly,
+		ScheduleWeekday: int(time.Weekday((int(now.Weekday()) + 1) % 7)), ScheduleTime: "09:30", Enabled: true, Notify: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if weekly.ScheduleType != domain.ScheduleWeekly || weekly.NextRunAt == nil || weekly.NextRunAt.Before(now) {
+		t.Fatalf("weekly schedule was not saved: %+v", weekly)
+	}
+
+	oneTimeAt := now.Add(2 * time.Hour)
+	weekly.Name = "One-time planning"
+	weekly.ScheduleType = domain.ScheduleOnce
+	weekly.ScheduleTime = ""
+	weekly.ScheduleWeekday = 0
+	weekly.ScheduleDay = 0
+	weekly.IntervalMinutes = 0
+	weekly.NextRunAt = &oneTimeAt
+	one, err := store.UpdateScheduledJob(ctx, weekly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.ScheduleType != domain.ScheduleOnce || one.NextRunAt == nil || !one.NextRunAt.Equal(oneTimeAt) || one.CompletedAt != nil {
+		t.Fatalf("editing schedule to one-time did not persist: %+v", one)
+	}
+
+	if err := store.RunScheduledJobNow(ctx, one.ID, now, true); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := store.getScheduledJob(ctx, one.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Enabled || completed.CompletedAt == nil || completed.LastRunAt == nil {
+		t.Fatalf("one-time job was not marked completed/disabled: %+v", completed)
+	}
+	notifications, err := store.ListNotifications(ctx, 20)
+	if err != nil || len(notifications) != 1 || notifications[0].Title != "One-time planning" {
+		t.Fatalf("run-now notification = %+v, err=%v", notifications, err)
+	}
+	if err := store.RunScheduledJobNow(ctx, one.ID, now.Add(time.Minute), true); err == nil {
+		t.Fatal("completed one-time job unexpectedly ran again")
+	}
+	if _, err := store.ToggleScheduledJob(ctx, one.ID); err == nil {
+		t.Fatal("completed one-time job unexpectedly re-enabled without rescheduling")
+	}
+
+	if err := store.DeleteScheduledJob(ctx, one.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.getScheduledJob(ctx, one.ID); err == nil {
+		t.Fatal("deleted scheduled job is still retrievable")
+	}
+}
+
+func TestDueOneTimeJobRunsExactlyOnceAndDoesNotRepeat(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "oneshot.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	due := time.Now().Add(-time.Minute)
+	job, err := store.CreateScheduledJob(ctx, domain.ScheduledJob{
+		Name: "One shot", ActionType: "custom-reminder", ScheduleType: domain.ScheduleOnce,
+		NextRunAt: &due, Enabled: true, Notify: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, err := store.ProcessDueJobs(ctx, time.Now(), true)
+	if err != nil || count != 1 {
+		t.Fatalf("first processing count = %d err=%v; want one", count, err)
+	}
+	count, err = store.ProcessDueJobs(ctx, time.Now().Add(24*time.Hour), true)
+	if err != nil || count != 0 {
+		t.Fatalf("second processing count = %d err=%v; one-time job must not repeat", count, err)
+	}
+	updated, err := store.getScheduledJob(ctx, job.ID)
+	if err != nil || updated.CompletedAt == nil || updated.Enabled {
+		t.Fatalf("one-time completion state = %+v err=%v", updated, err)
+	}
+	notifications, err := store.ListNotifications(ctx, 20)
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("one-time notifications = %d err=%v; want one", len(notifications), err)
+	}
+}

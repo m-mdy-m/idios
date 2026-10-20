@@ -10,6 +10,13 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// Databases created by earlier releases were seeded with this placeholder profile text.
+// Shipped migrations are immutable, so the TUI treats the placeholder as "not written yet".
+const (
+	seededProfileBio    = "A local-first workspace for projects, learning and ideas."
+	seededProfileReadme = "Welcome to my IDIOS workspace.\n\nI use this space to connect repositories, issues, concepts and the work behind them."
+)
+
 func (m *model) renderOverview(c *canvas, p palette) {
 	profileName := fallback(m.profile.FullName, "Your workspace")
 	username := strings.TrimSpace(m.profile.Username)
@@ -17,7 +24,7 @@ func (m *model) renderOverview(c *canvas, p palette) {
 		username = "workspace-owner"
 	}
 	c.title(profileName)
-	c.muted("@" + username + "  ·  IDIOS local workspace")
+	c.muted("@" + username)
 	if m.demoMode {
 		c.panel(copyText.DemoWorkspaceTitle, copyText.DemoWorkspaceNotice)
 	}
@@ -26,8 +33,8 @@ func (m *model) renderOverview(c *canvas, p palette) {
 		buttonSpec{"Customize", "nav:settings", false},
 		buttonSpec{"+ New", "new:menu", false},
 	)
-	if strings.TrimSpace(m.profile.Bio) != "" {
-		c.lineText(m.profile.Bio)
+	if bio := strings.TrimSpace(m.profile.Bio); bio != "" && bio != seededProfileBio {
+		c.lineText(bio)
 	}
 	counts := m.issueCounts()
 	c.muted(fmt.Sprintf(copyText.text("%d repositories  ·  %d projects  ·  %d issues  ·  %d concepts  ·  %d notes"), len(m.repositories), len(m.projects), len(m.issues), len(m.concepts), len(m.notes)))
@@ -36,8 +43,11 @@ func (m *model) renderOverview(c *canvas, p palette) {
 	// Like a profile README, this is an editable, full-width summary rather than a sidebar.
 	c.title("README")
 	readme := strings.TrimSpace(m.profile.Readme)
+	if strings.ReplaceAll(readme, `\n`, "\n") == seededProfileReadme {
+		readme = ""
+	}
 	if readme == "" {
-		readme = "Welcome to your IDIOS workspace.\n\nUse repositories to organize work, issues to track actionable tasks, projects to group outcomes, and concepts to connect reusable knowledge."
+		readme = "This README is empty. Choose “Edit profile” to add your current goals, a short plan or links you want to see every time IDIOS starts."
 	}
 	c.panel("WORKSPACE OVERVIEW", strings.Split(readme, "\n")...)
 
@@ -49,7 +59,7 @@ func (m *model) renderOverview(c *canvas, p palette) {
 		}
 	}
 	if len(openItems) == 0 {
-		c.panel("NO ACTIVE ITEMS", "Start an unblocked Issue to make it active. You can use the graph to inspect what is waiting on what.")
+		c.panel("NOTHING IN PROGRESS", "No issue is in progress or blocked. Open an issue and press “Start issue”.")
 	} else {
 		for i, issue := range openItems {
 			if i >= 5 {
@@ -100,7 +110,7 @@ func (m *model) renderOverview(c *canvas, p palette) {
 		c.buttonRow(buttonSpec{"Open repository", "repo:" + repo.Name, true}, buttonSpec{"Unpin", "pin:repository:" + repo.Name, false})
 	}
 	if len(pinnedRepoIDs) == 0 {
-		c.panel("NOTHING PINNED YET", "Pin a repository or important issue so it stays visible whenever IDIOS opens.")
+		c.panel("NO PINNED REPOSITORIES", "Use “Mark important” on a repository to keep it here.")
 		if len(m.repositories) > 0 {
 			c.muted("Suggested repositories")
 			for i, repo := range m.repositories {
@@ -148,19 +158,19 @@ func (m *model) renderOverview(c *canvas, p palette) {
 		}
 	}
 	if importantCount == 0 {
-		c.muted("Pin an Issue, Project, Concept or Note when it deserves a little extra attention.")
+		c.muted("No pinned issues, projects, concepts or notes. Use “Mark important” on their pages.")
 	}
 
 	if m.quote.ID != "" {
 		c.blank()
-		c.panel("QUOTE", "“"+m.quote.Text+"”", fallback(m.quote.Author, "Saved quote"), "Manage quotes with Ctrl+Shift+Q or open Quotes.")
+		c.panel("QUOTE", "“"+m.quote.Text+"”", fallback(m.quote.Author, "Saved quote"), "Add or remove quotes on the Quotes page.")
 	}
 
 	c.blank()
 	c.title("Activity")
-	c.muted("Latest changes grouped into familiar time windows.")
+	c.muted("Recent changes, newest first.")
 	if len(m.activity) == 0 {
-		c.panel("NO ACTIVITY YET", "Your recent Issues, PRs, notes and workspace changes will appear here.")
+		c.panel("NO ACTIVITY YET", "Changes to issues, pull requests, notes and settings are listed here.")
 	} else {
 		lastBucket := ""
 		now := time.Now()
@@ -214,11 +224,11 @@ func (m *model) pinReference(pin domain.WorkspacePin) string {
 
 func (m *model) renderRepositories(c *canvas, p palette) {
 	c.title("Repositories")
-	c.muted("Independent workspaces with their own Issues, PRs, labels, milestones and settings.")
+	c.muted("Each repository has its own issues, pull requests, labels and milestones.")
 	c.buttonRow(buttonSpec{"+ New repository", "form:" + string(formRepository), true}, buttonSpec{"Refresh", "refresh:now", false})
 	c.muted(fmt.Sprintf(copyText.text("%d repositories · use / to filter by name or description"), len(m.filteredRepositories())))
 	if len(m.filteredRepositories()) == 0 {
-		c.panel("NO MATCHING REPOSITORIES", "Create a repository or clear the search filter with / then Ctrl+U.")
+		c.panel("NO MATCHING REPOSITORIES", "Choose “+ New repository”, or clear the filter: press / then Ctrl+U.")
 		return
 	}
 	for idx, repo := range m.filteredRepositories() {
@@ -242,7 +252,7 @@ func (m *model) renderRepositories(c *canvas, p palette) {
 		c.raw(p.badge("info", "main"))
 		c.text("  " + truncateVisible(repo.Description, max(8, c.width-36)))
 		c.end()
-		c.muted(fmt.Sprintf(copyText.text("     %d Issues · %d done · %d open PRs · local-first"), count, done, openPR))
+		c.muted(fmt.Sprintf(copyText.text("     %d issues · %d done · %d open PRs"), count, done, openPR))
 		c.buttonRow(buttonSpec{"Open repository →", "repo:" + repo.Name, false}, buttonSpec{"Create Issue", "form:" + string(formIssue), false}, buttonSpec{"Mark important", "pin:repository:" + repo.Name, false})
 		c.rule()
 	}
@@ -250,10 +260,10 @@ func (m *model) renderRepositories(c *canvas, p palette) {
 
 func (m *model) renderProjects(c *canvas, p palette) {
 	c.title("Projects")
-	c.muted("Combine Issues from multiple repositories around an outcome or milestone.")
+	c.muted("A project groups issues from several repositories under one goal.")
 	c.buttonRow(buttonSpec{"+ New project", "form:" + string(formProject), true})
 	if len(m.filteredProjects()) == 0 {
-		c.panel("NO PROJECTS YET", "Projects are cross-repository collections, not repositories themselves.", "Create one, then add Issues like CPU#4 or ARLIZ#2.")
+		c.panel("NO PROJECTS YET", "Create a project, then add existing issues to it by reference, for example CPU#4.")
 		return
 	}
 	for idx, project := range m.filteredProjects() {
@@ -280,11 +290,11 @@ func (m *model) renderIssues(c *canvas, p palette, scoped bool) {
 		title = m.repoContext + " · Issues"
 	}
 	c.title(title)
-	c.muted("An Issue is a unit of work. Blocking prerequisites are distinct from knowledge links.")
+	c.muted("open → in progress → done. An issue becomes done when its pull request is accepted. BLOCKED means it is waiting for a prerequisite.")
 	c.buttonRow(buttonSpec{"+ New Issue", "form:" + string(formIssue), true}, buttonSpec{"Refresh", "refresh:now", false})
 	items := m.filteredIssues()
 	if len(items) == 0 {
-		c.panel("NO ISSUES FOUND", "Create an Issue in a Repository, then connect prerequisites and Concepts.")
+		c.panel("NO ISSUES FOUND", "Choose “+ New Issue”. You need a repository first.")
 		return
 	}
 	for idx, issue := range items {
@@ -336,11 +346,11 @@ func (m *model) renderPullRequests(c *canvas, p palette, scoped bool) {
 		title = m.repoContext + " · Pull requests"
 	}
 	c.title(title)
-	c.muted("Review the explanation and outcome. Accepting records a Completion on main; it does not merge files.")
+	c.muted("A pull request is your progress report on an issue. Edit it while you work; accept it when the work is finished and the issue becomes done.")
 	c.buttonRow(buttonSpec{"Refresh", "refresh:now", false})
 	items := m.filteredPRs()
 	if len(items) == 0 {
-		c.panel("NO PULL REQUESTS", "Start an eligible Issue, then create a PR with the work explanation.")
+		c.panel("NO PULL REQUESTS", "Open an issue, press “Start issue”, then “Create pull request” to track your progress.")
 		return
 	}
 	for idx, pr := range items {
@@ -351,7 +361,7 @@ func (m *model) renderPullRequests(c *canvas, p palette, scoped bool) {
 		c.text("  " + truncateVisible(pr.Title, max(8, c.width-lipgloss.Width(prRef(pr))-22)))
 		c.end()
 		c.muted(fmt.Sprintf(copyText.text("     Issue %s#%d · target %s"), pr.RepositoryName, pr.IssueNumber, pr.TargetBranchName))
-		c.buttonRow(buttonSpec{"Review details →", "pr:" + prRef(pr), false}, buttonSpec{"Accept", "pr-accept:" + prRef(pr), pr.Status == domain.PRPending})
+		c.buttonRow(buttonSpec{"Review details →", "pr:" + prRef(pr), false}, buttonSpec{"Edit", "pr-edit:" + prRef(pr), pr.Status == domain.PRPending}, buttonSpec{"Accept (issue done)", "pr-accept:" + prRef(pr), false})
 		c.rule()
 	}
 }
@@ -402,7 +412,7 @@ func (m *model) renderRepositoryOverview(c *canvas, p palette) {
 	}
 
 	c.title("◈ " + repo.Name)
-	c.muted(fmt.Sprintf("Repository · created %s · updated %s · local workspace", repo.CreatedAt.Format("2006-01-02"), repo.UpdatedAt.Format("2006-01-02")))
+	c.muted(fmt.Sprintf("Created %s · updated %s", repo.CreatedAt.Format("2006-01-02"), repo.UpdatedAt.Format("2006-01-02")))
 	c.buttonRow(
 		buttonSpec{"+ New Issue", "form:" + string(formIssue), true},
 		buttonSpec{"Issues", "repo-tab:" + string(pageRepoIssues), false},
@@ -415,21 +425,21 @@ func (m *model) renderRepositoryOverview(c *canvas, p palette) {
 	c.panel("REPOSITORY AT A GLANCE",
 		fmt.Sprintf("%d Issues  ·  %d open  ·  %d in progress  ·  %d done", len(issues), open, inProgress, done),
 		fmt.Sprintf("%d blocked Issues  ·  %d open PRs  ·  %d accepted PRs  ·  %d closed PRs", blocked, openPR, acceptedPR, closedPR),
-		"Default branch: main  ·  Repository-owned Issues, Pull Requests, labels, milestones, graph and activity")
+		"Default branch: main")
 
 	readmeLines := strings.Split(strings.TrimSuffix(strings.TrimSpace(repo.Description), "\n"), "\n")
 	if strings.TrimSpace(repo.Description) == "" {
-		c.panel("README / REPOSITORY PURPOSE", "This Repository does not have an overview yet.", "Create or edit its description to record the purpose, scope, setup steps and important design decisions.")
+		c.panel("README", "No description yet.", "Write what this repository is for, what is in scope, and how to get started.")
 	} else {
-		c.panel("README / REPOSITORY PURPOSE", readmeLines...)
+		c.panel("README", readmeLines...)
 	}
 
 	c.blank()
 	c.title("Recent Issues")
-	c.muted("Each Issue has a structured brief, acceptance criteria, status, priority and optional parent/dependency links.")
+	c.muted("Newest issues in this repository.")
 	c.buttonRow(buttonSpec{"View all Issues →", "repo-tab:" + string(pageRepoIssues), false})
 	if len(issues) == 0 {
-		c.panel("NO ISSUES YET", "Create the first unit of work. New Issues start with a configurable template for tasks, bugs, features or research.")
+		c.panel("NO ISSUES YET", "Choose “+ New Issue”. You can start from a task, bug, feature or research template.")
 	} else {
 		shown := 0
 		for _, issue := range issues {
@@ -457,10 +467,10 @@ func (m *model) renderRepositoryOverview(c *canvas, p palette) {
 
 	c.blank()
 	c.title("Recent Pull Requests")
-	c.muted("A Pull Request is the review and completion record for an in-progress Issue. Acceptance records completion; it does not merge Git files.")
+	c.muted("Your progress reports. Edit one while you work; accept it when finished and its issue becomes done.")
 	c.buttonRow(buttonSpec{"View all Pull Requests →", "repo-tab:" + string(pageRepoPRs), false})
 	if len(prs) == 0 {
-		c.panel("NO PULL REQUESTS YET", "Start an unblocked Issue and use Create pull request to record the implementation, verification and remaining risks.")
+		c.panel("NO PULL REQUESTS YET", "Start an issue, then choose “Create pull request” and write what you have done so far.")
 	} else {
 		shown := 0
 		for _, pr := range prs {
@@ -480,19 +490,19 @@ func (m *model) renderRepositoryOverview(c *canvas, p palette) {
 	}
 
 	c.blank()
-	c.panel("REPOSITORY WORKFLOW", "1. Write a clear Issue using task / bug / feature / research templates.", "2. Connect sub-issues, blocking prerequisites, labels, milestones and Concepts as needed.", "3. Start an unblocked Issue, then create a Pull Request using the review template.", "4. Accept the PR to record a Completion and mark the Issue done.")
+	c.panel("WORKFLOW", "1. Write an issue (task, bug, feature or research template).", "2. Add sub-issues, prerequisites, labels or milestones if needed.", "3. Start the issue, then create a pull request and keep editing it as you work.", "4. When the work is finished, accept the pull request. The issue is marked done.")
 }
 
 func (m *model) renderBranches(c *canvas, p palette) {
 	c.title("Branches")
-	c.muted("Branch is modeled independently of Issues. Only main is operational in this release.")
+	c.muted("Only the main branch is used. Other branches are not supported yet.")
 	branches, err := m.app.ListBranches(m.ctx, m.repoContext)
 	if err != nil {
 		c.panel("COULD NOT LOAD BRANCHES", err.Error())
 		return
 	}
 	if len(branches) == 0 {
-		c.panel("NO BRANCHES", "Every Repository should have a default main Branch.")
+		c.panel("NO BRANCHES", "This repository has no branches. Every repository normally starts with main.")
 		return
 	}
 	for _, b := range branches {
@@ -500,17 +510,17 @@ func (m *model) renderBranches(c *canvas, p palette) {
 		if b.IsDefault {
 			label += "  ★ default"
 		}
-		c.panel("⑂  "+label, fmt.Sprintf(copyText.text("Created %s"), b.CreatedAt.Format("2006-01-02 15:04")), "Branch creation, switching and merge for non-main branches are not active yet.")
+		c.panel("⑂  "+label, fmt.Sprintf(copyText.text("Created %s"), b.CreatedAt.Format("2006-01-02 15:04")), "Creating, switching or merging other branches is not supported yet.")
 	}
 }
 
 func (m *model) renderLabels(c *canvas, p palette) {
 	c.title("Labels")
-	c.muted("Use global labels for workspace-wide meaning, or repository labels for local workflow.")
+	c.muted("Labels tag issues. A label is either global or limited to one repository.")
 	c.buttonRow(buttonSpec{"+ New label", "label-action:new", true})
 	labels, _ := m.app.ListLabels(m.ctx, "")
 	if len(labels) == 0 {
-		c.panel("NO LABELS YET", "Examples: lang, research, architecture, blocked, writing.")
+		c.panel("NO LABELS YET", "Choose “+ New label”. Examples: bug, research, docs.")
 		return
 	}
 	for _, l := range labels {
@@ -529,10 +539,10 @@ func (m *model) renderLabels(c *canvas, p palette) {
 
 func (m *model) renderMilestones(c *canvas, p palette) {
 	c.title("Milestones")
-	c.muted("Checkpoints group work toward a defined outcome.")
+	c.muted("A milestone is a target with an optional due date. Assign issues to it.")
 	c.buttonRow(buttonSpec{"+ New milestone", "milestone-action:new", true})
 	if len(m.milestones) == 0 {
-		c.panel("NO MILESTONES", "Create a milestone such as 'Chapter 3 draft' or 'CPU fundamentals'.")
+		c.panel("NO MILESTONES", "Choose “+ New milestone”. Example: “v1 release”.")
 		return
 	}
 	for _, ms := range m.milestones {
@@ -546,7 +556,7 @@ func (m *model) renderMilestones(c *canvas, p palette) {
 
 func (m *model) renderRepositorySettings(c *canvas, p palette) {
 	c.title("Repository settings")
-	c.muted("Settings are local metadata. Workflow rules remain enforced by the Engine.")
+	c.muted("Key/value notes stored with this repository. They do not change how issues and pull requests work.")
 	c.buttonRow(buttonSpec{"+ Set key / value", "settings-action:set", true})
 	settings, err := m.app.GetRepositorySettings(m.ctx, m.repoContext)
 	if err != nil {
@@ -554,7 +564,7 @@ func (m *model) renderRepositorySettings(c *canvas, p palette) {
 		return
 	}
 	if len(settings) == 0 {
-		c.panel("NO CUSTOM SETTINGS", "The repository uses defaults and its standard main Branch.")
+		c.panel("NO CUSTOM SETTINGS", "Nothing has been set for this repository.")
 	}
 	for _, s := range settings {
 		c.panel(s.Key, s.Value)
@@ -563,7 +573,7 @@ func (m *model) renderRepositorySettings(c *canvas, p palette) {
 
 func (m *model) renderActivity(c *canvas, p palette) {
 	c.title("Activity & completions")
-	c.muted("An audit-style timeline of changes and accepted work in this Repository.")
+	c.muted("Changes and accepted work in this repository.")
 	if len(m.completions) > 0 {
 		c.title("Accepted work on main")
 		for _, item := range m.completions {
@@ -585,93 +595,16 @@ func (m *model) renderActivity(c *canvas, p palette) {
 			c.end()
 		}
 	} else if len(m.completions) == 0 {
-		c.panel("NO ACTIVITY YET", "Activity will appear as Issues, PRs, relations and settings change.")
-	}
-}
-
-func (m *model) renderGraphPage(c *canvas, p palette) {
-	c.title("Knowledge graph")
-	c.muted("Click a node to inspect it. Blocking dependencies are shown separately from semantic links.")
-	if m.graphFrom != "" {
-		c.lineText("Focused on: " + m.graphFrom)
-		c.buttonRow(buttonSpec{"Show whole workspace", "graph:all", false})
-	}
-	c.panel("GRAPH SUMMARY", fmt.Sprintf(copyText.text("%d nodes · %d typed relationships"), len(m.graph.Nodes), len(m.graph.Edges)), "Solid dependency edges block starting an Issue. Concept links are contextual only.")
-	if len(m.graph.Nodes) == 0 {
-		c.panel("YOUR GRAPH STARTS HERE", "Create repositories, Issues and Concepts, then connect them.", "A graph becomes useful when it explains why work is blocked or how ideas connect.")
-		return
-	}
-	byID := map[string]domain.GraphNode{}
-	for _, n := range m.graph.Nodes {
-		byID[n.ID] = n
-	}
-	outgoing := map[string][]domain.GraphEdge{}
-	for _, e := range m.graph.Edges {
-		outgoing[e.Source] = append(outgoing[e.Source], e)
-	}
-	c.blank()
-	c.title("Relationship map")
-	count := 0
-	for _, node := range sortedGraphNodes(m.graph.Nodes) {
-		edges := outgoing[node.ID]
-		if len(edges) == 0 {
-			continue
-		}
-		if count >= 40 {
-			c.muted("Graph view capped at 40 relationship groups. Narrow the graph by opening a node.")
-			break
-		}
-		count++
-		c.button(graphNodeRef(node), "graph-node:"+node.ID, false)
-		c.text("  " + truncateVisible(graphLabel(node), max(8, c.width-lipgloss.Width(graphNodeRef(node))-4)))
-		c.end()
-		for i, e := range edges {
-			target, ok := byID[e.Target]
-			branch := "├─"
-			if i == len(edges)-1 {
-				branch = "└─"
-			}
-			c.space(2)
-			c.raw(p.border().Render(branch + " "))
-			relation := e.Type
-			if relation == "depends_on" {
-				relation = "⛔ depends_on · BLOCKING"
-				c.raw(p.danger().Render(relation))
-			} else {
-				c.raw(p.muted().Render("◇ " + relation))
-			}
-			c.text("  →  ")
-			if ok {
-				c.button(graphNodeRef(target), "graph-node:"+target.ID, false)
-				c.text(" " + truncateVisible(graphLabel(target), max(3, c.width-lipgloss.Width(graphNodeRef(target))-18)))
-			} else {
-				c.text(e.Target)
-			}
-			c.end()
-		}
-		c.rule()
-	}
-	c.blank()
-	c.title("All nodes")
-	for idx, node := range sortedGraphNodes(m.graph.Nodes) {
-		m.selectLines = append(m.selectLines, len(c.lines))
-		c.button("["+strings.ToUpper(node.Type)+"] "+graphNodeRef(node), "graph-node:"+node.ID, idx == m.cursor)
-		c.space(1)
-		c.text(truncateVisible(graphLabel(node), max(5, c.width-lipgloss.Width(graphNodeRef(node))-15)))
-		if node.Status != "" {
-			c.space(1)
-			c.raw(p.badge(statusTone(node.Status, strings.Contains(strings.ToLower(node.Status), "block")), node.Status))
-		}
-		c.end()
+		c.panel("NO ACTIVITY YET", "Nothing has happened in this repository yet.")
 	}
 }
 
 func (m *model) renderConcepts(c *canvas, p palette) {
 	c.title("Concepts")
-	c.muted("Reusable pieces of knowledge connected to Issues and repositories.")
+	c.muted("A concept is a topic you can link from many issues, for example “caching” or “authentication”.")
 	c.buttonRow(buttonSpec{"+ New concept", "form:" + string(formConcept), true}, buttonSpec{"Open graph", "nav:graph", false})
 	if len(m.filteredConcepts()) == 0 {
-		c.panel("NO CONCEPTS YET", "Create Concepts like CPU, electricity, mathematics or virtual memory.")
+		c.panel("NO CONCEPTS YET", "Choose “+ New concept”, then link it from an issue.")
 		return
 	}
 	for idx, concept := range m.filteredConcepts() {
@@ -686,20 +619,20 @@ func (m *model) renderConcepts(c *canvas, p palette) {
 
 func (m *model) renderSettings(c *canvas, p palette) {
 	c.title("Settings")
-	c.muted("Personalize the interface and manage your local workspace. Changes are saved immediately.")
+	c.muted("Changes are saved immediately.")
 	c.title("Appearance")
-	c.panel("ACTIVE THEME", "Theme: "+m.config.Appearance.Theme, "Layout density: "+m.config.Appearance.Density, "Terminal font family and font size are controlled by your terminal application.")
+	c.panel("ACTIVE THEME", "Theme: "+m.config.Appearance.Theme, "Layout density: "+m.config.Appearance.Density, "Font family and size are set in your terminal, not in IDIOS.")
 	c.buttonRow(buttonSpec{"Next theme", "settings-action:theme", true}, buttonSpec{"Toggle density", "settings-action:density", false})
-	c.panel("CUSTOM COLORS", "Theme tokens are not hard-coded in UI pages.", "Edit appearance.colors in: "+config.AppConfigPath(), `Example: "appearance": {"colors": {"accent": "#ff78a9", "danger": "#ff4b4b"}}`, "Available tokens: background, foreground, muted, accent, accent_background, surface, surface_alt, border, success, success_background, warning, warning_background, danger, danger_background.")
+	c.panel("CUSTOM COLORS", "Override single colors in appearance.colors in: "+config.AppConfigPath(), `Example: "appearance": {"colors": {"accent": "#ff78a9", "danger": "#ff4b4b"}}`, "Available tokens: background, foreground, muted, accent, accent_background, on_accent, surface, surface_alt, border, success, success_background, warning, warning_background, danger, danger_background.")
 	c.blank()
 	c.title("Repository, Issue & Pull Request templates")
-	c.panel("CONFIGURABLE STARTER TEMPLATES",
+	c.panel("TEMPLATES",
 		"Repository README scaffold: REPOSITORY_TEMPLATE",
 		"Default Issue template: "+m.config.IssueTemplate.Default,
 		"Available Issue templates: "+strings.Join(issueTemplateKeys(m.config), ", "),
 		"Pull Request description template: PULL_REQUEST_TEMPLATE",
-		"Edit these sections in "+config.AppConfigPath()+". Template text is copied into new items; existing records are not rewritten.",
-		"Restart IDIOS after changing the config. The interactive TUI applies these templates; CLI commands keep explicit arguments for scripting.")
+		"Edit these sections in "+config.AppConfigPath()+". Template text is copied into new items; existing items are not changed.",
+		"Restart IDIOS after changing the config. The CLI does not use these templates.")
 	c.buttonRow(buttonSpec{"In-app help", "nav:help", false})
 	c.blank()
 	c.title("Startup & profile")
@@ -707,16 +640,16 @@ func (m *model) renderSettings(c *canvas, p palette) {
 	c.buttonRow(buttonSpec{"Toggle startup intro", "settings-action:intro", false}, buttonSpec{"Edit Overview profile", "settings-action:profile", false})
 	c.blank()
 	c.title("Notifications & scheduled jobs")
-	c.panel("REMINDERS", fmt.Sprintf(copyText.text("Notifications: %s · check interval: every %d minute(s)"), onOff(m.config.Notifications.Enabled), m.config.Notifications.PollIntervalMinutes), "Reminders are processed locally while the TUI is running; this is not an OS background service.")
+	c.panel("REMINDERS", fmt.Sprintf(copyText.text("Notifications: %s · check interval: every %d minute(s)"), onOff(m.config.Notifications.Enabled), m.config.Notifications.PollIntervalMinutes), "Reminders run only while IDIOS is open. There is no background service.")
 	c.buttonRow(buttonSpec{"Notification settings", "settings-action:notifications-page", true}, buttonSpec{"Scheduled jobs", "nav:jobs", false}, buttonSpec{"Notification inbox", "nav:notifications", false})
 	c.blank()
 	c.title("Diagnostics")
-	c.panel("LOGGING", "Debug logging: "+onOff(m.config.Debug), "Log file: "+logFilePath(), "Errors and important events are always logged; verbose DEBUG entries are collected only while enabled.")
+	c.panel("LOGGING", "Debug logging: "+onOff(m.config.Debug), "Log file: "+logFilePath(), "Errors are always logged. DEBUG lines are recorded only while Debug is on.")
 	c.buttonRow(buttonSpec{"Toggle debug", "settings-action:debug", false}, buttonSpec{"Open logs", "settings-action:logs", false})
 	c.blank()
 	c.title("Data & workflow")
-	c.panel("LOCAL DATABASE", "Database path: "+m.databasePath, "Configuration path: "+config.AppConfigPath(), "Workspace data is stored in SQLite on this device. No account or network service is required.")
-	c.panel("HOW WORK IS COMPLETED", "A prerequisite blocks starting an Issue until it is complete.", "Accepting a Pull Request records a Completion on the logical main branch. It does not merge real Git files.")
+	c.panel("FILES", "Database (SQLite): "+m.databasePath, "Settings file: "+config.AppConfigPath())
+	c.panel("HOW ISSUES FINISH", "An issue cannot start until its prerequisites are done.", "Accepting its pull request marks it done. Git and your files are not touched.")
 	c.buttonRow(buttonSpec{"Reload data", "refresh:now", false}, buttonSpec{"Quick guide", "nav:help", false})
 	c.blank()
 	c.title("Keyboard shortcuts")
@@ -742,14 +675,14 @@ func (m *model) renderSettings(c *canvas, p palette) {
 
 func (m *model) renderNotificationSettings(c *canvas, p palette) {
 	c.title("Settings / Notifications")
-	c.muted("Control scheduled reminders and choose how often IDIOS checks for due jobs.")
-	c.panel("DELIVERY", "Notifications are stored in the local SQLite inbox. IDIOS does not send push notifications or contact a remote service.", "Scheduled jobs are processed while the app is running.")
-	c.panel("GLOBAL SWITCH", "Scheduled notifications: "+onOff(m.config.Notifications.Enabled), "When disabled, due jobs still record a run and advance their schedule, but no inbox notification is created.")
+	c.muted("Turn reminders on or off and set how often IDIOS checks for due jobs.")
+	c.panel("DELIVERY", "Notifications appear in the inbox inside IDIOS.", "Jobs run only while IDIOS is open.")
+	c.panel("GLOBAL SWITCH", "Scheduled notifications: "+onOff(m.config.Notifications.Enabled), "When off, due jobs still run and move to their next time, but no message is added to the inbox.")
 	c.buttonRow(buttonSpec{"Toggle notifications", "settings-action:notifications", true}, buttonSpec{fmt.Sprintf(copyText.text("Check interval: %d minute(s) → next"), m.config.Notifications.PollIntervalMinutes), "settings-action:poll-interval", false}, buttonSpec{"Open inbox", "nav:notifications", false}, buttonSpec{"Manage scheduled jobs", "nav:jobs", false})
 	c.blank()
 	c.title("Current scheduled jobs")
 	if len(m.jobs) == 0 {
-		c.panel("NO JOBS CONFIGURED", "Add a daily plan, weekly review or blocked-issue reminder from Scheduled jobs.")
+		c.panel("NO JOBS", "Open Scheduled jobs and add a daily plan, a weekly review or a blocked-issues reminder.")
 	} else {
 		for _, job := range m.jobs {
 			state := "paused"
@@ -765,15 +698,15 @@ func (m *model) renderNotificationSettings(c *canvas, p palette) {
 				return "warning"
 			}(), state))
 			c.space(2)
-			c.lineText(scheduleLabel(job.IntervalMinutes) + " · " + onOff(job.Notify) + " notification")
+			c.lineText(scheduleSummary(job) + " · " + onOff(job.Notify) + " notification")
 		}
 	}
 }
 
 func (m *model) renderNew(c *canvas, p palette) {
 	c.title("Create something new")
-	c.muted("Choose what you want to add. Each action opens a proper form in this UI.")
+	c.muted("Choose what to create.")
 	c.buttonRow(buttonSpec{"Repository", "form:" + string(formRepository), true}, buttonSpec{"Project", "form:" + string(formProject), false})
 	c.buttonRow(buttonSpec{"Issue", "form:" + string(formIssue), false}, buttonSpec{"Concept", "form:" + string(formConcept), false})
-	c.panel("WHICH ONE SHOULD I USE?", "Repository: an independent work area such as CPU or ARLIZ.", "Project: one goal that combines Issues from different repositories.", "Issue: one unit of work; a Sub-issue belongs to a parent Issue.", "Concept: reusable knowledge that can connect many pieces of work.")
+	c.panel("WHICH ONE?", "Repository: a separate area of work, such as CPU or ARLIZ.", "Project: a goal that collects issues from several repositories.", "Issue: one task. A sub-issue belongs to a parent issue.", "Concept: a topic you can link from many issues.")
 }

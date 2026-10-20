@@ -27,6 +27,7 @@ go run ./cmd/idios issue start --id CPU#1
 
 # Record the outcome through a PR
 go run ./cmd/idios pr create --issue CPU#1 --description "What changed and what I learned"
+go run ./cmd/idios pr edit --id CPU!1 --description "Updated progress"
 go run ./cmd/idios pr accept --id CPU!1 --summary "Paging fundamentals reviewed"
 
 # Inspect connected relationships

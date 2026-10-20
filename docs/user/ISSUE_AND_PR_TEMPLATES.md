@@ -2,6 +2,13 @@
 
 IDIOS templates make new work records more useful from the beginning. They provide a repeatable structure for context, goals, acceptance criteria, verification and risk—not just a short description box. Templates are loaded from the user configuration and copied into a new record when it is created.
 
+## What the default templates look like
+
+The bundled templates are short on purpose: each section has a one-line prompt you overwrite, and fill-in lines such as `Resolves:`, `Blocked by:` and `Impact: low / medium / high` take a value instead of a paragraph. Delete any section that does not apply.
+
+- **Issue templates** (`task`, `bug`, `feature`, `research`) all end with a checkable **Done when** list (or **Deliverable** for research), so an Issue can be accepted against something concrete. The `bug` template keeps the `Expected behavior` and `Steps to reproduce` headings.
+- **Pull request template**: Summary (with `Resolves:` and complete/partial scope), Changes, Verification (with a block for the real command output), Risk (impact, what could break, how to undo) and Review focus.
+
 ## Where templates live
 
 The TUI configuration is normally:
@@ -20,7 +27,7 @@ IDIOS uses these configuration keys, with the exact spelling shown:
 
 `PULL_REQUEST_TEMPLATE` is spelled **REQUEST**, not `REUQEST`.
 
-These settings control the local IDIOS TUI. They are separate from the GitHub repository files under `.github/ISSUE_TEMPLATE/` and `.github/PULL_REQUEST_TEMPLATE.md`, which are used by GitHub's own web interface.
+These settings control the local IDIOS TUI. They are separate from the GitHub repository files under `.github/ISSUE_TEMPLATE/` and `.github/PULL_REQUEST_TEMPLATE.md`, which are used by GitHub's own web interface. Those GitHub files are for contributors to this repository; they carry the project's checks (`make check`, `make smoke`), compatibility checklist (schema, JSON protocol, layering) and bug-report fields (version, where it happens, steps).
 
 ## Repository overview template
 

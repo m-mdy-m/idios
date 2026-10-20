@@ -1,6 +1,6 @@
 # IDIOS Engineering Guide
 
-IDIOS is a local-first personal work and knowledge graph. The current Engine is written in Go. It
+IDIOS is a personal work tracker with a knowledge graph. The current Engine is written in Go. It
 models Repositories, Issues/Sub-issues, Projects, Concepts, typed relations, PR review records,
 CompletionRecords, Labels, Milestones and a visible graph. V1 is a logical workflow system, not Git.
 
@@ -65,8 +65,9 @@ real requirement justifies it.
   consistent (`CPU#4` for Issues, `CPU!2` for PRs).
 - Respect `NO_COLOR`, `TERM=dumb`, and `--no-color`. The full-screen TUI intentionally requires an interactive TTY; tests should exercise the Bubble Tea model directly without starting a terminal session.
 - Do not convey `BLOCKED` by color alone. Always print the word.
-- Graph nodes must show type/reference and status when meaningful. Edge labels remain visible so
-  `depends_on` cannot be confused with semantic links.
+- Graph nodes must show type/reference and status when meaningful. Every link is worded ("waits for",
+  "uses concept") and `depends_on` is the only link ever presented as blocking; an unknown relation type
+  is context. Ownership links are hidden by default. See `docs/development/TUI.md` (Graph page).
 - Sort graph nodes/edges deterministically and clip long labels to the panel width.
 
 ## Adding a feature

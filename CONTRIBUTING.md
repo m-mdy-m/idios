@@ -1,7 +1,7 @@
 # Contributing to IDIOS
 
 Thanks for helping improve IDIOS. This repository contains the Go Engine and its CLI/TUI adapters;
-the goal is to keep the application local-first, predictable, modular and useful without network
+the goal is to keep the application predictable, modular, and free of required network
 services or AI. Before changing behavior, read [AGENTS.md](AGENTS.md),
 [Architecture](docs/development/ARCHITECTURE.md), and the relevant feature guide.
 

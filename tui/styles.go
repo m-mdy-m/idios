@@ -42,13 +42,34 @@ func (p palette) warning() lipgloss.Style  { return p.style(true, "warning", "de
 func (p palette) danger() lipgloss.Style   { return p.style(true, "danger", "default") }
 func (p palette) border() lipgloss.Style   { return p.style(false, "border", "default") }
 
+// onAccent is the text color drawn on accent_background. Custom themes that predate the
+// token fall back to the normal foreground color.
+func (p palette) onAccent() string {
+	if value := strings.TrimSpace(p.colors["on_accent"]); value != "" {
+		return value
+	}
+	return p.color("foreground")
+}
+
+// tab styles navigation items: quiet when inactive, filled when they mark the current page.
+func (p palette) tab(active bool) lipgloss.Style {
+	style := lipgloss.NewStyle().Padding(0, 1)
+	if p.plain {
+		return style
+	}
+	if active {
+		return style.Foreground(lipgloss.Color(p.onAccent())).Background(lipgloss.Color(p.color("accent_background"))).Bold(true)
+	}
+	return style.Foreground(lipgloss.Color(p.color("muted"))).Background(lipgloss.Color(p.color("surface")))
+}
+
 func (p palette) button(active bool) lipgloss.Style {
 	style := lipgloss.NewStyle().Padding(0, 1)
 	if p.plain {
 		return style
 	}
 	if active {
-		return style.Foreground(lipgloss.Color(p.color("foreground"))).Background(lipgloss.Color(p.color("accent_background"))).Bold(true)
+		return style.Foreground(lipgloss.Color(p.onAccent())).Background(lipgloss.Color(p.color("accent_background"))).Bold(true)
 	}
 	return style.Foreground(lipgloss.Color(p.color("foreground"))).Background(lipgloss.Color(p.color("surface_alt")))
 }
@@ -59,7 +80,7 @@ func (p palette) input(active bool) lipgloss.Style {
 		return style
 	}
 	if active {
-		return style.Foreground(lipgloss.Color(p.color("foreground"))).Background(lipgloss.Color(p.color("accent_background"))).Bold(true)
+		return style.Foreground(lipgloss.Color(p.color("foreground"))).Background(lipgloss.Color(p.color("surface_alt"))).Bold(true)
 	}
 	return style.Foreground(lipgloss.Color(p.color("foreground"))).Background(lipgloss.Color(p.color("surface")))
 }

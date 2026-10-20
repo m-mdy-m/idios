@@ -93,3 +93,12 @@ func TestPrintableKeyRejectsNamedControlsButAllowsPlus(t *testing.T) {
 		}
 	}
 }
+
+func TestPrettyKey(t *testing.T) {
+	cases := map[string]string{"ctrl+n": "Ctrl+N", "/": "/", "q": "Q", "ctrl+shift+q": "Ctrl+Shift+Q", "": "?"}
+	for in, want := range cases {
+		if got := prettyKey(in, "?"); got != want {
+			t.Fatalf("prettyKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

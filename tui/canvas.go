@@ -14,6 +14,7 @@ type canvas struct {
 	hits             *[]hitbox
 	style            palette
 	focusAction      string
+	tabMode          bool
 }
 
 type buttonSpec struct {
@@ -65,7 +66,11 @@ func (c *canvas) button(label, action string, active bool) {
 	if lipgloss.Width(label)+4 > c.width {
 		label = truncateVisible(label, maxLabel)
 	}
-	styled := c.style.button(active).Render(label)
+	style := c.style.button(active)
+	if c.tabMode {
+		style = c.style.tab(active)
+	}
+	styled := style.Render(label)
 	w := lipgloss.Width(styled)
 	if c.x+w > c.width {
 		return
@@ -114,6 +119,13 @@ func (c *canvas) buttonRow(items ...buttonSpec) {
 		c.button(item.label, item.action, item.active)
 	}
 	c.end()
+}
+
+// tabRow renders navigation items as tabs: the current page is filled, the others stay quiet.
+func (c *canvas) tabRow(items ...buttonSpec) {
+	c.tabMode = true
+	c.buttonRow(items...)
+	c.tabMode = false
 }
 
 func (c *canvas) end() {

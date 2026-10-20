@@ -90,7 +90,7 @@ func statusTone(status string, blocked bool) string {
 		return "success"
 	case "cancelled", "canceled", "closed", "failed", "blocked", "error":
 		return "danger"
-	case "open", "pending", "in_progress", "in progress", "draft", "running", "warning":
+	case "pending", "in_progress", "in progress", "draft", "running", "warning":
 		return "warning"
 	default:
 		return "accent"
@@ -385,7 +385,14 @@ func fitLine(s string, width int) string {
 
 func renderPanel(width int, title string, lines []string, p palette) string {
 	content := make([]string, 0, len(lines)+1)
-	content = append(content, p.title().Render(truncateVisible(title, max(1, width-6))))
+	content = append(content, p.style(true, "accent", "default").Render(truncateVisible(title, max(1, width-6))))
 	content = append(content, lines...)
 	return p.panel(max(1, width)).Render(strings.Join(content, "\n"))
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }

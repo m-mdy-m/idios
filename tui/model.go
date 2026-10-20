@@ -58,6 +58,7 @@ const (
 	formConcept         formKind = "concept"
 	formPullRequest     formKind = "pull-request"
 	formAcceptPR        formKind = "accept-pr"
+	formEditPR          formKind = "edit-pr"
 	formDependency      formKind = "dependency"
 	formConceptLink     formKind = "concept-link"
 	formProjectIssue    formKind = "project-issue"
@@ -101,6 +102,7 @@ type snapshot struct {
 	issueLabels     map[string][]domain.Label
 	issueMilestones map[string][]domain.Milestone
 	notes           []domain.Note
+	noteLabels      []domain.NoteLabel
 	quotes          []domain.Quote
 	quote           domain.Quote
 	jobs            []domain.ScheduledJob
@@ -125,6 +127,7 @@ type operationMsg struct {
 	openProject string
 	openConcept string
 	openNote    string
+	openJob     string
 }
 
 type model struct {
@@ -149,29 +152,33 @@ type model struct {
 	showHelp            bool
 	newMenu             bool
 
-	repositories    []domain.Repository
-	projects        []domain.Project
-	issues          []domain.Issue
-	pullRequests    []domain.PullRequest
-	concepts        []domain.Concept
-	graph           domain.Graph
-	completions     []domain.CompletionRecord
-	activity        []domain.ActivityEvent
-	labels          []domain.Label
-	milestones      []domain.Milestone
-	settings        []domain.RepositorySetting
-	issueLabels     map[string][]domain.Label
-	issueMilestones map[string][]domain.Milestone
-	notes           []domain.Note
-	quotes          []domain.Quote
-	quote           domain.Quote
-	jobs            []domain.ScheduledJob
-	notifications   []domain.Notification
-	profile         domain.WorkspaceProfile
-	pins            []domain.WorkspacePin
-	uiLogs          []string
-	selectedNoteID  string
-	selectedQuoteID string
+	repositories     []domain.Repository
+	projects         []domain.Project
+	issues           []domain.Issue
+	pullRequests     []domain.PullRequest
+	concepts         []domain.Concept
+	graph            domain.Graph
+	completions      []domain.CompletionRecord
+	activity         []domain.ActivityEvent
+	labels           []domain.Label
+	milestones       []domain.Milestone
+	settings         []domain.RepositorySetting
+	issueLabels      map[string][]domain.Label
+	issueMilestones  map[string][]domain.Milestone
+	notes            []domain.Note
+	noteLabels       []domain.NoteLabel
+	quotes           []domain.Quote
+	quote            domain.Quote
+	jobs             []domain.ScheduledJob
+	notifications    []domain.Notification
+	profile          domain.WorkspaceProfile
+	pins             []domain.WorkspacePin
+	uiLogs           []string
+	selectedNoteID   string
+	selectedQuoteID  string
+	selectedJobID    string
+	activeNoteLabel  string
+	schedulerChecked bool
 
 	selectedIssueRef string
 	selectedPRRef    string
@@ -179,6 +186,7 @@ type model struct {
 	selectedConcept  string
 	graphFrom        string
 	graphDepth       int
+	graphStructure   bool // include ownership links (repository owns issue, branch ...) on the Graph page
 
 	form                formKind
 	formFields          []formField
@@ -244,7 +252,7 @@ func newModel(ctx context.Context, app *application.Service, dbPath string, opts
 		databasePath: dbPath,
 		plain:        opts.NoColor,
 		demoMode:     opts.DemoMode,
-		status:       "Everything stays local · Engine rules apply to every interface",
+		status:       "",
 		focusIndex:   -1,
 	}
 }
@@ -290,6 +298,7 @@ func loadSnapshotCmd(ctx context.Context, app *application.Service, rotateQuote 
 		out.issueLabels, _ = app.ListIssueLabels(ctx)
 		out.issueMilestones, _ = app.ListIssueMilestones(ctx)
 		out.notes, _ = app.ListNotes(ctx)
+		out.noteLabels, _ = app.ListNoteLabels(ctx)
 		out.quotes, _ = app.ListQuotes(ctx)
 		out.jobs, _ = app.ListScheduledJobs(ctx)
 		out.notifications, _ = app.ListNotifications(ctx, 50)

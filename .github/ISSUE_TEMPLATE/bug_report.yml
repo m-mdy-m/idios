@@ -1,26 +1,43 @@
 name: Bug report
-description: A reproducible problem in the Go Engine, CLI or TUI.
+description: Something in the CLI, TUI or Engine does not work as documented.
+title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Before filing, try the latest commit and include the exact command or TUI action that failed.
-        Do not upload a personal SQLite database; redact paths and sensitive content.
+        Thanks for the report. A short, reproducible report gets fixed fastest.
+        **Never attach your SQLite database or config.** Redact paths and personal text.
 
-  - type: textarea
-    id: description
+  - type: checkboxes
+    id: checks
     attributes:
-      label: What happened?
-      description: Describe the unexpected behavior and the operation you were attempting.
-      placeholder: "`idios issue start --id ARLIZ#3` returns ..."
+      label: Before you submit
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I reproduced it on the latest release or `main`.
+          required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options:
+        - CLI (`idios ...`)
+        - TUI (`idios-tui`)
+        - Both
+        - Storage / migration
+        - Not sure
     validations:
       required: true
 
   - type: textarea
-    id: expected
+    id: summary
     attributes:
-      label: What did you expect?
+      label: What went wrong?
+      description: One or two sentences. Say what you tried to do and what you got.
+      placeholder: "`idios issue start --id ARLIZ#3` fails even though CPU#4 is done."
     validations:
       required: true
 
@@ -28,11 +45,38 @@ body:
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: Minimal commands or TUI key sequence that demonstrates the problem.
+      description: The smallest sequence that triggers it. Use a throwaway database (`--db ./test.sqlite3`).
       placeholder: |
         1. `idios --db ./test.sqlite3 repo create --name CPU`
-        2. `idios --db ./test.sqlite3 issue list --repo CPU`
-        3. Observe the incorrect output
+        2. `idios --db ./test.sqlite3 issue create --repo CPU --title "A"`
+        3. ...
+        4. See the wrong output below
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output, error or screenshot
+      description: Paste the exact text if you can (use `--no-color`). Remove secrets.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: IDIOS version or commit
+      description: Output of `idios --version`, or the commit hash if built from source.
+      placeholder: "1.0.1 / a1b2c3d"
     validations:
       required: true
 
@@ -40,34 +84,17 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Paste `go version`, OS, architecture, whether `CGO_ENABLED=1`, and whether this was CLI or TUI.
+      description: OS, architecture, terminal, and `go version` if built from source.
       placeholder: |
-        go version go1.25.x linux/amd64
-        OS: Linux
-        UI: TUI
+        OS: Windows 11 (amd64), Windows Terminal
+        go version go1.25.x
     validations:
       required: true
 
   - type: textarea
-    id: output
-    attributes:
-      label: Error or output
-      description: Relevant error/output. Remove secrets and personal data.
-      render: text
-    validations:
-      required: false
-
-  - type: textarea
-    id: database
-    attributes:
-      label: Database / migration context
-      description: Engine schema version if known; never attach the database itself.
-    validations:
-      required: false
-
-  - type: textarea
     id: notes
     attributes:
-      label: Additional context
+      label: Anything else?
+      description: Related issues, things you already tried, schema version if you know it.
     validations:
       required: false

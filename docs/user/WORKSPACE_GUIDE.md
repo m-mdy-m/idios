@@ -44,13 +44,44 @@ A Project groups Issues around one outcome and can span multiple Repositories. I
 
 A Concept is reusable knowledge, such as “virtual memory” or “event-loop ownership”. Semantic links connect Concepts to Issues and to each other. They add context but do **not** block work.
 
-The Graph view shows typed relationships among Repositories, branches, Issues, Projects, Concepts, PRs, completion records, labels, milestones and graph-visible Notes. Use it to inspect why something is blocked and to follow related ideas. An edge's type matters: `depends_on` is a blocker; `uses_concept` and `note_about` are contextual links.
+The Graph view shows typed relationships among Repositories, branches, Issues, Projects, Concepts, PRs, completion records, labels, milestones and graph-visible Notes. It reads top to bottom:
+
+1. **Summary and legend** — how many nodes and links are on screen, and what each marker means.
+2. **What is blocked right now** — every Issue that is waiting, with the unfinished prerequisite under it (`ARLIZ#3` ⛔ waits for `CPU#4 [OPEN]`). Prerequisites that are already done are not listed here.
+3. **Nodes and their links** — each node followed by its links, worded as short sentences and sorted by importance: ⛔ blocking, → workflow (sub-issues, pull requests, completions), ◇ context (concepts, notes, labels, milestones, projects). Each link is printed once, under the more central node, so an Issue lists its Concepts rather than the Concept listing every Issue.
+4. **Other nodes** — nodes that are only linked from the ones above, or not linked yet.
+
+Only `depends_on` ever blocks work. Every other relation is context.
+
+Controls above the list:
+
+- **Show whole workspace** — leave a focused view (shown only when focused).
+- **Distance: N → next** — when focused on a node, cycle how many links away from it are drawn (1, 2 or 3).
+- **Ownership links: hidden → show** — ownership plumbing (a repository owns its Issues and branches, a PR targets a branch) is hidden by default because it connects almost everything. Branches, labels and milestones that have no other links are hidden with it. Turn it on to see the full structure.
+
+Click or press Enter on any reference to open it. “View graph” on an Issue or Concept focuses the graph on that node and shows its links in both directions.
 
 ### Notes
 
-Notes are quick capture for anything that does not yet deserve an Issue. Open **Notes**, create a note, then select it and choose **Link / graph settings**. Select an entity type and its reference (for example `issue`, `IDIOS#2`; `repository`, `IDIOS`; or `concept`, `Knowledge graph`). Choose `yes` for “Show in graph?” to add a Note node and its link to the graph. Choose `no` to retain the relationship without adding the Note to graph visualization.
+Notes are quick capture for anything that does not yet deserve an Issue. Each note can have multiple reusable labels, entered as a comma-separated list in the **Labels** field (for example `idea, research, read-later`). Notes with the same label share a filter chip; use `/` to search titles, content and labels. Edit a note to replace its labels. Labels are stored separately so a label can be reused across many notes.
+
+To connect a note to work, select it and choose **Link / graph settings**. Select an entity type and its reference (for example `issue`, `IDIOS#2`; `repository`, `IDIOS`; or `concept`, `Knowledge graph`). Choose `yes` for “Show in graph?” to add a Note node and its link to the graph. Choose `no` to retain the relationship without adding the Note to graph visualization.
 
 Notes are stored locally. Deleting a Note does not delete the Issue, Repository or Concept it was linked to.
+
+### Scheduled jobs and reminders
+
+Open **Scheduled jobs** and add or edit a reminder. Schedules are interpreted in the computer's local time:
+
+- `interval` repeats after a duration, such as `30m`, `1h`, `2d` or `1w` (a bare number is minutes).
+- `once` runs at one date and time, written `YYYY-MM-DD HH:MM`, for example `2026-10-25 14:30`.
+- `daily` repeats at `HH:MM`, for example `09:00`.
+- `weekly` repeats on a weekday and time, for example `Mon 09:00`.
+- `monthly` repeats on a day and time, for example `15 09:00`. If the day is beyond a month's length, it runs on that month's final day.
+
+You can edit a job's schedule, pause/resume recurring jobs, run it immediately, or delete it. A one-time job is automatically disabled after it runs and can be scheduled again by editing its date/time. The scheduled job stores a run history; a notification is put in the local inbox only when both the job and the global notification switch allow it. Missed recurring intervals are skipped rather than replayed in a burst.
+
+**Important:** reminders are processed while IDIOS is open. Overdue reminders are processed as soon as the TUI starts again, but there is no always-running background service, so a reminder cannot appear at its scheduled time while IDIOS is closed. The check interval in notification settings controls how promptly due jobs are noticed while the app is open.
 
 ### Quotes
 

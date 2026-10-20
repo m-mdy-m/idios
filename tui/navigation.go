@@ -129,17 +129,17 @@ func (m *model) cursorItems() []cursorItem {
 			items = append(items, cursorItem{c.Name, "concept:" + c.Name})
 		}
 	case pageNotes:
-		for _, n := range m.notes {
+		for _, n := range m.filteredNotes() {
 			items = append(items, cursorItem{n.Title, "note:" + n.ID})
 		}
 	case pageJobs:
 		for _, job := range m.jobs {
-			items = append(items, cursorItem{job.Name, "job:" + job.ID})
+			items = append(items, cursorItem{job.Name, "job-edit:" + job.ID})
 		}
 	case pageNotifications:
 		items = append(items, cursorItem{"Mark all notifications read", "notification-action:read-all"})
 	case pageGraph, pageRepoGraph:
-		for _, n := range sortedGraphNodes(m.graph.Nodes) {
+		for _, n := range m.currentGraphLayout().order {
 			items = append(items, cursorItem{graphNodeRef(n), "graph-node:" + n.ID})
 		}
 	case pageNew:
@@ -238,11 +238,11 @@ func onOff(value bool) string {
 func formTitle(kind formKind) string {
 	titles := map[formKind]string{
 		formRepository: "Create repository", formProject: "Create project", formIssue: "Create issue",
-		formConcept: "Create concept", formPullRequest: "Create pull request", formAcceptPR: "Accept pull request",
+		formConcept: "Create concept", formPullRequest: "Create pull request", formAcceptPR: "Accept pull request", formEditPR: "Edit pull request",
 		formDependency: "Add blocking prerequisite", formConceptLink: "Link issue to concept", formProjectIssue: "Add issue to project",
 		formRepoSetting: "Edit repository setting", formLabel: "Create label", formMilestone: "Create milestone",
 		formAssignLabel: "Assign label", formAssignMilestone: "Assign milestone", formNote: "Write a note",
-		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Schedule a reminder", formProfile: "Edit workspace profile",
+		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Create scheduled job", formProfile: "Edit workspace profile",
 	}
 	if title := titles[kind]; title != "" {
 		return title

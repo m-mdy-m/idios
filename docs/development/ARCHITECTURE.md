@@ -1,6 +1,6 @@
 # Architecture
 
-IDIOS is a local-first work and knowledge graph. The Go Engine owns domain rules and persistence; CLI and TUI are independent adapters. A Pull Request is currently a review/acceptance record. Accepting it records a Completion against the logical `main` branch; it does not perform a real Git merge.
+IDIOS is a personal work tracker with a knowledge graph. The Go Engine owns domain rules and persistence; CLI and TUI are independent adapters. A Pull Request is currently a review/acceptance record. Accepting it records a Completion against the logical `main` branch; it does not perform a real Git merge.
 
 ## Dependency direction
 
@@ -56,6 +56,7 @@ internal/storage/sqlite/
     migrate.go             Ordered embedded migration runner
     0001_initial.sql        Core repository/workflow/graph tables
     0002_workspace_experience.sql  Profile, pins, notes, quotes, jobs and notifications
+    0003_notes_labels_and_job_schedules.sql  Reusable note labels and calendar job schedules
   repositories.go          Repositories, projects, branches and repository settings
   issues.go                Issue lifecycle, Sub-issues and dependencies
   workflow.go              Pull requests and Completion records

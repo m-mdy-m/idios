@@ -1,8 +1,8 @@
 # IDIOS
 
-**A local-first workspace for projects, issues, ideas and the relationships between them.**
+**Track repositories, issues, projects and notes, and see which issues depend on which.**
 
-IDIOS keeps your work in a local SQLite database and gives it structure: repositories own issues, sub-issues describe task breakdown, blocking dependencies explain what must happen first, projects group work across repositories, and concepts connect reusable knowledge. The terminal interface is keyboard-first, mouse-aware, and uses the same Go application engine as the CLI.
+IDIOS is a terminal issue tracker for your own projects. It works like repositories, issues and pull requests on GitHub, but without Git. Work is organised like this: repositories own issues, sub-issues describe task breakdown, blocking dependencies explain what must happen first, projects group work across repositories, and concepts connect reusable knowledge. The terminal interface is keyboard-first, mouse-aware, and uses the same Go application engine as the CLI.
 
 ## Start here
 
@@ -41,7 +41,7 @@ The TUI database defaults to `~/.idios/idios-engine.sqlite3` and can be changed 
 - **Pull Request templates:** new PR forms include a configurable summary, implementation, verification, risk and reviewer checklist.
 - **Issues and sub-issues:** break a task into smaller child issues. A child issue must share its parent's repository.
 - **Blocking dependencies:** connect issues with `depends_on`; an unfinished prerequisite prevents an issue from starting, including across repositories.
-- **Pull requests and completions:** explain the outcome, review and accept the logical pull request. Acceptance creates a completion record on `main` and marks the issue done.
+- **Pull requests and completions:** write a pull request for an issue you started, edit it as the work progresses, and accept it when the work is finished. Acceptance creates a completion record on `main` and marks the issue done.
 - **Projects:** group related issues from multiple repositories around one goal.
 - **Concepts and graph:** link reusable knowledge and inspect the different relationship types.
 - **Notes and quotes:** capture thoughts, link notes to work or the graph, and rotate saved quotes on startup.

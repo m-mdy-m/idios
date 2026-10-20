@@ -27,10 +27,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.completions, m.activity, m.labels = s.completions, s.activity, s.labels
 		m.milestones, m.settings = s.milestones, s.settings
 		m.issueLabels, m.issueMilestones = s.issueLabels, s.issueMilestones
-		m.notes, m.quotes, m.quote = s.notes, s.quotes, s.quote
+		m.notes, m.noteLabels, m.quotes, m.quote = s.notes, s.noteLabels, s.quotes, s.quote
 		m.jobs, m.notifications, m.profile, m.pins = s.jobs, s.notifications, s.profile, s.pins
 		m.rebindDetails()
 		m.clampViewport()
+		// Only the first successful snapshot triggers startup catch-up. Doing this
+		// after loading avoids racing the initial view against due-job processing.
+		if m.app != nil && !m.schedulerChecked {
+			m.schedulerChecked = true
+			return m, processDueJobsCmd(m.ctx, m.app, time.Now(), m.config.Notifications.Enabled)
+		}
 		return m, nil
 	case schedulerTickMsg:
 		interval := time.Duration(m.config.Notifications.PollIntervalMinutes) * time.Minute
@@ -43,7 +49,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logEvent("ERROR", "scheduled job processor: "+msg.err.Error())
 		} else if msg.count > 0 {
 			m.logEvent("INFO", fmt.Sprintf("processed %d scheduled job(s)", msg.count))
-			m.notifications, _ = m.app.ListNotifications(m.ctx, 50)
+			if jobs, err := m.app.ListScheduledJobs(m.ctx); err != nil {
+				m.logEvent("ERROR", "refresh scheduled jobs: "+err.Error())
+			} else {
+				m.jobs = jobs
+			}
+			if notifications, err := m.app.ListNotifications(m.ctx, 50); err != nil {
+				m.logEvent("ERROR", "refresh notifications: "+err.Error())
+			} else {
+				m.notifications = notifications
+			}
 		}
 		return m, nil
 	case actionClickMsg:
@@ -82,6 +97,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.openNote != "" {
 			m.selectedNoteID, m.page = msg.openNote, pageNotes
+		}
+		if msg.openJob != "" {
+			m.selectedJobID, m.page = msg.openJob, pageJobs
 		}
 		if msg.err == nil && msg.message == "Note deleted." {
 			m.selectedNoteID = ""

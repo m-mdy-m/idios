@@ -22,7 +22,7 @@ func (m *model) renderIntro(c *canvas, p palette) {
 	ruleWidth := min(c.width-4, logoWidth+8)
 	rule := centerASCII(strings.Repeat("-", max(1, ruleWidth)), c.width)
 	c.lineText(p.muted().Render(rule))
-	c.lineText(p.title().Render(centerASCII("PERSONAL WORK GRAPH / LOCAL-FIRST", c.width)))
+	c.lineText(p.title().Render(centerASCII("Issues and pull requests for your own work", c.width)))
 	c.lineText(p.muted().Render(rule))
 	c.blank()
 	c.title(copyText.IntroTitle)
@@ -32,33 +32,59 @@ func (m *model) renderIntro(c *canvas, p palette) {
 		c.panel(copyText.DemoWorkspaceTitle, copyText.DemoWorkspaceNotice)
 	}
 	c.blank()
-	c.panel("A LOCAL-FIRST WORKSPACE", copyText.IntroPrivacy,
-		fmt.Sprintf(copyText.text("%d repositories · %d open issues · %d concepts · %d notes"), len(m.repositories), len(m.issues), len(m.concepts), len(m.notes)))
+
+	// The checklist follows the real state of the database, so it doubles as a progress
+	// indicator for a new user and disappears into a short reminder for an experienced one.
+	counts := m.issueCounts()
+	step := func(done bool, text string) string {
+		if done {
+			return "✓  " + text
+		}
+		return "○  " + text
+	}
+	c.panel("HOW IT WORKS",
+		step(len(m.issues) > 0, "ISSUE: write the task. A repository groups related issues, for example one per subject or project."),
+		step(counts[domain.IssueInProgress]+counts[domain.IssueDone] > 0, "START it when you begin working on it."),
+		step(m.openPRCount()+counts[domain.IssueDone] > 0, "PULL REQUEST: write what you have done so far. Edit it as the work progresses."),
+		step(counts[domain.IssueDone] > 0, "ACCEPT the pull request when the work is finished. The issue becomes done."),
+		"Also: sub-issues split a task, prerequisites make an issue wait for another, projects group issues across repositories, concepts and notes keep what you learn.")
+	c.muted(fmt.Sprintf(copyText.text("%d repositories · %d issues · %d concepts · %d notes"), len(m.repositories), len(m.issues), len(m.concepts), len(m.notes)))
 	c.blank()
 	if m.quote.ID != "" {
-		c.panel("QUOTE FOR THIS SESSION", "“"+m.quote.Text+"”", fallback(m.quote.Author, "Saved quote"))
-	} else {
-		c.panel("YOUR QUOTE SPACE", "Save a quote you like; IDIOS will rotate saved quotes each time it starts.")
+		c.panel("QUOTE", "“"+m.quote.Text+"”", fallback(m.quote.Author, "Saved quote"))
+		c.blank()
 	}
-	c.blank()
 	c.buttonRow(
 		buttonSpec{copyText.IntroContinue, "nav:overview", true},
 		buttonSpec{copyText.IntroHelp, "nav:help", false},
 		buttonSpec{copyText.IntroSettings, "nav:settings", false},
 	)
 	c.blank()
-	c.panel("KEYBOARD FIRST", "Ctrl+N  New item     /  Search     ?  Help     g  Graph", "Tab / Shift+Tab  Sections     F6 / Ctrl+Tab  Focus buttons     Enter  Activate     Esc  Back")
+	c.panel("KEYS", "Ctrl+N new item   /  filter list   ?  help   g  graph   q  quit", "Tab / Shift+Tab switch sections   F6 / Ctrl+Tab focus buttons   Enter open   Esc back")
 }
 
 func (m *model) renderNotes(c *canvas, p palette) {
 	c.title("Notes")
-	c.muted("Catch a thought now. Link it to an Issue or Repository when it becomes actionable.")
+	c.muted("Capture ideas like a lightweight Notion: edit notes, reuse multiple labels, search, filter and link to work.")
 	c.buttonRow(buttonSpec{"+ New note", "note-action:new", true}, buttonSpec{"Quotes", "nav:quotes", false}, buttonSpec{"Explore graph", "nav:graph", false})
-	if len(m.notes) == 0 {
-		c.panel("NO NOTES YET", copyText.NotesEmpty)
+	filters := []buttonSpec{{"All notes", "note-filter:all", m.activeNoteLabel == ""}}
+	for _, label := range m.noteLabels {
+		filters = append(filters, buttonSpec{"#" + label.Name, "note-filter:" + label.Name, strings.EqualFold(m.activeNoteLabel, label.Name)})
+	}
+	if len(filters) > 0 {
+		c.buttonRow(filters...)
+	}
+	items := m.filteredNotes()
+	c.muted(fmt.Sprintf("%d note(s) · %d reusable label(s) · use / to search title, content and labels", len(items), len(m.noteLabels)))
+	if len(items) == 0 {
+		if len(m.notes) == 0 {
+			c.panel("NO NOTES YET", copyText.NotesEmpty, "Create a note and add labels such as #idea, #research or #read-later.")
+		} else {
+			c.panel("NO MATCHING NOTES", "Try another label or clear the search with / then Ctrl+U.")
+		}
 		return
 	}
-	for idx, n := range m.notes {
+	for idx, n := range items {
 		marker := "  "
 		if n.ID == m.selectedNoteID || idx == m.cursor {
 			marker = "▸ "
@@ -70,27 +96,71 @@ func (m *model) renderNotes(c *canvas, p palette) {
 		if n.LinkedEntityLabel != "" {
 			c.text("↳ " + truncateVisible(n.LinkedEntityLabel, max(8, c.width/2)))
 		} else {
-			c.text("Unlinked")
-		}
-		c.space(1)
-		if n.GraphVisible {
-			c.raw(p.badge("success", "graph"))
-		} else {
-			c.raw(p.badge("info", "note"))
+			c.text("not linked")
 		}
 		c.end()
+		if len(n.Labels) > 0 {
+			c.space(2)
+			for _, tag := range n.Labels {
+				c.raw(p.style(true, noteLabelColorToken(tag.Color), "default").Render("#" + tag.Name))
+				c.space(2)
+			}
+			c.end()
+		}
+		if n.GraphVisible {
+			c.lineText("  ◉ visible in graph")
+		}
 		c.muted(strings.Repeat("─", max(1, c.width-2)))
 	}
 	if n := m.selectedNote(); n != nil {
+		visible := false
+		for _, item := range items {
+			if item.ID == n.ID {
+				visible = true
+				break
+			}
+		}
+		if !visible {
+			return
+		}
 		c.blank()
 		c.title("Selected note")
 		c.panel(n.Title, strings.Split(n.Content, "\n")...)
-		c.muted("Created " + n.CreatedAt.Format("2006-01-02 15:04"))
+		c.muted("Created " + n.CreatedAt.Format("2006-01-02 15:04") + " · Updated " + n.UpdatedAt.Format("2006-01-02 15:04"))
 		if n.LinkedEntityLabel != "" {
 			c.muted("Linked to: " + n.LinkedEntityLabel)
 		}
+		if len(n.Labels) > 0 {
+			c.text("Labels: ")
+			for _, tag := range n.Labels {
+				c.raw(p.style(true, noteLabelColorToken(tag.Color), "default").Render("#" + tag.Name))
+				c.space(2)
+			}
+			c.end()
+		}
 		c.buttonRow(buttonSpec{"Edit", "note-action:edit", true}, buttonSpec{"Link / graph settings", "note-action:link", false}, buttonSpec{"Delete", "note-action:delete", false})
 	}
+}
+
+func noteLabelColorToken(color string) string {
+	switch color {
+	case "green":
+		return "success"
+	case "orange", "yellow":
+		return "warning"
+	case "pink":
+		return "danger"
+	default:
+		return "accent"
+	}
+}
+
+func stringsToTagNames(labels []domain.NoteLabel) []string {
+	out := make([]string, 0, len(labels))
+	for _, label := range labels {
+		out = append(out, "#"+label.Name)
+	}
+	return out
 }
 
 func (m *model) selectedNote() *domain.Note {
@@ -104,10 +174,10 @@ func (m *model) selectedNote() *domain.Note {
 
 func (m *model) renderQuotes(c *canvas, p palette) {
 	c.title("Quotes")
-	c.muted("A small shelf of lines worth remembering. The Overview quote advances on each launch.")
+	c.muted("Saved quotes. IDIOS shows one on the Overview and picks the next one at every start.")
 	c.buttonRow(buttonSpec{"+ Save a quote", "quote-action:new", true}, buttonSpec{"Back to Overview", "nav:overview", false})
 	if len(m.quotes) == 0 {
-		c.panel("NO SAVED QUOTES", "Save your first quote to start the rotation.")
+		c.panel("NO SAVED QUOTES", "Choose “+ Save a quote” to add one.")
 		return
 	}
 	for i, q := range m.quotes {
@@ -115,56 +185,93 @@ func (m *model) renderQuotes(c *canvas, p palette) {
 			c.muted(fmt.Sprintf(copyText.text("And %d more…"), len(m.quotes)-i))
 			break
 		}
-		c.panel("“"+q.Text+"”", fallback(q.Author, "Personal quote"), "Saved "+q.CreatedAt.Format("2006-01-02"))
+		c.panel("“"+q.Text+"”", fallback(q.Author, "No source"), "Saved "+q.CreatedAt.Format("2006-01-02"))
 		c.blank()
 	}
 }
 
 func (m *model) renderJobs(c *canvas, p palette) {
 	c.title("Scheduled jobs")
-	c.muted("Reminders are stored locally. They are processed while IDIOS is running; notifications can be disabled in Settings.")
-	c.buttonRow(buttonSpec{"+ Add reminder", "job-action:new", true}, buttonSpec{"Notification settings", "settings-action:notifications-page", false}, buttonSpec{"View notifications", "nav:notifications", false})
+	c.muted("Create, reschedule, pause, run or delete reminders. Jobs are processed while IDIOS is open; all schedule dates/times use your local timezone.")
+	c.buttonRow(buttonSpec{"+ Add job", "job-action:new", true}, buttonSpec{"Notification settings", "settings-action:notifications-page", false}, buttonSpec{"View notifications", "nav:notifications", false})
 	if len(m.jobs) == 0 {
-		c.panel("NO SCHEDULED JOBS", copyText.JobsEmpty)
+		c.panel("NO SCHEDULED JOBS", copyText.JobsEmpty, "Examples: every 1h, once at a date/time, daily at 09:00 or every Monday at 10:30.")
 		return
 	}
 	for idx, job := range m.jobs {
 		m.selectLines = append(m.selectLines, len(c.lines))
 		state := "paused"
-		if job.Enabled {
-			state = "enabled"
+		stateColor := "warning"
+		if job.CompletedAt != nil {
+			state, stateColor = "completed", "info"
+		} else if job.Enabled {
+			state, stateColor = "enabled", "success"
 		}
-		next := "not scheduled"
-		if job.NextRunAt != nil {
-			next = job.NextRunAt.Local().Format("2006-01-02 15:04")
-		}
-		last := "never"
-		if job.LastRunAt != nil {
-			last = job.LastRunAt.Local().Format("2006-01-02 15:04")
-		}
-		c.title(job.Name + "  " + p.badge(func() string {
-			if job.Enabled {
-				return "success"
-			}
-			return "warning"
-		}(), state))
-		c.muted(scheduleLabel(job.IntervalMinutes) + " · " + strings.ReplaceAll(job.ActionType, "-", " "))
+		c.title(job.Name + "  " + p.badge(stateColor, state))
+		c.muted(scheduleSummary(job) + " · " + strings.ReplaceAll(job.ActionType, "-", " ") + " · " + notificationPreference(job.Notify))
 		if job.Description != "" {
 			c.lineText(job.Description)
 		}
-		c.muted("Next run: " + next + " · Last run: " + last)
-		actionLabel := "Pause"
-		if !job.Enabled {
-			actionLabel = "Enable"
+		if job.CompletedAt != nil {
+			c.muted("Completed: " + job.CompletedAt.Local().Format("2006-01-02 15:04"))
+		} else {
+			next := "not scheduled"
+			if job.NextRunAt != nil {
+				next = job.NextRunAt.Local().Format("2006-01-02 15:04 MST")
+			}
+			c.muted("Next run: " + next)
 		}
-		c.buttonRow(buttonSpec{actionLabel, "job:" + job.ID, idx == m.cursor})
+		last := "never"
+		if job.LastRunAt != nil {
+			last = job.LastRunAt.Local().Format("2006-01-02 15:04 MST")
+		}
+		c.muted("Last run: " + last)
+		if job.CompletedAt == nil {
+			actionLabel := "Pause"
+			if !job.Enabled {
+				actionLabel = "Enable"
+			}
+			c.buttonRow(
+				buttonSpec{"Edit schedule", "job-edit:" + job.ID, idx == m.cursor},
+				buttonSpec{actionLabel, "job-toggle:" + job.ID, false},
+				buttonSpec{"Run now", "job-run:" + job.ID, false},
+				buttonSpec{"Delete", "job-delete:" + job.ID, false},
+			)
+		} else {
+			c.buttonRow(buttonSpec{"Edit / reschedule", "job-edit:" + job.ID, idx == m.cursor}, buttonSpec{"Delete", "job-delete:" + job.ID, false})
+		}
 		c.muted(strings.Repeat("─", max(1, c.width-2)))
+	}
+}
+
+func notificationPreference(notify bool) string {
+	if notify {
+		return "notification on"
+	}
+	return "notification off"
+}
+
+func scheduleSummary(job domain.ScheduledJob) string {
+	switch job.ScheduleType {
+	case domain.ScheduleOnce:
+		if job.NextRunAt != nil && job.CompletedAt == nil {
+			return "Once · " + job.NextRunAt.Local().Format("2006-01-02 15:04 MST")
+		}
+		return "One-time job"
+	case domain.ScheduleDaily:
+		return "Daily at " + job.ScheduleTime
+	case domain.ScheduleWeekly:
+		return "Every " + time.Weekday(job.ScheduleWeekday).String() + " at " + job.ScheduleTime
+	case domain.ScheduleMonthly:
+		return fmt.Sprintf("Monthly on day %d at %s", job.ScheduleDay, job.ScheduleTime)
+	default:
+		return scheduleLabel(job.IntervalMinutes)
 	}
 }
 
 func (m *model) renderNotifications(c *canvas, p palette) {
 	c.title("Notifications")
-	c.muted("A local inbox for scheduled reminders. No external push service is required.")
+	c.muted("Messages created by your scheduled jobs.")
 	c.buttonRow(buttonSpec{"Mark all read", "notification-action:read-all", false}, buttonSpec{"Manage jobs", "nav:jobs", false})
 	unread := 0
 	for _, n := range m.notifications {
@@ -174,7 +281,7 @@ func (m *model) renderNotifications(c *canvas, p palette) {
 	}
 	c.muted(fmt.Sprintf(copyText.text("%d unread · %d recent notifications"), unread, len(m.notifications)))
 	if len(m.notifications) == 0 {
-		c.panel("ALL QUIET", "No notifications yet. Add a scheduled job to receive reminders.")
+		c.panel("INBOX EMPTY", "No notifications yet. They appear here when a scheduled job runs.")
 		return
 	}
 	for _, n := range m.notifications {
@@ -191,7 +298,7 @@ func (m *model) renderNotifications(c *canvas, p palette) {
 
 func (m *model) renderLogs(c *canvas, p palette) {
 	c.title("Application logs")
-	c.muted("Recent UI events and errors. Debug lines are collected only when Debug is enabled.")
+	c.muted("Recent events and errors. DEBUG lines are recorded only while Debug is on.")
 	c.buttonRow(buttonSpec{"Debug: " + onOff(m.config.Debug), "settings-action:debug", true}, buttonSpec{"Settings", "nav:settings", false}, buttonSpec{"Refresh", "refresh:now", false})
 	c.muted("Log file: " + logFilePath())
 	c.blank()
@@ -286,11 +393,11 @@ func scheduleLabel(minutes int) string {
 	case 60:
 		return "Every hour"
 	case 1440:
-		return "Every day"
+		return "Every 24 hours"
 	case 10080:
-		return "Every week"
+		return "Every 7 days"
 	case 43200:
-		return "Every month (30 days)"
+		return "Every 30 days"
 	default:
 		return fmt.Sprintf(copyText.text("Every %d minutes"), minutes)
 	}

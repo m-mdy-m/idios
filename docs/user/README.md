@@ -1,6 +1,6 @@
 # User guide
 
-IDIOS is designed around a connected workspace rather than a list of unrelated tasks. You can use it entirely offline; the current engine stores data in local SQLite.
+IDIOS is designed around a connected workspace rather than a list of unrelated tasks. Data is stored in a SQLite file.
 
 ## Suggested reading order
 

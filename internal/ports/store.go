@@ -37,6 +37,7 @@ type Store interface {
 	CreatePullRequest(context.Context, string, string, string) (domain.PullRequest, error)
 	GetPullRequest(context.Context, string) (domain.PullRequest, error)
 	ListPullRequests(context.Context, string, string) ([]domain.PullRequest, error)
+	UpdatePullRequest(context.Context, string, string, string) (domain.PullRequest, error)
 	ClosePullRequest(context.Context, string) (domain.PullRequest, error)
 	AcceptPullRequest(context.Context, string, string) (domain.PullRequest, domain.CompletionRecord, domain.Issue, error)
 	ListCompletions(context.Context, string) ([]domain.CompletionRecord, error)
@@ -64,8 +65,11 @@ type Store interface {
 
 	SeedDemo(context.Context) (domain.SeedReport, error)
 	ListNotes(context.Context) ([]domain.Note, error)
+	ListNoteLabels(context.Context) ([]domain.NoteLabel, error)
 	CreateNote(context.Context, string, string) (domain.Note, error)
+	CreateNoteWithLabels(context.Context, string, string, []string) (domain.Note, error)
 	UpdateNote(context.Context, string, string, string) (domain.Note, error)
+	UpdateNoteWithLabels(context.Context, string, string, string, []string) (domain.Note, error)
 	DeleteNote(context.Context, string) error
 	LinkNote(context.Context, string, string, string, bool) error
 	ListQuotes(context.Context) ([]domain.Quote, error)
@@ -77,7 +81,10 @@ type Store interface {
 	ToggleWorkspacePin(context.Context, string, string, string, string) (bool, error)
 	ListScheduledJobs(context.Context) ([]domain.ScheduledJob, error)
 	CreateScheduledJob(context.Context, domain.ScheduledJob) (domain.ScheduledJob, error)
+	UpdateScheduledJob(context.Context, domain.ScheduledJob) (domain.ScheduledJob, error)
+	DeleteScheduledJob(context.Context, string) error
 	ToggleScheduledJob(context.Context, string) (domain.ScheduledJob, error)
+	RunScheduledJobNow(context.Context, string, time.Time, bool) error
 	ProcessDueJobs(context.Context, time.Time, bool) (int, error)
 	ListNotifications(context.Context, int) ([]domain.Notification, error)
 	MarkNotificationsRead(context.Context) error

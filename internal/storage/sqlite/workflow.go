@@ -133,6 +133,31 @@ func (s *Store) ListPullRequests(ctx context.Context, repoRef, status string) ([
 	return collect(rows, prFrom), nil
 }
 
+// UpdatePullRequest rewrites the title and description of a PR that is still open, so the PR can
+// grow with the work. Accepted and closed PRs are records and cannot be edited.
+func (s *Store) UpdatePullRequest(ctx context.Context, prRef, title, description string) (domain.PullRequest, error) {
+	p, err := s.GetPullRequest(ctx, prRef)
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	if p.Status != domain.PRPending {
+		return domain.PullRequest{}, fmt.Errorf("%w: only open PRs can be edited", domain.ErrInvalidTransition)
+	}
+	title, description = strings.TrimSpace(title), strings.TrimSpace(description)
+	if title == "" || description == "" {
+		return domain.PullRequest{}, fmt.Errorf("%w: PR title and description cannot be empty", domain.ErrInvalid)
+	}
+	changed, err := s.p().changes(ctx, `UPDATE pull_requests SET title=?,description=?,updated_at=? WHERE id=? AND status='open'`, title, description, nowText(), p.ID)
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	if changed == 0 {
+		return domain.PullRequest{}, fmt.Errorf("%w: PR state changed concurrently", domain.ErrInvalidTransition)
+	}
+	_ = s.RecordActivity(ctx, "pull_request", p.ID, "pull_request.updated", "")
+	return s.GetPullRequest(ctx, p.ID)
+}
+
 func (s *Store) ClosePullRequest(ctx context.Context, prRef string) (domain.PullRequest, error) {
 	p, err := s.GetPullRequest(ctx, prRef)
 	if err != nil {

@@ -8,6 +8,7 @@ Migrations live under `internal/storage/sqlite/migrations/` and are embedded in 
 
 - `0001_initial.sql` — repositories, logical branches, Issues, dependencies, PRs/completions, Projects, Concepts/relations, labels/milestones, repository settings and activity.
 - `0002_workspace_experience.sql` — app-level settings, notes, quotes, scheduled jobs/job runs, notifications, workspace profile and Important pins.
+- `0003_notes_labels_and_job_schedules.sql` — reusable note labels and assignments, calendar schedule fields, and one-time job completion state.
 
 A shipped migration is immutable. Add the next sequential migration for any schema change. The runner refuses a database created by a newer application rather than silently downgrading it.
 
@@ -22,7 +23,7 @@ A shipped migration is immutable. Add the next sequential migration for any sche
 | Concepts and semantic knowledge edges | `concepts`, `relations` |
 | Labels and milestones | `labels`, `issue_labels`, `milestones`, `issue_milestones` |
 | Audit-like timeline | `activity_events` |
-| Quick capture and quote rotation | `notes`, `quotes`, `app_settings` |
+| Quick capture and quote rotation | `notes`, `quotes`, `app_settings`, `note_labels`, `note_label_assignments` |
 | Profile and Important view | `workspace_profile`, `workspace_pins` |
 | Reminders and local inbox | `scheduled_jobs`, `job_runs`, `notifications` |
 

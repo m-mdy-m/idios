@@ -3,9 +3,9 @@ contact_links:
   - name: Question / discussion
     url: https://github.com/m-mdy-m/idios/discussions
     about: >
-      Ask questions and discuss design here — not in issues.
+      Questions, ideas and design discussion go here, not in issues.
   - name: Security vulnerability
     url: https://github.com/m-mdy-m/idios/security/advisories/new
     about: >
-      Report security issues privately via GitHub's advisory flow.
-      See docs/SECURITY.md for the full policy.
+      Report security problems privately. Please do not open a public issue.
+      See SECURITY.md for the policy.

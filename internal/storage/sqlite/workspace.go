@@ -29,52 +29,191 @@ CASE n.linked_entity_type
  WHEN 'note' THEN (SELECT n2.title FROM notes n2 WHERE n2.id=n.linked_entity_id)
  ELSE '' END AS linked_entity_label FROM notes n`
 
+func noteLabelFrom(r Row) domain.NoteLabel {
+	return domain.NoteLabel{ID: str(r, "id"), Name: str(r, "name"), Color: str(r, "color"), CreatedAt: parseTime(r["created_at"])}
+}
+
 func (s *Store) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	rows, err := s.p().all(ctx, noteSelect+` ORDER BY n.updated_at DESC,n.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, noteFrom), nil
+	notes := collect(rows, noteFrom)
+	if err := s.loadNoteLabels(ctx, notes); err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
+func (s *Store) loadNoteLabels(ctx context.Context, notes []domain.Note) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	byID := make(map[string][]domain.NoteLabel, len(notes))
+	// Keep each IN query comfortably under SQLite builds whose bind-variable limit is 999.
+	const batchSize = 400
+	for start := 0; start < len(notes); start += batchSize {
+		end := min(start+batchSize, len(notes))
+		args := make([]any, 0, end-start)
+		marks := make([]string, 0, end-start)
+		for _, note := range notes[start:end] {
+			marks = append(marks, "?")
+			args = append(args, note.ID)
+		}
+		rows, err := s.p().all(ctx, `SELECT a.note_id,l.id,l.name,l.color,l.created_at
+			FROM note_label_assignments a JOIN note_labels l ON l.id=a.label_id
+			WHERE a.note_id IN (`+strings.Join(marks, ",")+`) ORDER BY l.name COLLATE NOCASE`, args...)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			byID[str(row, "note_id")] = append(byID[str(row, "note_id")], noteLabelFrom(row))
+		}
+	}
+	for i := range notes {
+		notes[i].Labels = byID[notes[i].ID]
+	}
+	return nil
+}
+
+func (s *Store) ListNoteLabels(ctx context.Context) ([]domain.NoteLabel, error) {
+	rows, err := s.p().all(ctx, `SELECT id,name,color,created_at FROM note_labels ORDER BY name COLLATE NOCASE`)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, noteLabelFrom), nil
 }
 
 func (s *Store) CreateNote(ctx context.Context, title, content string) (domain.Note, error) {
+	return s.CreateNoteWithLabels(ctx, title, content, nil)
+}
+
+func (s *Store) CreateNoteWithLabels(ctx context.Context, title, content string, labels []string) (domain.Note, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return domain.Note{}, fmt.Errorf("%w: note title is required", domain.ErrInvalid)
 	}
 	id, now := domain.NewID(), nowText()
-	if _, err := s.p().changes(ctx, `INSERT INTO notes(id,title,content,created_at,updated_at) VALUES(?,?,?,?,?)`, id, title, strings.TrimSpace(content), now, now); err != nil {
+	err := s.run(ctx, func(p provider) error {
+		if _, err := p.changes(ctx, `INSERT INTO notes(id,title,content,created_at,updated_at) VALUES(?,?,?,?,?)`, id, title, strings.TrimSpace(content), now, now); err != nil {
+			return err
+		}
+		if err := setNoteLabels(ctx, p, id, labels); err != nil {
+			return err
+		}
+		return activity(ctx, p, "note", id, "note.created", marshalPayload(map[string]any{"title": title, "labels": labels}))
+	})
+	if err != nil {
 		return domain.Note{}, err
 	}
-	_ = s.RecordActivity(ctx, "note", id, "note.created", marshalPayload(map[string]string{"title": title}))
 	return s.getNote(ctx, id)
 }
 
 func (s *Store) UpdateNote(ctx context.Context, id, title, content string) (domain.Note, error) {
+	return s.updateNote(ctx, id, title, content, nil, false)
+}
+
+func (s *Store) UpdateNoteWithLabels(ctx context.Context, id, title, content string, labels []string) (domain.Note, error) {
+	return s.updateNote(ctx, id, title, content, labels, true)
+}
+
+func (s *Store) updateNote(ctx context.Context, id, title, content string, labels []string, replaceLabels bool) (domain.Note, error) {
 	title = strings.TrimSpace(title)
-	if title == "" {
-		return domain.Note{}, fmt.Errorf("%w: note title is required", domain.ErrInvalid)
+	if strings.TrimSpace(id) == "" || title == "" {
+		return domain.Note{}, fmt.Errorf("%w: note ID and title are required", domain.ErrInvalid)
 	}
-	changed, err := s.p().changes(ctx, `UPDATE notes SET title=?,content=?,updated_at=? WHERE id=?`, title, strings.TrimSpace(content), nowText(), id)
+	err := s.run(ctx, func(p provider) error {
+		changed, err := p.changes(ctx, `UPDATE notes SET title=?,content=?,updated_at=? WHERE id=?`, title, strings.TrimSpace(content), nowText(), id)
+		if err != nil {
+			return err
+		}
+		if changed == 0 {
+			return fmt.Errorf("%w: note %q", domain.ErrNotFound, id)
+		}
+		if replaceLabels {
+			if err := setNoteLabels(ctx, p, id, labels); err != nil {
+				return err
+			}
+		}
+		return activity(ctx, p, "note", id, "note.updated", marshalPayload(map[string]any{"title": title, "labels": labels}))
+	})
 	if err != nil {
 		return domain.Note{}, err
 	}
-	if changed == 0 {
-		return domain.Note{}, fmt.Errorf("%w: note %q", domain.ErrNotFound, id)
-	}
-	_ = s.RecordActivity(ctx, "note", id, "note.updated", marshalPayload(map[string]string{"title": title}))
 	return s.getNote(ctx, id)
 }
 
-func (s *Store) DeleteNote(ctx context.Context, id string) error {
-	changed, err := s.p().changes(ctx, `DELETE FROM notes WHERE id=?`, id)
-	if err != nil {
+func normalizeNoteLabels(labels []string) []string {
+	out := make([]string, 0, len(labels))
+	seen := map[string]bool{}
+	for _, label := range labels {
+		name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(label), "#"))
+		key := strings.ToLower(name)
+		if name == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+func setNoteLabels(ctx context.Context, p provider, noteID string, labels []string) error {
+	if _, err := p.changes(ctx, `DELETE FROM note_label_assignments WHERE note_id=?`, noteID); err != nil {
 		return err
 	}
-	if changed == 0 {
-		return fmt.Errorf("%w: note %q", domain.ErrNotFound, id)
+	for _, name := range normalizeNoteLabels(labels) {
+		labelID := domain.NewID()
+		if _, err := p.changes(ctx, `INSERT INTO note_labels(id,name,color,created_at) VALUES(?,?,?,?) ON CONFLICT(name) DO NOTHING`, labelID, name, noteLabelColor(name), nowText()); err != nil {
+			return err
+		}
+		row, err := p.must(ctx, "note label", `SELECT id FROM note_labels WHERE name=? COLLATE NOCASE`, name)
+		if err != nil {
+			return err
+		}
+		if _, err := p.changes(ctx, `INSERT INTO note_label_assignments(note_id,label_id,created_at) VALUES(?,?,?)`, noteID, str(row, "id"), nowText()); err != nil {
+			return err
+		}
 	}
-	return s.RecordActivity(ctx, "note", id, "note.deleted", "")
+	return cleanupUnusedNoteLabels(ctx, p)
+}
+
+func cleanupUnusedNoteLabels(ctx context.Context, p provider) error {
+	_, err := p.changes(ctx, `DELETE FROM note_labels WHERE NOT EXISTS (
+		SELECT 1 FROM note_label_assignments a WHERE a.label_id=note_labels.id
+	)`)
+	return err
+}
+
+func noteLabelColor(name string) string {
+	// Stable colors make a label recognizable across notes and application restarts.
+	colors := []string{"blue", "purple", "green", "orange", "pink", "cyan", "yellow", "accent"}
+	var hash uint32 = 2166136261
+	for _, r := range strings.ToLower(name) {
+		hash ^= uint32(r)
+		hash *= 16777619
+	}
+	return colors[int(hash)%len(colors)]
+}
+
+func (s *Store) DeleteNote(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("%w: note ID is required", domain.ErrInvalid)
+	}
+	return s.run(ctx, func(p provider) error {
+		changed, err := p.changes(ctx, `DELETE FROM notes WHERE id=?`, id)
+		if err != nil {
+			return err
+		}
+		if changed == 0 {
+			return fmt.Errorf("%w: note %q", domain.ErrNotFound, id)
+		}
+		if err := cleanupUnusedNoteLabels(ctx, p); err != nil {
+			return err
+		}
+		return activity(ctx, p, "note", id, "note.deleted", "")
+	})
 }
 
 func (s *Store) getNote(ctx context.Context, id string) (domain.Note, error) {
@@ -82,7 +221,11 @@ func (s *Store) getNote(ctx context.Context, id string) (domain.Note, error) {
 	if err != nil {
 		return domain.Note{}, err
 	}
-	return noteFrom(r), nil
+	notes := []domain.Note{noteFrom(r)}
+	if err := s.loadNoteLabels(ctx, notes); err != nil {
+		return domain.Note{}, err
+	}
+	return notes[0], nil
 }
 
 func (s *Store) LinkNote(ctx context.Context, noteID, entityType, entityRef string, graphVisible bool) error {
@@ -231,12 +374,26 @@ func (s *Store) ToggleWorkspacePin(ctx context.Context, entityType, entityRef, l
 	return added, err
 }
 
+const scheduledJobColumns = `id,name,description,action_type,schedule_type,interval_minutes,schedule_time,schedule_weekday,schedule_day,enabled,notify,next_run_at,last_run_at,completed_at,created_at,updated_at`
+
 func scheduledJobFrom(r Row) domain.ScheduledJob {
-	return domain.ScheduledJob{ID: str(r, "id"), Name: str(r, "name"), Description: str(r, "description"), ActionType: str(r, "action_type"), IntervalMinutes: int(i64(r["interval_minutes"])), Enabled: boolRow(r, "enabled"), Notify: boolRow(r, "notify"), NextRunAt: ptrTime(r["next_run_at"]), LastRunAt: ptrTime(r["last_run_at"]), CreatedAt: parseTime(r["created_at"]), UpdatedAt: parseTime(r["updated_at"])}
+	scheduleType := str(r, "schedule_type")
+	intervalMinutes := int(i64(r["interval_minutes"]))
+	if scheduleType != "" && scheduleType != domain.ScheduleInterval {
+		intervalMinutes = 0 // Keep the legacy SQLite column valid without exposing its sentinel value.
+	}
+	return domain.ScheduledJob{
+		ID: str(r, "id"), Name: str(r, "name"), Description: str(r, "description"), ActionType: str(r, "action_type"),
+		ScheduleType: scheduleType, IntervalMinutes: intervalMinutes,
+		ScheduleTime: str(r, "schedule_time"), ScheduleWeekday: int(i64(r["schedule_weekday"])), ScheduleDay: int(i64(r["schedule_day"])),
+		Enabled: boolRow(r, "enabled"), Notify: boolRow(r, "notify"), NextRunAt: ptrTime(r["next_run_at"]),
+		LastRunAt: ptrTime(r["last_run_at"]), CompletedAt: ptrTime(r["completed_at"]),
+		CreatedAt: parseTime(r["created_at"]), UpdatedAt: parseTime(r["updated_at"]),
+	}
 }
 
 func (s *Store) ListScheduledJobs(ctx context.Context) ([]domain.ScheduledJob, error) {
-	rows, err := s.p().all(ctx, `SELECT id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,last_run_at,created_at,updated_at FROM scheduled_jobs ORDER BY enabled DESC,next_run_at,name COLLATE NOCASE`)
+	rows, err := s.p().all(ctx, `SELECT `+scheduledJobColumns+` FROM scheduled_jobs ORDER BY completed_at IS NOT NULL, enabled DESC,next_run_at,name COLLATE NOCASE`)
 	if err != nil {
 		return nil, err
 	}
@@ -244,27 +401,85 @@ func (s *Store) ListScheduledJobs(ctx context.Context) ([]domain.ScheduledJob, e
 }
 
 func (s *Store) CreateScheduledJob(ctx context.Context, job domain.ScheduledJob) (domain.ScheduledJob, error) {
-	job.Name = strings.TrimSpace(job.Name)
-	if job.Name == "" || job.IntervalMinutes < 1 {
-		return domain.ScheduledJob{}, fmt.Errorf("%w: job name and a positive schedule interval are required", domain.ErrInvalid)
-	}
-	if job.ActionType == "" {
-		job.ActionType = "custom-reminder"
+	job, err := domain.PrepareScheduledJob(job, domain.Now().Local())
+	if err != nil {
+		return domain.ScheduledJob{}, err
 	}
 	if job.NextRunAt == nil {
-		next := domain.Now().Add(time.Duration(job.IntervalMinutes) * time.Minute)
-		job.NextRunAt = &next
+		return domain.ScheduledJob{}, fmt.Errorf("%w: next run time could not be calculated", domain.ErrInvalid)
 	}
 	id, now := domain.NewID(), nowText()
-	_, err := s.p().changes(ctx, `INSERT INTO scheduled_jobs(id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, job.Name, strings.TrimSpace(job.Description), job.ActionType, job.IntervalMinutes, boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), now, now)
+	err = s.run(ctx, func(p provider) error {
+		_, err := p.changes(ctx, `INSERT INTO scheduled_jobs(id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,created_at,updated_at,schedule_type,schedule_time,schedule_weekday,schedule_day,completed_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`, id, job.Name, job.Description, job.ActionType,
+			max(1, job.IntervalMinutes), boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), now, now,
+			job.ScheduleType, job.ScheduleTime, job.ScheduleWeekday, job.ScheduleDay)
+		if err != nil {
+			return err
+		}
+		return activity(ctx, p, "scheduled_job", id, "scheduled_job.created", marshalPayload(map[string]any{
+			"name": job.Name, "schedule_type": job.ScheduleType, "interval_minutes": job.IntervalMinutes,
+			"schedule_time": job.ScheduleTime, "schedule_weekday": job.ScheduleWeekday, "schedule_day": job.ScheduleDay,
+		}))
+	})
 	if err != nil {
 		return domain.ScheduledJob{}, err
 	}
 	return s.getScheduledJob(ctx, id)
 }
 
+func (s *Store) UpdateScheduledJob(ctx context.Context, job domain.ScheduledJob) (domain.ScheduledJob, error) {
+	if strings.TrimSpace(job.ID) == "" {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	job, err := domain.PrepareScheduledJob(job, domain.Now().Local())
+	if err != nil {
+		return domain.ScheduledJob{}, err
+	}
+	if job.NextRunAt == nil {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: next run time could not be calculated", domain.ErrInvalid)
+	}
+	now := nowText()
+	err = s.run(ctx, func(p provider) error {
+		changed, err := p.changes(ctx, `UPDATE scheduled_jobs SET name=?,description=?,action_type=?,schedule_type=?,interval_minutes=?,schedule_time=?,schedule_weekday=?,schedule_day=?,enabled=?,notify=?,next_run_at=?,completed_at=NULL,updated_at=? WHERE id=?`,
+			job.Name, job.Description, job.ActionType, job.ScheduleType, max(1, job.IntervalMinutes), job.ScheduleTime, job.ScheduleWeekday, job.ScheduleDay,
+			boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), now, job.ID)
+		if err != nil {
+			return err
+		}
+		if changed == 0 {
+			return fmt.Errorf("%w: scheduled job %q", domain.ErrNotFound, job.ID)
+		}
+		return activity(ctx, p, "scheduled_job", job.ID, "scheduled_job.updated", marshalPayload(map[string]any{
+			"name": job.Name, "schedule_type": job.ScheduleType, "interval_minutes": job.IntervalMinutes,
+			"schedule_time": job.ScheduleTime, "schedule_weekday": job.ScheduleWeekday, "schedule_day": job.ScheduleDay,
+		}))
+	})
+	if err != nil {
+		return domain.ScheduledJob{}, err
+	}
+	return s.getScheduledJob(ctx, job.ID)
+}
+
+func (s *Store) DeleteScheduledJob(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	return s.run(ctx, func(p provider) error {
+		changed, err := p.changes(ctx, `DELETE FROM scheduled_jobs WHERE id=?`, id)
+		if err != nil {
+			return err
+		}
+		if changed == 0 {
+			return fmt.Errorf("%w: scheduled job %q", domain.ErrNotFound, id)
+		}
+		return activity(ctx, p, "scheduled_job", id, "scheduled_job.deleted", "")
+	})
+}
+
 func (s *Store) getScheduledJob(ctx context.Context, id string) (domain.ScheduledJob, error) {
-	r, err := s.p().must(ctx, "scheduled job", `SELECT id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,last_run_at,created_at,updated_at FROM scheduled_jobs WHERE id=?`, id)
+	r, err := s.p().must(ctx, "scheduled job", `SELECT `+scheduledJobColumns+` FROM scheduled_jobs WHERE id=?`, id)
 	if err != nil {
 		return domain.ScheduledJob{}, err
 	}
@@ -272,54 +487,106 @@ func (s *Store) getScheduledJob(ctx context.Context, id string) (domain.Schedule
 }
 
 func (s *Store) ToggleScheduledJob(ctx context.Context, id string) (domain.ScheduledJob, error) {
-	changed, err := s.p().changes(ctx, `UPDATE scheduled_jobs SET enabled=1-enabled,updated_at=? WHERE id=?`, nowText(), id)
+	if strings.TrimSpace(id) == "" {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	now := domain.Now().Local()
+	err := s.run(ctx, func(p provider) error {
+		r, err := p.must(ctx, "scheduled job "+id, `SELECT `+scheduledJobColumns+` FROM scheduled_jobs WHERE id=?`, id)
+		if err != nil {
+			return err
+		}
+		job := scheduledJobFrom(r)
+		if !job.Enabled && job.CompletedAt != nil {
+			return fmt.Errorf("%w: this one-time job has completed; edit its date/time to schedule it again", domain.ErrInvalidTransition)
+		}
+		enabled := !job.Enabled
+		if job.NextRunAt == nil || job.NextRunAt.IsZero() {
+			if job.ScheduleType == domain.ScheduleOnce {
+				return fmt.Errorf("%w: one-time job has no scheduled date/time; edit it to reschedule", domain.ErrInvalid)
+			}
+			prepared, err := domain.PrepareScheduledJob(job, now)
+			if err != nil {
+				return err
+			}
+			job.NextRunAt = prepared.NextRunAt
+		} else if enabled && !job.NextRunAt.After(now) && job.ScheduleType != domain.ScheduleOnce {
+			next, err := domain.NextScheduledOccurrence(job, now)
+			if err != nil {
+				return err
+			}
+			job.NextRunAt = &next
+		}
+		if job.NextRunAt == nil {
+			return fmt.Errorf("%w: next run time could not be calculated", domain.ErrInvalid)
+		}
+		_, err = p.changes(ctx, `UPDATE scheduled_jobs SET enabled=?,next_run_at=?,updated_at=? WHERE id=?`, boolInt(enabled), timeText(*job.NextRunAt), nowText(), id)
+		if err != nil {
+			return err
+		}
+		return activity(ctx, p, "scheduled_job", id, "scheduled_job.toggled", marshalPayload(map[string]bool{"enabled": enabled}))
+	})
 	if err != nil {
 		return domain.ScheduledJob{}, err
 	}
-	if changed == 0 {
-		return domain.ScheduledJob{}, fmt.Errorf("%w: scheduled job %q", domain.ErrNotFound, id)
-	}
 	return s.getScheduledJob(ctx, id)
+}
+
+func scheduledReminderMessage(job domain.ScheduledJob) string {
+	message := job.Description
+	switch job.ActionType {
+	case "daily-plan":
+		message = "Time to plan today's work. Review pinned items and open Issues."
+	case "weekly-review":
+		message = "Time for a weekly review. Check activity, completed work and next priorities."
+	case "blocked-issues":
+		message = "Review the graph for Issues waiting on unfinished prerequisites."
+	case "open-issues":
+		message = "Review your open and in-progress Issues and choose the next small step."
+	default:
+		if strings.TrimSpace(message) == "" {
+			message = "Your scheduled IDIOS reminder is due."
+		}
+	}
+	return message
+}
+
+func executeScheduledJob(ctx context.Context, p provider, job domain.ScheduledJob, now time.Time, notificationsEnabled bool) error {
+	message := scheduledReminderMessage(job)
+	if notificationsEnabled && job.Notify {
+		if _, err := p.changes(ctx, `INSERT INTO notifications(id,title,body,level,created_at) VALUES(?,?,?,?,?)`, domain.NewID(), job.Name, message, "info", timeText(now)); err != nil {
+			return err
+		}
+	}
+	if _, err := p.changes(ctx, `INSERT INTO job_runs(id,job_id,status,message,created_at) VALUES(?,?,?,?,?)`, domain.NewID(), job.ID, "completed", message, timeText(now)); err != nil {
+		return err
+	}
+	if job.ScheduleType == domain.ScheduleOnce {
+		_, err := p.changes(ctx, `UPDATE scheduled_jobs SET enabled=0,last_run_at=?,next_run_at=?,completed_at=?,updated_at=? WHERE id=?`, timeText(now), timeText(now), timeText(now), timeText(now), job.ID)
+		return err
+	}
+	next, err := domain.NextScheduledOccurrence(job, now)
+	if err != nil {
+		return err
+	}
+	_, err = p.changes(ctx, `UPDATE scheduled_jobs SET last_run_at=?,next_run_at=?,completed_at=NULL,updated_at=? WHERE id=?`, timeText(now), timeText(next), timeText(now), job.ID)
+	return err
 }
 
 func (s *Store) ProcessDueJobs(ctx context.Context, now time.Time, notificationsEnabled bool) (int, error) {
 	if now.IsZero() {
 		now = domain.Now()
 	}
+	now = now.Local()
 	processed := 0
 	err := s.run(ctx, func(p provider) error {
-		rows, err := p.all(ctx, `SELECT id,name,description,action_type,interval_minutes,notify FROM scheduled_jobs WHERE enabled=1 AND next_run_at<=? ORDER BY next_run_at`, timeText(now))
+		rows, err := p.all(ctx, `SELECT `+scheduledJobColumns+` FROM scheduled_jobs WHERE enabled=1 AND completed_at IS NULL AND next_run_at<=? ORDER BY next_run_at,id`, timeText(now))
 		if err != nil {
 			return err
 		}
-		for _, r := range rows {
-			id, name, description, action := str(r, "id"), str(r, "name"), str(r, "description"), str(r, "action_type")
-			message := description
-			switch action {
-			case "daily-plan":
-				message = "Time to plan today's work. Review pinned items and open Issues."
-			case "weekly-review":
-				message = "Time for a weekly review. Check activity, completed work and next priorities."
-			case "blocked-issues":
-				message = "Review the graph for Issues waiting on unfinished prerequisites."
-			case "open-issues":
-				message = "Review your open and in-progress Issues and choose the next small step."
-			default:
-				if strings.TrimSpace(message) == "" {
-					message = "Your scheduled IDIOS reminder is due."
-				}
-			}
-			if notificationsEnabled && boolRow(r, "notify") {
-				if _, err := p.changes(ctx, `INSERT INTO notifications(id,title,body,level,created_at) VALUES(?,?,?,?,?)`, domain.NewID(), name, message, "info", timeText(now)); err != nil {
-					return err
-				}
-			}
-			if _, err := p.changes(ctx, `INSERT INTO job_runs(id,job_id,status,message,created_at) VALUES(?,?,?,?,?)`, domain.NewID(), id, "completed", message, timeText(now)); err != nil {
-				return err
-			}
-			interval := max(1, int(i64(r["interval_minutes"])))
-			next := now.Add(time.Duration(interval) * time.Minute)
-			if _, err := p.changes(ctx, `UPDATE scheduled_jobs SET last_run_at=?,next_run_at=?,updated_at=? WHERE id=?`, timeText(now), timeText(next), timeText(now), id); err != nil {
+		for _, row := range rows {
+			job := scheduledJobFrom(row)
+			if err := executeScheduledJob(ctx, p, job, now, notificationsEnabled); err != nil {
 				return err
 			}
 			processed++
@@ -327,6 +594,27 @@ func (s *Store) ProcessDueJobs(ctx context.Context, now time.Time, notifications
 		return nil
 	})
 	return processed, err
+}
+
+func (s *Store) RunScheduledJobNow(ctx context.Context, id string, now time.Time, notificationsEnabled bool) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	if now.IsZero() {
+		now = domain.Now()
+	}
+	now = now.Local()
+	return s.run(ctx, func(p provider) error {
+		row, err := p.must(ctx, "scheduled job "+id, `SELECT `+scheduledJobColumns+` FROM scheduled_jobs WHERE id=?`, id)
+		if err != nil {
+			return err
+		}
+		job := scheduledJobFrom(row)
+		if job.CompletedAt != nil {
+			return fmt.Errorf("%w: this one-time job has already completed; edit its date/time to run it again", domain.ErrInvalidTransition)
+		}
+		return executeScheduledJob(ctx, p, job, now, notificationsEnabled)
+	})
 }
 
 func notificationFrom(r Row) domain.Notification {

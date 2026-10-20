@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// DefaultDBPath resolves the Engine database override or the user's local-first default.
+// DefaultDBPath resolves the Engine database override or the default path in the user's home directory.
 func DefaultDBPath() string {
 	if v := strings.TrimSpace(os.Getenv("IDIOS_DB")); v != "" {
 		return v

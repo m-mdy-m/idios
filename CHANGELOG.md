@@ -6,6 +6,18 @@ All notable changes to IDIOS are documented here. This file follows
 
 ## [1.0.1] — Unreleased
 
+### Added
+
+- **Edit pull requests:** an open pull request can now be edited (title and description) in the TUI (`Edit pull request`) and in the CLI (`idios pr edit`), so it can follow the work until it is accepted. Accepted and closed pull requests stay read-only.
+
+### Changed
+
+- **Graph page:** rewritten to be readable. It now opens with a summary and a short legend, then **What is blocked right now** (each waiting Issue with its unfinished prerequisite), then every node with its links worded as sentences (“has pull request”, “uses concept”, “waits for”) and ordered blocking → workflow → context. Each link is printed once, under the more central node, instead of repeating relationship groups plus a separate all-nodes list. Ownership links (repository owns issue, PR targets branch) and unlinked branches/labels/milestones are hidden by default behind **Ownership links: hidden → show**; a focused graph has a **Distance** control and shows links in both directions. Long lists say how many nodes were left out instead of silently stopping at 40.
+- **Templates:** the bundled Issue (`task`, `bug`, `feature`, `research`) and Pull Request templates in `internal/config/defaults.json` are shorter and use fill-in lines, a checkable “Done when” list, a verification block for real command output, and a risk/undo section. The GitHub issue forms and pull request template were rewritten the same way (duplicate-search and latest-version checks, “where does it happen”, version field, project checks and compatibility checklist). `.github/ISSUE_TEMPLATE/config.yml` now points to `SECURITY.md` at the repository root.
+- **TUI redesign:** navigation items are now tabs (filled for the current page, quiet otherwise), the top bar no longer repeats the tabs, the repository header is one line instead of a banner, and panel titles use the accent color. The footer shows only the keys that work on the current screen (forms, filter mode, intro, lists).
+- **Themes:** `midnight` (now cyan instead of purple), `paper` and `forest` were retuned for contrast, and `ocean`, `ember` and a high-contrast `contrast` theme were added. Packaged themes are now always loaded from the application, so configs written by older releases no longer freeze the old purple colors. and the new optional `on_accent` token controls text on accent backgrounds (fixes unreadable button text on light themes).
+- **Copy:** all in-app text was rewritten to say what a screen is for and what to do next. Marketing phrases and repeated "local-first" taglines were removed. The intro screen now shows a "Get started" checklist that follows the real state of the database.
+
 ### Fixed
 
 - **Clean end-user downloads:** exclude `idios-tui-demo` and extended guides from portable archives and native installers. User-facing packages contain only the `idios` CLI, clean `idios-tui`, `README.md`, and `LICENSE`; the demo executable and extended guides remain available in the source repository for development and CI smoke tests.

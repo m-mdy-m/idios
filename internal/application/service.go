@@ -231,6 +231,24 @@ func (s *Service) GetPullRequest(ctx context.Context, ref string) (domain.PullRe
 func (s *Service) ListPullRequests(ctx context.Context, repo, status string) ([]domain.PullRequest, error) {
 	return s.store.ListPullRequests(ctx, repo, status)
 }
+
+// UpdatePullRequest edits an open PR. A blank title or description keeps the current value.
+func (s *Service) UpdatePullRequest(ctx context.Context, ref, title, description string) (domain.PullRequest, error) {
+	p, err := s.store.GetPullRequest(ctx, ref)
+	if err != nil {
+		return p, err
+	}
+	if strings.TrimSpace(title) == "" && strings.TrimSpace(description) == "" {
+		return p, fmt.Errorf("%w: give a new title or description", domain.ErrInvalid)
+	}
+	if strings.TrimSpace(title) == "" {
+		title = p.Title
+	}
+	if strings.TrimSpace(description) == "" {
+		description = p.Description
+	}
+	return s.store.UpdatePullRequest(ctx, ref, title, description)
+}
 func (s *Service) ClosePullRequest(ctx context.Context, ref string) (domain.PullRequest, error) {
 	return s.store.ClosePullRequest(ctx, ref)
 }
@@ -377,17 +395,32 @@ func (s *Service) SeedDemo(ctx context.Context) (domain.SeedReport, error) {
 func (s *Service) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	return s.store.ListNotes(ctx)
 }
+func (s *Service) ListNoteLabels(ctx context.Context) ([]domain.NoteLabel, error) {
+	return s.store.ListNoteLabels(ctx)
+}
 func (s *Service) CreateNote(ctx context.Context, title, content string) (domain.Note, error) {
 	if strings.TrimSpace(title) == "" {
 		return domain.Note{}, fmt.Errorf("%w: note title is required", domain.ErrInvalid)
 	}
 	return s.store.CreateNote(ctx, title, content)
 }
+func (s *Service) CreateNoteWithLabels(ctx context.Context, title, content string, labels []string) (domain.Note, error) {
+	if strings.TrimSpace(title) == "" {
+		return domain.Note{}, fmt.Errorf("%w: note title is required", domain.ErrInvalid)
+	}
+	return s.store.CreateNoteWithLabels(ctx, title, content, labels)
+}
 func (s *Service) UpdateNote(ctx context.Context, id, title, content string) (domain.Note, error) {
 	if strings.TrimSpace(id) == "" || strings.TrimSpace(title) == "" {
 		return domain.Note{}, fmt.Errorf("%w: note ID and title are required", domain.ErrInvalid)
 	}
 	return s.store.UpdateNote(ctx, id, title, content)
+}
+func (s *Service) UpdateNoteWithLabels(ctx context.Context, id, title, content string, labels []string) (domain.Note, error) {
+	if strings.TrimSpace(id) == "" || strings.TrimSpace(title) == "" {
+		return domain.Note{}, fmt.Errorf("%w: note ID and title are required", domain.ErrInvalid)
+	}
+	return s.store.UpdateNoteWithLabels(ctx, id, title, content, labels)
 }
 func (s *Service) DeleteNote(ctx context.Context, id string) error {
 	return s.store.DeleteNote(ctx, id)
@@ -426,17 +459,65 @@ func (s *Service) ToggleWorkspacePin(ctx context.Context, entityType, entityRef,
 func (s *Service) ListScheduledJobs(ctx context.Context) ([]domain.ScheduledJob, error) {
 	return s.store.ListScheduledJobs(ctx)
 }
+func validateScheduledJobAction(action string) error {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		action = "custom-reminder"
+	}
+	switch action {
+	case "daily-plan", "weekly-review", "blocked-issues", "open-issues", "custom-reminder":
+		return nil
+	default:
+		return fmt.Errorf("%w: unsupported reminder kind %q", domain.ErrInvalid, action)
+	}
+}
+
 func (s *Service) CreateScheduledJob(ctx context.Context, job domain.ScheduledJob) (domain.ScheduledJob, error) {
-	if strings.TrimSpace(job.Name) == "" {
-		return domain.ScheduledJob{}, fmt.Errorf("%w: job name is required", domain.ErrInvalid)
+	if err := validateScheduledJobAction(job.ActionType); err != nil {
+		return domain.ScheduledJob{}, err
 	}
-	if job.IntervalMinutes < 1 {
-		return domain.ScheduledJob{}, fmt.Errorf("%w: job interval must be at least one minute", domain.ErrInvalid)
+	prepared, err := domain.PrepareScheduledJob(job, domain.Now().Local())
+	if err != nil {
+		return domain.ScheduledJob{}, err
 	}
-	return s.store.CreateScheduledJob(ctx, job)
+	if prepared.ScheduleType == domain.ScheduleOnce && (prepared.NextRunAt == nil || !prepared.NextRunAt.After(domain.Now())) {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: one-time job date and time must be in the future", domain.ErrInvalid)
+	}
+	return s.store.CreateScheduledJob(ctx, prepared)
+}
+func (s *Service) UpdateScheduledJob(ctx context.Context, job domain.ScheduledJob) (domain.ScheduledJob, error) {
+	if strings.TrimSpace(job.ID) == "" {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	if err := validateScheduledJobAction(job.ActionType); err != nil {
+		return domain.ScheduledJob{}, err
+	}
+	prepared, err := domain.PrepareScheduledJob(job, domain.Now().Local())
+	if err != nil {
+		return domain.ScheduledJob{}, err
+	}
+	if prepared.ScheduleType == domain.ScheduleOnce && (prepared.NextRunAt == nil || !prepared.NextRunAt.After(domain.Now())) {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: one-time job date and time must be in the future", domain.ErrInvalid)
+	}
+	return s.store.UpdateScheduledJob(ctx, prepared)
+}
+func (s *Service) DeleteScheduledJob(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	return s.store.DeleteScheduledJob(ctx, id)
 }
 func (s *Service) ToggleScheduledJob(ctx context.Context, id string) (domain.ScheduledJob, error) {
+	if strings.TrimSpace(id) == "" {
+		return domain.ScheduledJob{}, fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
 	return s.store.ToggleScheduledJob(ctx, id)
+}
+func (s *Service) RunScheduledJobNow(ctx context.Context, id string, now time.Time, notificationsEnabled bool) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("%w: job ID is required", domain.ErrInvalid)
+	}
+	return s.store.RunScheduledJobNow(ctx, id, now, notificationsEnabled)
 }
 func (s *Service) ProcessDueJobs(ctx context.Context, now time.Time, notificationsEnabled bool) (int, error) {
 	return s.store.ProcessDueJobs(ctx, now, notificationsEnabled)

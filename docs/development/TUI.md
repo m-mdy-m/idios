@@ -50,6 +50,18 @@ The UI form editor is implemented in `update.go`, `helpers.go`, and `view_detail
 
 Templates are local text scaffolds. Do not describe them as creating GitHub's `.github` files, Git commits, branches, or remote Pull Requests; IDIOS currently stores the resulting prose in its local SQLite records. User instructions and JSON examples live in `docs/user/ISSUE_AND_PR_TEMPLATES.md`.
 
+## Graph page
+
+The Graph page is a presentation of the graph returned by `Application.Graph`; it must not infer relations or apply blocker policy.
+
+- `graph_view.go` is pure (no terminal types) and holds `buildGraphLayout`, the word/kind table for stored edge types (`graphPhrases`) and the ordering rules. It is unit-tested without a terminal.
+- `view_graph.go` draws that layout with the canvas primitives.
+- Edge kinds are `blocking` (only `depends_on`), `workflow`, `context` and `structure`. An unknown stored relation type is always `context`, so a new semantic relation can never look like a blocker. When adding an edge type to `storage/sqlite/graph.go`, add it to `graphPhrases` too.
+- Each edge is printed once, under the node with the lower `graphTypeRank` (the focused node always wins), using the forward phrase from the source side or the reverse phrase from the target side.
+- `structure` links are hidden unless `model.graphStructure` is on; `branch`, `label` and `milestone` nodes with no visible links are dropped with them and reported in the summary.
+- `graphLayout.order` is the single source of truth for selectable rows. `cursorItems` (navigation) and the renderer's `selectLines` must stay in the same order; `TestGraphPageSelectableRowsMatchKeyboardItems` guards this.
+- Lists are capped (`graphMaxGroups`, `graphMaxOthers`) and the page says how many nodes were left out. Status words (`[BLOCKED]`, `[OPEN]`) are always printed, never color alone.
+
 ## Keyboard and interaction
 
 Shortcut bindings are user-configurable in the `keyboard` object. `Update` dispatches a configured action before applying normal navigation keys. Avoid ambiguous duplicate bindings; the action order in `shortcutAction` defines precedence. Every primary destination should remain usable without a mouse.

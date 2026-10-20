@@ -12,7 +12,7 @@ import (
 // printHelp lists the real command table, so help cannot drift away from what dispatch
 // actually accepts. Per-command flags live in `idios help <command>`.
 func printHelp(w io.Writer) {
-	fmt.Fprint(w, `IDIOS — local-first work and knowledge graph
+	fmt.Fprint(w, `IDIOS — issues, projects and notes with dependencies
 
 Usage:
   idios [--db PATH] [--json] [--verbose] COMMAND [FLAGS]
@@ -42,8 +42,9 @@ References:
 Workflow:
   1. idios issue create --repo CPU --title 'Learn CPU'
   2. idios issue start --id CPU#1
-  3. idios pr create --issue CPU#1 --description 'What I learned and the result'
-  4. idios pr accept --id CPU!1 --summary 'Core concepts reviewed'
+  3. idios pr create --issue CPU#1 --description 'What I have done so far'
+  4. idios pr edit --id CPU!1 --description 'Updated progress'   (repeat while you work)
+  5. idios pr accept --id CPU!1 --summary 'Core concepts reviewed'   (issue becomes done)
 
 An Issue can become done only through an accepted PR. No real Git commit, file merge,
 or non-main branch operations are performed in v1. See docs/user/WORKSPACE_GUIDE.md.

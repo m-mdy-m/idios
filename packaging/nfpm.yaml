@@ -4,7 +4,7 @@ platform: linux
 version: ${VERSION}
 version_schema: semver
 maintainer: IDIOS contributors
-description: Local-first workspace for projects, issues, ideas, and connected knowledge.
+description: Terminal tracker for repositories, issues with dependencies, projects, concepts and notes.
 vendor: IDIOS
 homepage: https://github.com/m-mdy-m/idios
 license: MPL-2.0

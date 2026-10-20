@@ -2,11 +2,15 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/domain"
+	"idios/internal/storage/sqlite"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -93,7 +97,7 @@ func TestGraphViewShowsTypedBlockingRelationshipAndClickableNodes(t *testing.T) 
 		},
 	}
 	view := m.View()
-	for _, want := range []string{"Relationship map", "depends_on · BLOCKING", "uses_concept", "CPU#4", "ARLIZ#3", "Electricity"} {
+	for _, want := range []string{"What is blocked right now", "waits for", "[BLOCKED]", "uses concept", "CPU#4", "ARLIZ#3", "Electricity"} {
 		if !strings.Contains(view.Content, want) {
 			t.Errorf("graph view does not show %q", want)
 		}
@@ -291,5 +295,113 @@ func TestCleanAndDemoTUIAreVisiblySeparatedWithoutInAppSeedAction(t *testing.T) 
 	}
 	if strings.Contains(strings.ToLower(demoView.Content), "load demo workspace") {
 		t.Fatal("demo TUI must not offer a redundant in-app demo-loading action")
+	}
+}
+
+func TestScheduledJobFormParsesFlexibleSchedules(t *testing.T) {
+	interval, err := parseScheduledJobFields("interval", "90m")
+	if err != nil || interval.IntervalMinutes != 90 {
+		t.Fatalf("parsed 90m interval = %+v err=%v", interval, err)
+	}
+
+	weekly, err := parseScheduledJobFields("weekly", "Monday 09:30")
+	if err != nil || weekly.ScheduleWeekday != int(time.Monday) || weekly.ScheduleTime != "09:30" {
+		t.Fatalf("parsed weekly schedule = %+v err=%v", weekly, err)
+	}
+
+	monthly, err := parseScheduledJobFields("monthly", "31 17:45")
+	if err != nil || monthly.ScheduleDay != 31 || monthly.ScheduleTime != "17:45" {
+		t.Fatalf("parsed monthly schedule = %+v err=%v", monthly, err)
+	}
+
+	future := time.Now().Local().Add(48 * time.Hour).Truncate(time.Minute)
+	once, err := parseScheduledJobFields("once", future.Format("2006-01-02 15:04"))
+	if err != nil || once.NextRunAt == nil || !once.NextRunAt.Equal(future) {
+		t.Fatalf("parsed one-time schedule = %+v err=%v, want %s", once, err, future)
+	}
+
+	if _, err := parseScheduledJobFields("daily", "tomorrow morning"); err == nil {
+		t.Fatal("invalid daily time unexpectedly parsed")
+	}
+}
+
+func TestNotesFilterUsesSharedLabelsAndSearch(t *testing.T) {
+	m := newModel(context.Background(), nil, "", Options{NoColor: true})
+	m.notes = []domain.Note{
+		{ID: "one", Title: "Scheduler idea", Content: "Interval jobs", Labels: []domain.NoteLabel{{Name: "research"}, {Name: "idea"}}},
+		{ID: "two", Title: "Book notes", Content: "Read later", Labels: []domain.NoteLabel{{Name: "reading"}}},
+	}
+	m.activeNoteLabel = "idea"
+	if got := m.filteredNotes(); len(got) != 1 || got[0].ID != "one" {
+		t.Fatalf("label filter returned %+v, want only note one", got)
+	}
+	m.search = "book"
+	if got := m.filteredNotes(); len(got) != 0 {
+		t.Fatalf("combined label + text filter returned %+v, want empty", got)
+	}
+	m.activeNoteLabel, m.search = "", "#reading"
+	if got := m.filteredNotes(); len(got) != 1 || got[0].ID != "two" {
+		t.Fatalf("search did not match note labels: %+v", got)
+	}
+}
+
+func TestWorkspacePagesExposeNoteTagsAndJobControls(t *testing.T) {
+	m := newModel(context.Background(), nil, "", Options{NoColor: true})
+	m.width, m.height, m.page = 120, 45, pageNotes
+	m.selectedNoteID = "note-a"
+	m.notes = []domain.Note{{ID: "note-a", Title: "Design thoughts", Content: "Keep labels reusable", Labels: []domain.NoteLabel{{ID: "tag-a", Name: "idea"}, {ID: "tag-b", Name: "research"}}}}
+	m.noteLabels = []domain.NoteLabel{{Name: "idea"}, {Name: "research"}}
+	view := m.View()
+	for _, want := range []string{"#idea", "#research", "Labels", "Design thoughts"} {
+		if !strings.Contains(view.Content, want) {
+			t.Errorf("Notes view does not include %q", want)
+		}
+	}
+
+	m.page = pageJobs
+	future := time.Now().Add(time.Hour)
+	m.jobs = []domain.ScheduledJob{{ID: "job-a", Name: "Hourly review", ScheduleType: domain.ScheduleInterval, IntervalMinutes: 60, Enabled: true, Notify: true, NextRunAt: &future}}
+	view = m.View()
+	for _, want := range []string{"Hourly review", "Edit schedule", "Run now", "Delete", "Pause"} {
+		if !strings.Contains(view.Content, want) {
+			t.Errorf("Jobs view does not include %q", want)
+		}
+	}
+}
+
+func TestStartupProcessesOverdueJobsAndRefreshesState(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.OpenStore(filepath.Join(t.TempDir(), "startup-jobs.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	due := time.Now().Local().Add(-time.Minute)
+	job, err := store.CreateScheduledJob(ctx, domain.ScheduledJob{
+		Name: "Overdue one-time reminder", ActionType: "custom-reminder", ScheduleType: domain.ScheduleOnce,
+		NextRunAt: &due, Enabled: true, Notify: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.Notifications.Enabled = true
+	m := newModel(ctx, application.New(store), "startup-jobs.sqlite3", Options{NoColor: true, Config: cfg})
+
+	_, cmd := m.Update(snapshotMsg(snapshot{jobs: []domain.ScheduledJob{job}}))
+	if cmd == nil {
+		t.Fatal("first successful snapshot did not schedule startup catch-up")
+	}
+	processed, ok := cmd().(schedulerProcessedMsg)
+	if !ok || processed.err != nil || processed.count != 1 {
+		t.Fatalf("startup catch-up = %#v; want one processed job without error", processed)
+	}
+	m.Update(processed)
+	if len(m.jobs) != 1 || m.jobs[0].CompletedAt == nil || m.jobs[0].Enabled {
+		t.Fatalf("startup catch-up did not refresh one-time job state: %+v", m.jobs)
+	}
+	if len(m.notifications) != 1 || m.notifications[0].Title != job.Name {
+		t.Fatalf("startup catch-up did not refresh notification inbox: %+v", m.notifications)
 	}
 }

@@ -9,7 +9,7 @@ import (
 func (m *model) renderIssueDetail(c *canvas, p palette) {
 	issue := m.findIssue(m.selectedIssueRef)
 	if issue == nil {
-		c.panel("ISSUE NOT FOUND", m.selectedIssueRef, "The Issue may have been removed. Refresh and return to the list.")
+		c.panel("ISSUE NOT FOUND", m.selectedIssueRef, "It may have been deleted. Go back and refresh the list.")
 		c.buttonRow(buttonSpec{"← Back", "back:now", false})
 		return
 	}
@@ -17,8 +17,8 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 	c.muted(fmt.Sprintf(copyText.text("%s  ·  Issue #%d  ·  created %s"), issue.RepositoryName, issue.Number, issue.CreatedAt.Format("2006-01-02")))
 	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open repository", "repo:" + issue.RepositoryName, false}, buttonSpec{"View graph", "issue-action:graph", false}, buttonSpec{"Mark important", "pin:issue:" + issueRef(*issue), false})
 	statusToneValue := statusTone(string(issue.Status), issue.Blocked)
-	c.panel("STATUS", p.badge(statusToneValue, string(issue.Status)), fmt.Sprintf(copyText.text("Priority: %s"), fallback(issue.Priority, "normal")), fmt.Sprintf("Blocked: %t", issue.Blocked))
-	c.panel("DESCRIPTION", fallback(issue.Description, "No description. Add context when creating the Issue; record final outcomes in its PR."))
+	c.panel("STATUS", p.badge(statusToneValue, string(issue.Status)), fmt.Sprintf(copyText.text("Priority: %s"), fallback(issue.Priority, "normal")), "Blocked: "+yesNo(issue.Blocked))
+	c.panel("DESCRIPTION", fallback(issue.Description, "No description."))
 	if labels := m.issueLabels[issue.ID]; len(labels) > 0 {
 		c.title("Labels")
 		items := make([]buttonSpec, 0, len(labels))
@@ -27,7 +27,7 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 		}
 		c.buttonRow(items...)
 	} else {
-		c.muted("Labels: none assigned")
+		c.muted("No labels")
 	}
 	if milestones := m.issueMilestones[issue.ID]; len(milestones) > 0 {
 		c.title("Milestones")
@@ -39,7 +39,7 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 			c.muted(detail)
 		}
 	} else {
-		c.muted("Milestone: none assigned")
+		c.muted("No milestone")
 	}
 	if issue.Blocked {
 		c.title("Prerequisites blocking this Issue")
@@ -57,7 +57,7 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 		c.buttonRow(buttonSpec{"▶ Start issue", "issue-action:start", true})
 	}
 	if issue.Status == domain.IssueOpen && issue.Blocked {
-		c.muted("Start is disabled until all blocking prerequisites are complete.")
+		c.muted("This issue cannot start until the prerequisites above are done.")
 	}
 	if issue.Status == domain.IssueInProgress {
 		c.buttonRow(buttonSpec{"↗ Create pull request", "issue-action:pr", true})
@@ -79,20 +79,20 @@ func (m *model) renderIssueDetail(c *canvas, p palette) {
 func (m *model) renderPRDetail(c *canvas, p palette) {
 	pr := m.findPR(m.selectedPRRef)
 	if pr == nil {
-		c.panel("PULL REQUEST NOT FOUND", m.selectedPRRef, "Return to the PR list and refresh.")
+		c.panel("PULL REQUEST NOT FOUND", m.selectedPRRef, "Go back and refresh the list.")
 		c.buttonRow(buttonSpec{"← Back", "back:now", false})
 		return
 	}
 	c.title(pr.Title)
 	c.muted(fmt.Sprintf(copyText.text("%s  ·  Pull request #%d  ·  Issue %s#%d"), pr.RepositoryName, pr.Number, pr.RepositoryName, pr.IssueNumber))
 	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"Open linked Issue", "pr-action:issue", false}, buttonSpec{"Open repository", "repo:" + pr.RepositoryName, false})
-	c.panel("REVIEW STATUS", p.badge(statusTone(string(pr.Status), false), string(pr.Status)), "Target branch: "+pr.TargetBranchName, "Completion on main is recorded only after acceptance.")
-	c.panel("WORK EXPLANATION", fallback(pr.Description, "No explanation supplied."))
+	c.panel("REVIEW STATUS", p.badge(statusTone(string(pr.Status), false), string(pr.Status)), "Target branch: "+pr.TargetBranchName, "Open: you can still edit it. Accepting it marks the issue done.")
+	c.panel("WORK EXPLANATION", fallback(pr.Description, "No description."))
 	if pr.Status == domain.PRPending {
-		c.buttonRow(buttonSpec{"✓ Accept & record completion", "pr-action:accept", true}, buttonSpec{"Close without completion", "pr-action:close", false})
+		c.buttonRow(buttonSpec{"✎ Edit pull request", "pr-action:edit", true}, buttonSpec{"✓ Accept: issue is done", "pr-action:accept", false}, buttonSpec{"Close without completing", "pr-action:close", false})
 	}
 	if pr.Status == domain.PRAccepted {
-		c.panel("ACCEPTED", "This PR already has a Completion Record.")
+		c.panel("ACCEPTED", "This pull request was accepted. Its issue is done.")
 	}
 }
 
@@ -126,7 +126,7 @@ func (m *model) renderProjectDetail(c *canvas, p palette) {
 		c.end()
 	}
 	if len(issues) == 0 {
-		c.panel("EMPTY PROJECT", "Add an Issue from any repository using a reference such as CPU#4.")
+		c.panel("NO ISSUES YET", "Choose “+ Add Issue” and enter a reference such as CPU#4.")
 	}
 }
 
@@ -138,7 +138,7 @@ func (m *model) renderConceptDetail(c *canvas, p palette) {
 		return
 	}
 	c.title("◇ " + concept.Name)
-	c.muted("Shared knowledge node · concept detail")
+	c.muted("Concept")
 	c.buttonRow(buttonSpec{"← Back", "back:now", false}, buttonSpec{"View connected graph", "graph:focus-concept:" + concept.Name, true})
 	c.panel("DESCRIPTION", fallback(concept.Description, "No description yet."))
 	c.title("Connections")
@@ -162,7 +162,7 @@ func (m *model) renderConceptDetail(c *canvas, p palette) {
 		c.end()
 	}
 	if len(seen) == 0 {
-		c.muted("No linked nodes yet. Link the Concept to an Issue to build context.")
+		c.muted("Not linked to anything yet. Open an issue and choose “Link concept”.")
 	}
 }
 
@@ -227,6 +227,8 @@ func (m *model) renderForm(c *canvas, p palette) {
 		submit = "Create pull request"
 	case formAcceptPR:
 		submit = "Accept & record completion"
+	case formEditPR:
+		submit = "Save changes"
 	case formDependency:
 		submit = "Add prerequisite"
 	case formConceptLink:
@@ -253,16 +255,15 @@ func (m *model) renderForm(c *canvas, p palette) {
 		submit = "Create concept"
 	}
 	c.buttonRow(buttonSpec{submit, "form-action:submit", m.formFocus >= len(m.formFields)}, buttonSpec{"Cancel", "form-action:cancel", false})
-	c.panel("FORM TIPS", "Ctrl+U clears the focused field. Backspace deletes before the caret. Use the configured Issue and Pull Request templates as a checklist, not a substitute for clear scope and verification.")
 }
 
 func (m *model) renderHelp(c *canvas, p palette) {
 	c.title(copyText.HelpTitle)
 	c.muted(copyText.HelpIntro)
-	c.panel("FIRST STEPS", copyText.HelpRepository, copyText.HelpIssue, copyText.HelpDependency)
-	c.panel("ORGANIZE WORK", copyText.HelpProject, copyText.HelpConcept, copyText.HelpPR)
-	c.panel("SEE THE CONNECTIONS", copyText.HelpGraph, copyText.HelpNotes)
-	c.panel("SAFE PRACTICE DATA", copyText.HelpSeed)
+	c.panel("BASICS", copyText.HelpRepository, copyText.HelpIssue, copyText.HelpDependency)
+	c.panel("GROUPING", copyText.HelpProject, copyText.HelpConcept, copyText.HelpPR)
+	c.panel("GRAPH AND NOTES", copyText.HelpGraph, copyText.HelpNotes)
+	c.panel("SAMPLE DATA", copyText.HelpSeed)
 	c.title("Keyboard shortcuts")
 	shortcuts := []struct{ action, description string }{
 		{"new", "Open creation hub"}, {"search", "Search / filter this view"}, {"help", "Open this guide"},
@@ -280,7 +281,7 @@ func (m *model) renderHelp(c *canvas, p palette) {
 		c.space(2)
 		c.lineText(shortcut.description)
 	}
-	c.panel("FORM EDITING", "Tab / Shift+Tab moves through fields. Ctrl+Enter submits. Ctrl+U clears the active field. Esc cancels a form or returns to the previous workspace area.")
-	c.panel("IMPORTANT DISTINCTION", "A parent/Sub-issue relationship describes task structure. `depends_on` is a blocking prerequisite. Concept links and note links add context but do not block an Issue.", "IDIOS stores a logical work history; it does not commit files, merge Git branches or synchronize with remote hosting.")
+	c.panel("FORMS", "Tab / Shift+Tab move between fields. Ctrl+Enter saves. Ctrl+U clears the field. Esc cancels.")
+	c.panel("BLOCKING VS. LINKING", "Only a prerequisite (depends_on) blocks an issue. Sub-issues, concept links and note links never block it.", "IDIOS is not a Git client: it does not commit, merge or sync anything.")
 	c.buttonRow(buttonSpec{"← Back to Overview", "nav:overview", true}, buttonSpec{"Open settings", "nav:settings", false})
 }
