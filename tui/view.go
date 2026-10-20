@@ -1,10 +1,11 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"fmt"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m *model) View() tea.View {
@@ -70,7 +71,7 @@ func (m *model) View() tea.View {
 	header.blank()
 	bodyTop := len(header.lines)
 
-	bodyHeight := max(1, m.height-bodyTop-2)
+	bodyHeight := max(1, m.height-bodyTop-3)
 	m.bodyTop, m.bodyHeight = bodyTop, bodyHeight
 	sideWidth := 23
 	showSidebar := width >= 88 && m.page != pageOverview && m.page != pageIntro
