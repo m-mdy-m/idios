@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"idios/internal/application"
 	"idios/clients/cli"
-	"idios/internal/config"
 	"idios/clients/server"
+	"idios/internal/application"
+	"idios/internal/config"
 	"idios/internal/storage/sqlite"
 )
 

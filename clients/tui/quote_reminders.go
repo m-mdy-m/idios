@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"idios/clients/server"
 	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/desktopnotify"
 	"idios/internal/domain"
 	builtinquotes "idios/internal/quotes"
 	"idios/internal/reminders"
-	"idios/clients/server"
 
 	tea "charm.land/bubbletea/v2"
 )

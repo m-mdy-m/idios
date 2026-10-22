@@ -5,10 +5,10 @@ import (
 	"io"
 	"os"
 
-	"idios/internal/application"
 	"idios/clients/cli"
-	"idios/internal/storage/sqlite"
 	"idios/clients/tui/launch"
+	"idios/internal/application"
+	"idios/internal/storage/sqlite"
 )
 
 func main() {
