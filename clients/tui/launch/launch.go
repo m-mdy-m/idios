@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
+	"idios/clients/tui"
 	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/storage/sqlite"
-	"idios/clients/tui"
 )
 
 // ErrNonInteractive is returned when a full-screen launch is attempted without a terminal.
