@@ -41,7 +41,7 @@ $ make check
 
 - [ ] **Schema:** new numbered migration; shipped migrations are unchanged
 - [ ] **Legacy importer:** still read-only
-- [ ] **CLI / JSON protocol:** unchanged, or documented in `docs/user/CLI_REFERENCE.md` and `docs/development/JSON_PROTOCOL.md`
+- [ ] **CLI / JSON protocol:** unchanged, or documented in `docs/user/CLI_REFERENCE.md` and `docs/development/WEB_API.md`
 - [ ] **Layering:** `domain` stays pure; `cli` and `tui` do not import each other or write SQL (see `AGENTS.md`)
 - [ ] **Docs and `CHANGELOG.md`** updated for anything users will notice
 

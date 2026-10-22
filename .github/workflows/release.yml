@@ -19,6 +19,14 @@ jobs:
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.15.4'
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -86,6 +94,14 @@ jobs:
           fi
       - name: Checkout tagged source
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.15.4'
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -110,6 +126,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Download modules
         run: go mod download
+      - name: Build Web UI bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd web
+          pnpm install --no-frozen-lockfile
+          pnpm run build
       - name: Verify formatting
         shell: bash
         run: |
@@ -137,9 +160,9 @@ jobs:
           else
             BASE_LDFLAGS='-s -w'
           fi
-          CLI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/cli.Version=${VERSION} -X idios/internal/updater.Version=${VERSION}"
+          CLI_LDFLAGS="$BASE_LDFLAGS -X idios/clients/cli.Version=${VERSION} -X idios/internal/updater.Version=${VERSION}"
           TUI_LDFLAGS="$BASE_LDFLAGS -X idios/internal/updater.Version=${VERSION}"
-          go build -trimpath -ldflags="$CLI_LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
+          go build -tags=embed_web -trimpath -ldflags="$CLI_LDFLAGS" -o "dist/idios${EXE_SUFFIX}" ./cmd/idios
           go build -trimpath -ldflags="$TUI_LDFLAGS" -o "dist/idios-tui${EXE_SUFFIX}" ./cmd/idios-tui
           go build -trimpath -ldflags="$TUI_LDFLAGS" -o "dist/idios-tui-demo${EXE_SUFFIX}" ./cmd/idios-tui-demo
       - name: Smoke-test native executables
@@ -358,7 +381,7 @@ jobs:
           rpm_pkg="artifact/idios-${GITHUB_REF_NAME}-${ASSET}.rpm"
           dpkg-deb --info "$deb" >/dev/null
           rpm -qp --qf '%{NAME} %{VERSION} %{ARCH}\n' "$rpm_pkg"
-          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios' 
+          rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios'
           rpm -qpl "$rpm_pkg" | grep -Fx '/usr/bin/idios-tui'
           if rpm -qpl "$rpm_pkg" | grep -Fxq '/usr/bin/idios-tui-demo'; then
             echo 'Release RPM unexpectedly contains idios-tui-demo.' >&2
