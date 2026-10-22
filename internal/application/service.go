@@ -414,7 +414,7 @@ func (s *Service) CreatePullRequestWithBranches(ctx context.Context, issue, titl
 	if err := invalidInput(validation.Text("issue reference", issue, true, 256)); err != nil {
 		return domain.PullRequest{}, err
 	}
-	if err := invalidInput(validation.Text("pull request title", title, true, 200)); err != nil {
+	if err := invalidInput(validation.Text("pull request title", title, false, 200)); err != nil {
 		return domain.PullRequest{}, err
 	}
 	if err := invalidInput(validation.Text("pull request description", description, true, 30000)); err != nil {
