@@ -3,6 +3,14 @@ package domain
 import "time"
 
 type IssueStatus string
+type IssueType string
+
+const (
+	IssueTask     IssueType = "task"
+	IssueBug      IssueType = "bug"
+	IssueFeature  IssueType = "feature"
+	IssueResearch IssueType = "research"
+)
 
 const (
 	IssueOpen       IssueStatus = "open"
@@ -47,10 +55,13 @@ type Issue struct {
 	Title           string      `json:"title"`
 	Description     string      `json:"description"`
 	Status          IssueStatus `json:"status"`
+	Type            IssueType   `json:"type"`
 	Priority        string      `json:"priority,omitempty"`
 	DueDate         *string     `json:"due_date,omitempty"`
 	ParentIssueID   *string     `json:"parent_issue_id,omitempty"`
 	ParentReference string      `json:"parent_reference,omitempty"`
+	BranchID        *string     `json:"branch_id,omitempty"`
+	BranchName      string      `json:"branch_name,omitempty"`
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
 	ClosedAt        *time.Time  `json:"closed_at,omitempty"`
@@ -75,6 +86,17 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type ProjectRepository struct {
+	ProjectID             string    `json:"project_id"`
+	RepositoryID          string    `json:"repository_id"`
+	RepositoryName        string    `json:"repository_name"`
+	RepositoryDescription string    `json:"repository_description"`
+	Relationship          string    `json:"relationship"`
+	IsPrimary             bool      `json:"is_primary"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
 type Concept struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
@@ -94,12 +116,15 @@ type PullRequest struct {
 	Title            string     `json:"title"`
 	Description      string     `json:"description"`
 	Status           PRStatus   `json:"status"`
+	IsDraft          bool       `json:"is_draft"`
 	TargetBranchID   string     `json:"target_branch_id"`
 	TargetBranchName string     `json:"target_branch_name,omitempty"`
 	SourceBranchID   *string    `json:"source_branch_id,omitempty"`
+	SourceBranchName string     `json:"source_branch_name,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 	AcceptedAt       *time.Time `json:"accepted_at,omitempty"`
+	IssueIDs         []string   `json:"issue_ids,omitempty"`
 }
 
 type CompletionRecord struct {
@@ -115,6 +140,37 @@ type CompletionRecord struct {
 	Sequence           int64     `json:"sequence"`
 	ParentCompletionID *string   `json:"parent_completion_id,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
+	CommitHash         string    `json:"commit_hash"`
+}
+
+type RepositoryFile struct {
+	ID                    string    `json:"id"`
+	RepositoryID          string    `json:"repository_id"`
+	Path                  string    `json:"path"`
+	Content               string    `json:"content"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	UpdatedInCompletionID string    `json:"updated_in_completion_id,omitempty"`
+}
+
+type RepositoryTag struct {
+	ID                 string    `json:"id"`
+	RepositoryID       string    `json:"repository_id"`
+	RepositoryName     string    `json:"repository_name,omitempty"`
+	Name               string    `json:"name"`
+	Message            string    `json:"message"`
+	CompletionSequence int64     `json:"completion_sequence"`
+	CompletionID       string    `json:"completion_id,omitempty"`
+	PreviousTagID      string    `json:"previous_tag_id,omitempty"`
+	PreviousTagName    string    `json:"previous_tag_name,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	FileCount          int       `json:"file_count,omitempty"`
+}
+
+type TagFileChange struct {
+	Path            string `json:"path"`
+	Status          string `json:"status"`
+	PreviousContent string `json:"previous_content,omitempty"`
+	Content         string `json:"content,omitempty"`
 }
 
 type Relation struct {
@@ -160,22 +216,54 @@ type ActivityEvent struct {
 }
 
 type GraphNode struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Label     string `json:"label"`
-	Status    string `json:"status,omitempty"`
-	Reference string `json:"reference,omitempty"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Reference   string `json:"reference,omitempty"`
 }
 
 type GraphEdge struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
 	Type   string `json:"type"`
+	Label  string `json:"label,omitempty"`
 }
 
 type Graph struct {
 	Nodes []GraphNode `json:"nodes"`
 	Edges []GraphEdge `json:"edges"`
+}
+
+// GraphPosition is a node coordinate in the graph canvas coordinate system (960 × 570).
+type GraphPosition struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// GraphViewport stores the pan/zoom state of one graph mode.
+type GraphViewport struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Scale float64 `json:"scale"`
+}
+
+// GraphLayout is persisted in the local Engine database so node arrangement, graph mode,
+// and viewport survive browser refreshes and Engine restarts. Coordinates are kept per mode
+// so arranging the organic graph does not overwrite the flowchart arrangement.
+type GraphLayout struct {
+	Mode      string                              `json:"mode"`
+	Positions map[string]map[string]GraphPosition `json:"positions"`
+	Views     map[string]GraphViewport            `json:"views"`
+}
+
+func DefaultGraphLayout() GraphLayout {
+	return GraphLayout{
+		Mode:      "organic",
+		Positions: map[string]map[string]GraphPosition{"organic": {}, "flowchart": {}},
+		Views:     map[string]GraphViewport{"organic": {X: 0, Y: 0, Scale: 1}, "flowchart": {X: 0, Y: 0, Scale: 1}},
+	}
 }
 
 type RepositorySetting struct {

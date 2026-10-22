@@ -22,6 +22,30 @@ type Note struct {
 	UpdatedAt         time.Time   `json:"updated_at"`
 }
 
+type PlanTask struct {
+	ID          string     `json:"id"`
+	PlanID      string     `json:"plan_id"`
+	Title       string     `json:"title"`
+	Position    int        `json:"position"`
+	Done        bool       `json:"done"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+type Plan struct {
+	ID                string     `json:"id"`
+	Title             string     `json:"title"`
+	Description       string     `json:"description"`
+	PlanDate          string     `json:"plan_date"`
+	LinkedEntityType  string     `json:"linked_entity_type,omitempty"`
+	LinkedEntityID    string     `json:"linked_entity_id,omitempty"`
+	LinkedEntityLabel string     `json:"linked_entity_label,omitempty"`
+	Tasks             []PlanTask `json:"tasks"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
 type Quote struct {
 	ID        string    `json:"id"`
 	Text      string    `json:"text"`
@@ -37,6 +61,8 @@ type ScheduledJob struct {
 	Name            string     `json:"name"`
 	Description     string     `json:"description,omitempty"`
 	ActionType      string     `json:"action_type"`
+	BranchID        *string    `json:"branch_id,omitempty"`
+	BranchName      string     `json:"branch_name,omitempty"`
 	ScheduleType    string     `json:"schedule_type"`
 	IntervalMinutes int        `json:"interval_minutes,omitempty"`
 	ScheduleTime    string     `json:"schedule_time,omitempty"`
@@ -52,17 +78,22 @@ type ScheduledJob struct {
 }
 
 type Notification struct {
-	ID        string     `json:"id"`
-	Title     string     `json:"title"`
-	Body      string     `json:"body"`
-	Level     string     `json:"level"`
-	ReadAt    *time.Time `json:"read_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID                string     `json:"id"`
+	Title             string     `json:"title"`
+	Body              string     `json:"body"`
+	Level             string     `json:"level"`
+	RelatedEntityType string     `json:"related_entity_type,omitempty"`
+	RelatedEntityID   string     `json:"related_entity_id,omitempty"`
+	ReadAt            *time.Time `json:"read_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 type WorkspaceProfile struct {
 	Username  string    `json:"username"`
 	FullName  string    `json:"full_name"`
+	Focus     string    `json:"focus"`
+	Topics    string    `json:"topics"`
+	Website   string    `json:"website"`
 	Bio       string    `json:"bio"`
 	Readme    string    `json:"readme"`
 	UpdatedAt time.Time `json:"updated_at"`

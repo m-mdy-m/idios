@@ -11,10 +11,15 @@ type Store interface {
 	Ping(context.Context) error
 
 	CreateRepository(context.Context, string, string) (domain.Repository, error)
+	CreateRepositoryWithDefaultBranch(context.Context, string, string, string) (domain.Repository, error)
+	UpdateRepositoryDescription(context.Context, string, string) (domain.Repository, error)
 	DeleteRepository(context.Context, string) error
 	GetRepository(context.Context, string) (domain.Repository, error)
 	ListRepositories(context.Context) ([]domain.Repository, error)
 	ListBranches(context.Context, string) ([]domain.Branch, error)
+	CreateBranch(context.Context, string, string, string) (domain.Branch, error)
+	AssignIssueBranch(context.Context, string, string) error
+	AssignIssueParent(context.Context, string, string) error
 	SetRepositorySetting(context.Context, string, string, string) error
 	GetRepositorySettings(context.Context, string) ([]domain.RepositorySetting, error)
 
@@ -22,6 +27,10 @@ type Store interface {
 	DeleteProject(context.Context, string) error
 	GetProject(context.Context, string) (domain.Project, error)
 	ListProjects(context.Context) ([]domain.Project, error)
+	ListProjectRepositories(context.Context, string) ([]domain.ProjectRepository, error)
+	LinkRepositoryToProject(context.Context, string, string, string, bool) error
+	UnlinkRepositoryFromProject(context.Context, string, string) error
+	SetPrimaryProjectRepository(context.Context, string, string) error
 	AddIssueToProject(context.Context, string, string) error
 	ListProjectIssues(context.Context, string) ([]domain.Issue, error)
 
@@ -38,6 +47,10 @@ type Store interface {
 	ListDependencyEdges(context.Context) ([]domain.GraphEdge, error)
 
 	CreatePullRequest(context.Context, string, string, string) (domain.PullRequest, error)
+	CreatePullRequestWithBranches(context.Context, string, string, string, string, string, bool) (domain.PullRequest, error)
+	CreatePullRequestWithIssues(context.Context, []string, string, string, string, string, bool) (domain.PullRequest, error)
+	ListPullRequestIssues(context.Context, string) ([]domain.Issue, error)
+	MarkPullRequestReady(context.Context, string) (domain.PullRequest, error)
 	DeletePullRequest(context.Context, string) error
 	GetPullRequest(context.Context, string) (domain.PullRequest, error)
 	ListPullRequests(context.Context, string, string) ([]domain.PullRequest, error)
@@ -45,6 +58,15 @@ type Store interface {
 	ClosePullRequest(context.Context, string) (domain.PullRequest, error)
 	AcceptPullRequest(context.Context, string, string) (domain.PullRequest, domain.CompletionRecord, domain.Issue, error)
 	ListCompletions(context.Context, string) ([]domain.CompletionRecord, error)
+	ListRepositoryFiles(context.Context, string) ([]domain.RepositoryFile, error)
+	SaveRepositoryFile(context.Context, string, string, string) (domain.RepositoryFile, error)
+	DeleteRepositoryFile(context.Context, string, string) error
+	ListRepositoryTags(context.Context, string) ([]domain.RepositoryTag, error)
+	CreateRepositoryTag(context.Context, string, string, string) (domain.RepositoryTag, error)
+	GetRepositoryTag(context.Context, string, string) (domain.RepositoryTag, error)
+	GetRepositoryTagFiles(context.Context, string) ([]domain.RepositoryFile, error)
+	CompareRepositoryTags(context.Context, string, string) ([]domain.TagFileChange, error)
+	ListTagHistory(context.Context, string) ([]domain.CompletionRecord, error)
 
 	CreateConcept(context.Context, string, string) (domain.Concept, error)
 	DeleteConcept(context.Context, string) error
@@ -65,6 +87,8 @@ type Store interface {
 	AssignMilestone(context.Context, string, string) error
 
 	ListGraph(context.Context) (domain.Graph, error)
+	GetGraphLayout(context.Context) (domain.GraphLayout, error)
+	SaveGraphLayout(context.Context, domain.GraphLayout) error
 	ListActivity(context.Context, string, string, int) ([]domain.ActivityEvent, error)
 	RecordActivity(context.Context, string, string, string, string) error
 
@@ -73,6 +97,7 @@ type Store interface {
 	SeedDemo(context.Context) (domain.SeedReport, error)
 	ListNotes(context.Context) ([]domain.Note, error)
 	ListNoteLabels(context.Context) ([]domain.NoteLabel, error)
+	SetNoteLabelColor(context.Context, string, string) error
 	CreateNote(context.Context, string, string) (domain.Note, error)
 	CreateNoteWithLabels(context.Context, string, string, []string) (domain.Note, error)
 	UpdateNote(context.Context, string, string, string) (domain.Note, error)
@@ -95,6 +120,13 @@ type Store interface {
 	ToggleScheduledJob(context.Context, string) (domain.ScheduledJob, error)
 	RunScheduledJobNow(context.Context, string, time.Time, bool) error
 	ProcessDueJobs(context.Context, time.Time, bool) (int, error)
+	ListPlans(context.Context, string, string) ([]domain.Plan, error)
+	CreatePlan(context.Context, domain.Plan, []string) (domain.Plan, error)
+	UpdatePlan(context.Context, domain.Plan) (domain.Plan, error)
+	DeletePlan(context.Context, string) error
+	AddPlanTask(context.Context, string, string) (domain.PlanTask, error)
+	SetPlanTaskDone(context.Context, string, string, bool) (domain.PlanTask, error)
+	CreatePlanReminderNotification(context.Context, string, string, string, string, time.Time) (bool, error)
 	ListNotifications(context.Context, int) ([]domain.Notification, error)
 	CreateNotification(context.Context, string, string, string) (domain.Notification, error)
 	DeleteNotification(context.Context, string) error
