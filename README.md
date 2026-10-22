@@ -1,136 +1,54 @@
 # IDIOS
 
-**Track repositories, issues, projects and notes, and see which issues depend on which.**
+IDIOS helps you keep track of work in one place: repositories, issues, projects, notes, labels, and scheduled reminders. You can use it in a terminal or in a browser.
 
-IDIOS is a terminal issue tracker for your own projects. It works like repositories, issues and pull requests on GitHub, but without Git. Work is organised like this: repositories own issues, sub-issues describe task breakdown, blocking dependencies explain what must happen first, projects group work across repositories, and concepts connect reusable knowledge. The terminal interface is keyboard-first, mouse-aware, and uses the same Go application engine as the CLI.
+IDIOS stores its workspace in a SQLite database on your computer. It does **not** clone Git repositories, push code, or create real GitHub pull requests. An IDIOS pull request is a record of work and its review inside IDIOS.
 
-## Start here
+## Install
 
-### Requirements
-
-- Go **1.25 or newer**
-- A C compiler and CGO enabled for the SQLite driver (`gcc`/Clang on Unix-like systems; a supported C toolchain on Windows)
-- An interactive terminal for the full-screen UI
-
-### Run IDIOS from source
-
-```sh
-# Launch the normal interactive workspace (no sample data is inserted)
-go run ./cmd/idios
-
-# Explicit arguments continue to use the CLI
-go run ./cmd/idios --help
-
-# The TUI also remains available as a standalone executable
-go run ./cmd/idios-tui
-
-```
-
-Or build the CLI and clean TUI:
-
-```sh
-make build
-./dist/idios                  # opens the interactive workspace
-./dist/idios --help           # CLI help
-./dist/idios-tui              # standalone TUI entry point
-```
-
-The TUI database defaults to `~/.idios/idios-engine.sqlite3` and can be changed with `IDIOS_DB` or an explicit `--db PATH` override. TUI preferences are stored in `~/.idios/config.json`; set `IDIOS_CONFIG` to choose a different configuration file.
-
-## What you can do
-
-- **Overview:** edit your workspace profile and README, pin important repositories and issues, see active work, and review recent activity.
-- **Repositories:** each repository has a structured README-style overview, stats, recent Issues and Pull Requests, and repository-specific graph, labels, milestones, settings and activity. New repositories use a configurable overview scaffold.
-- **Issue templates:** start from `task`, `bug`, `feature` or `research` templates with detailed context, plan and acceptance criteria; edit the multiline body before creating the Issue.
-- **Pull Request templates:** new PR forms include a configurable summary, implementation, verification, risk and reviewer checklist.
-- **Issues and sub-issues:** break a task into smaller child issues. A child issue must share its parent's repository.
-- **Blocking dependencies:** connect issues with `depends_on`; an unfinished prerequisite prevents an issue from starting, including across repositories.
-- **Pull requests and completions:** write a pull request for an issue you started, edit it as the work progresses, and accept it when the work is finished. Acceptance creates a completion record on `main` and marks the issue done.
-- **Projects:** group related issues from multiple repositories around one goal.
-- **Concepts and graph:** link reusable knowledge and inspect the different relationship types.
-- **Notes and quotes:** capture thoughts, link notes to work or the graph, and rotate saved quotes on startup.
-- **Jobs and notifications:** configure local reminders, review the notification inbox, and inspect UI logs. Scheduled reminders run while the TUI is open; they are not an OS background service.
-- **Sourced quote library:** start with attributed quotations from software engineering, programming, computing and mathematics, with source links retained in SQLite. Optional randomized quote reminders can send native desktop notifications and also appear in the local inbox; the TUI must remain open.
-- **Customization:** select a theme, change layout density, edit semantic color tokens, configure `REPOSITORY_TEMPLATE`, `ISSUE_TEMPLATE` and `PULL_REQUEST_TEMPLATE`, and customize keyboard shortcuts without changing Go source.
-
-## Workspace data
-
-The standard TUI opens a clean workspace and never inserts sample records automatically. A new database receives only the schema migrations. Existing database files and records are never automatically cleared or rewritten.
-
-## Important scope notes
-
-IDIOS is a **local work-tracking engine**, not a Git client or remote-hosting clone. Pull-request acceptance records a logical completion; it does not create Git commits, merge source files, check out branches, or sync with GitHub/GitLab. Notifications are kept in a local inbox, and scheduled jobs are evaluated while the TUI is running.
-
-## Documentation
-
-- [User documentation](docs/user/README.md) — quick start, workflows, settings, shortcuts and CLI usage.
-- [Repository, Issue and Pull Request templates](docs/user/ISSUE_AND_PR_TEMPLATES.md) — customize repository overview scaffolds and detailed Issue / PR forms.
-- [Developer documentation](docs/development/README.md) — package boundaries, SQLite migrations, tests and extension points.
-- [Changelog](CHANGELOG.md)
-- [Security policy](SECURITY.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
-
-## Downloads and supported platforms
-
-Release assets are built and tested on native 64-bit runners for both x86-64 (`amd64`) and ARM64 (`arm64`). The `idios` command opens the clean interactive workspace when run without arguments and remains the scriptable CLI when arguments are supplied; `idios-tui` is also shipped as a standalone TUI entry point. Developer-only demo tooling is not included in user-facing release assets.
-
-| Platform | Architectures | Installable formats | Portable format |
-| --- | --- | --- | --- |
-| Linux | x86-64 (`amd64`), ARM64 (`arm64`) | `.deb`, `.rpm` | `.tar.gz` |
-| macOS | Intel (`amd64`), Apple Silicon (`arm64`) | `.pkg`, `.dmg` (contains the `.pkg` installer) | `.tar.gz` |
-| Windows | x86-64 (`amd64`), ARM64 (`arm64`) | `-setup.exe` installer | `.zip` |
-
-Asset names use the release tag and target architecture, for example:
-
-- Linux: `idios-v1.0.2-linux-amd64.deb` and `idios-v1.0.2-linux-arm64.deb` (matching `.rpm` packages are also published)
-- macOS: `idios-v1.0.2-darwin-arm64.pkg` and `idios-v1.0.2-darwin-arm64.dmg`
-- Windows: `idios-v1.0.2-windows-amd64-setup.exe` and `idios-v1.0.2-windows-arm64-setup.exe`
-
-Choose the asset that matches both your operating system and CPU architecture from the GitHub Releases page. `SHA256SUMS.txt` contains checksums for verifying downloadable assets. Each release also publishes user-level `install.sh` and `install.ps1` installers, which verify the archive checksum, replace older binaries, and place `idios` on PATH.
-
-### Install
-
-**Recommended for automatic in-app upgrades** — user-local installation on Linux/macOS:
-
-```sh
-curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh
-```
-
-On Windows, run this in PowerShell:
+**Windows (PowerShell):**
 
 ```powershell
 irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex
 ```
 
-The scripts install into a user-writable directory by default, so the in-app updater can replace both `idios` and `idios-tui` without administrator access. Reopen the terminal if PATH does not refresh automatically.
-
-On Debian or Ubuntu, install the matching `.deb` package:
+**Linux or macOS:**
 
 ```sh
-sudo apt install ./idios-v1.0.2-linux-amd64.deb
+curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh
 ```
 
-On Fedora, RHEL or another RPM-based distribution, install the matching `.rpm` package:
+These commands install the latest published release for your CPU. You do not need Go or Node.js to run a release build. To download an installer or portable archive yourself, visit [Releases](https://github.com/m-mdy-m/idios/releases/latest).
+
+## Open IDIOS
 
 ```sh
-sudo dnf install ./idios-v1.0.2-linux-amd64.rpm
+idios       # open the terminal workspace
+idios web   # open the browser workspace
+idios help  # see commands
 ```
 
-On macOS, open the matching `.pkg` directly, or open the `.dmg` and launch the `.pkg` included inside. The installer places the executables in `/usr/local/bin` and includes only the README and license under `/usr/local/share/doc/idios`. The current pipeline does not have Apple Developer ID signing/notarization credentials, so macOS may display a security warning for these packages.
+The browser workspace normally opens at `http://127.0.0.1:43170`. It runs on your own computer; the default address is not exposed to your network.
 
-On Windows, run the matching `-setup.exe`. It installs the CLI and clean TUI per-user under `%LOCALAPPDATA%\\Programs\\IDIOS` and offers Start Menu shortcuts. The `.zip` remains available for portable use without an installer. The setup executable is not Authenticode-signed by this pipeline, so Windows SmartScreen may warn about an unknown publisher.
+## What you can do
 
-The portable `.tar.gz` and `.zip` bundles contain only the CLI, clean TUI, README and license. After extracting a portable bundle, run `./idios` (PowerShell: `.\idios.exe`) to open your workspace, or `./idios help` (PowerShell: `.\idios.exe help`) for CLI help. `idios-tui` remains available as a standalone TUI entry point; the full-screen UI needs an interactive terminal.
+- Organize work in repositories, issues, sub-issues, and projects.
+- Record blockers so an issue can depend on another issue.
+- Track work with IDIOS pull-request and completion records.
+- Save notes with multiple labels and connect them to other items.
+- Schedule reminders and keep reusable concepts and links.
+- Use the terminal UI, browser UI, or CLI commands.
 
-The SQLite driver uses CGO. Building from source requires Go 1.25+ and a supported C compiler; the prebuilt packages and portable bundles do not require a Go toolchain to run. Releases cover 64-bit x86 and ARM only; 32-bit targets are not currently provided.
+## Your data
 
-## Development checks
+The default database is `~/.idios/idios-engine.sqlite3` (`%USERPROFILE%\.idios\idios-engine.sqlite3` on Windows). The file is created when IDIOS first opens the workspace. A new workspace starts empty.
 
-```sh
-make fmt-check
-make test
-make vet
-make build
-```
+## Guides
 
-Tests use temporary SQLite databases and do not need to modify your actual IDIOS workspace. The SQLite driver uses CGO, so a C compiler is required.
+- [Install and start IDIOS](docs/user/GETTING_STARTED.md)
+- [How the workspace works](docs/user/WORKSPACE_GUIDE.md)
+- [CLI commands](docs/user/CLI_REFERENCE.md)
+- [Settings and data files](docs/user/SETTINGS.md)
+- [Build, run, and test from source](docs/development/README.md)
+- [Contributing changes](CONTRIBUTING.md)
+- [Security](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md)

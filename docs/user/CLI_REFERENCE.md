@@ -1,63 +1,59 @@
-# CLI reference
+# Command-line reference
 
-Running `idios` with no arguments opens the normal interactive workspace and checks GitHub Releases for a newer version. Explicit arguments such as `idios version`, `idios --help`, or `idios issue list` continue to run the scriptable CLI. The standalone `idios-tui` and `idios-tui-demo` entry points remain available. The CLI and both TUI variants use the same Application Engine but have different default database paths. CLI commands and the clean TUI use `IDIOS_DB`; the demo TUI uses `IDIOS_DEMO_DB` and seeds only its separate database by default. Every CLI command and both TUI binaries can accept `--db PATH` to explicitly select a database. Add `--json` for machine-readable output and use `idios help COMMAND...` to see accepted options.
+The CLI is useful for scripts or for actions you would rather run from a terminal. Most interactive workspace features are easier to use in the terminal or browser interface.
+
+## Start here
+
+```sh
+idios help                   # list available commands
+idios help issue create      # show flags for one command
+idios version                # print the installed version
+idios protocol               # print the CLI/API contract version
+```
+
+Running `idios` with no arguments opens the terminal workspace. Running `idios web` opens the browser workspace.
 
 ## Common commands
 
 ```sh
-# Start the normal interactive workspace
-go run ./cmd/idios
+idios repo create --name "Demo"
+idios repo list
 
-# General help and version
-go run ./cmd/idios --help
-go run ./cmd/idios version
+idios issue create --repo Demo --title "Read the project guide"
+idios issue list --repo Demo
+idios issue show --id Demo#1
+idios issue start --id Demo#1
 
-# Intentionally seed the currently selected CLI database (use a separate path)
-go run ./cmd/idios --db ./idios-demo.sqlite3 seed demo
+idios project create --name "Release preparation"
+idios project add-issue --project "Release preparation" --issue Demo#1
 
-# Prefer the isolated demo TUI for a ready-to-explore sample workspace
-go run ./cmd/idios-tui-demo
-
-# Create and inspect repositories
-go run ./cmd/idios repo create --name CPU --description "CPU learning notes"
-go run ./cmd/idios repo list
-go run ./cmd/idios repo show --repo CPU
-
-# Work with Issues
-go run ./cmd/idios issue create --repo CPU --title "Learn paging"
-go run ./cmd/idios issue list --repo CPU
-go run ./cmd/idios issue start --id CPU#1
-
-# Record the outcome through a PR
-go run ./cmd/idios pr create --issue CPU#1 --description "What changed and what I learned"
-go run ./cmd/idios pr edit --id CPU!1 --description "Updated progress"
-go run ./cmd/idios pr accept --id CPU!1 --summary "Paging fundamentals reviewed"
-
-# Inspect connected relationships
-go run ./cmd/idios graph
+idios pr create --issue Demo#1 --description "Documented the first-run workflow"
+idios pr accept --id Demo!1 --summary "Guide is ready"
 ```
 
-The exact flags for each command are the source of truth; run `go run ./cmd/idios help issue create` or `go run ./cmd/idios help pr accept` for detailed forms.
+The example identifiers (`Demo#1`, `Demo!1`) mean repository `Demo`, issue 1, and pull request 1. Use the identifiers returned by IDIOS in your own workspace.
 
-The `ISSUE_TEMPLATE` and `PULL_REQUEST_TEMPLATE` config sections currently prefill interactive TUI forms. CLI creation stays explicit for reproducible scripts: provide the title and description yourself. See [the template guide](ISSUE_AND_PR_TEMPLATES.md) for customization.
+An issue becomes done when its IDIOS pull request is accepted. That operation only records completion inside IDIOS; it does not merge Git code or create a GitHub pull request.
 
-## References
+## Other command groups
 
-- Issue: `Repository#12` (example: `CPU#1`)
-- Pull Request: `Repository!3` (example: `CPU!1`)
-- A Project can contain Issues from multiple repositories.
+Use `idios help` to see the full list. Depending on the group, commands also cover concepts, graph relationships, labels, milestones, dependencies, activity, repository settings, and importing an older IDIOS database.
 
-## Scripted use
+Notes and scheduled jobs are managed through the terminal and browser interfaces; they do not currently have standalone CLI command groups.
+
+## JSON output and database selection
+
+Add `--json` to request machine-readable output:
 
 ```sh
-go run ./cmd/idios --json repo list
-go run ./cmd/idios --json graph
+idios --json repo list
+idios issue list --json
 ```
 
-The `--json` output is useful for scripts and integration clients. For protocol and schema details, see [the developer protocol notes](../development/JSON_PROTOCOL.md).
+Use `--db PATH` to select a database for a command:
 
-The demo TUI supports `--check` for non-interactive setup verification. It applies schema migrations, ensures seed data exists and exits with an error if the database cannot be opened. The clean TUI `--check` only initializes/verifies the schema and does not insert sample records.
+```sh
+idios --db ./scratch.sqlite3 repo list
+```
 
-## Workflow limitation
-
-An Issue becomes `done` only through accepting a Pull Request and writing its Completion record. IDIOS v1 does not create actual Git commits, merge source files or operate remote pull requests.
+The `IDIOS_DB` environment variable can also set the default database path. See [Settings and data](SETTINGS.md).

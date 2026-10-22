@@ -1,15 +1,6 @@
-# User guide
+# Using IDIOS
 
-IDIOS is designed around a connected workspace rather than a list of unrelated tasks. Data is stored in a SQLite file.
+New to IDIOS? Start with [Install and start](GETTING_STARTED.md). It explains how to install IDIOS and open the workspace.
 
-## Suggested reading order
-
-1. [Getting started](GETTING_STARTED.md) — run the app and load the demo.
-2. [Workspace guide](WORKSPACE_GUIDE.md) — understand repositories, issues, prerequisites, projects, concepts, graph, notes and quotes.
-3. [Settings](SETTINGS.md) — themes, custom colors, shortcuts, logs, notifications and scheduled jobs.
-4. [Repository, Issue and Pull Request templates](ISSUE_AND_PR_TEMPLATES.md) — configure repository overview scaffolds and detailed Issue / PR forms.
-5. [CLI reference](CLI_REFERENCE.md) — repeatable commands and scripting.
-
-## In-app help
-
-Open the TUI and press `?` to see the quick guide. From most pages, use `Esc` to return to the Overview or back out of a detail page. Controls are clickable, but the app is also navigable from the keyboard.
+Then see the [Workspace guide](WORKSPACE_GUIDE.md) for the main concepts, the [CLI reference](CLI_REFERENCE.md) for terminal commands, or [Settings and data](SETTINGS.md) to find your database and configuration.
+For dated task checklists and daily reminders, see [Daily Plans](DAILY_PLANS.md).

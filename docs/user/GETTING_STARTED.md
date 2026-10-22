@@ -1,97 +1,93 @@
-# Getting started
+# Install and start IDIOS
 
-## 1. Launch IDIOS
+This guide is for someone who has been told to install IDIOS and has not used it before.
 
-After installation, run `idios` to open the normal interactive workspace. Commands with explicit arguments (for example, `idios version` or `idios --help`) remain scriptable CLI commands. For a source checkout, use:
+## 1. Install a release
 
-```sh
-# Normal workspace: starts with no sample records in a new database
-go run ./cmd/idios
+Download a ready-to-run build from the [latest release page](https://github.com/m-mdy-m/idios/releases/latest). Choose a file for your operating system and CPU:
 
-# Demo workspace: creates sample data in a separate database automatically
-go run ./cmd/idios-tui-demo
-```
+- **Windows:** use the `setup.exe` installer, or download the `.zip` for a portable copy.
+- **Linux:** use the installer below, a `.deb` package on Debian/Ubuntu, an `.rpm` package on Fedora/RHEL, or the portable `.tar.gz` archive.
+- **macOS:** use the `.pkg` installer, the `.dmg`, or the portable `.tar.gz` archive.
 
-The standard TUI opens in Intro and does not include a “Load Demo Workspace” button. Launch the demo executable when you want to explore sample repositories, linked issues, concepts, projects, pull requests and graph relationships. The two apps share the interface but use different default database paths.
+The release page contains builds for 64-bit Intel/AMD (`amd64`) and ARM (`arm64`) computers. You do not need to install Go, Node.js, or a database server to run a release build.
 
-For prebuilt development binaries, run `make build`, then launch `dist/idios` or `dist/idios-tui-demo` (Windows: `dist\idios.exe` or `dist\idios-tui-demo.exe`).
+### Quick install on Windows
 
-## 2. Choose a database
-
-The normal workspace defaults to `~/.idios/idios-engine.sqlite3`. It honors `IDIOS_DB` or `--db PATH`. A fresh database receives schema migrations only; the standard TUI does not seed demo records.
-
-The demo workspace defaults to `~/.idios/demo/idios-demo.sqlite3`. Set `IDIOS_DEMO_DB` to override its default. The demo binary intentionally ignores `IDIOS_DB`, so setting the normal workspace path does not redirect its default seed into your real workspace. You can also pass `--db PATH` directly to either executable for an explicit override; do not point both at the same file unless you deliberately want to share one workspace.
-
-Both binaries support `--check` for automation and diagnostics. It initializes and checks the selected database without requiring an interactive terminal. The demo binary also ensures that sample data exists:
-
-```sh
-./dist/idios-tui --check --db ./clean-workspace.sqlite3
-IDIOS_DEMO_DB=./demo-workspace.sqlite3 ./dist/idios-tui-demo --check
-```
-
-PowerShell:
+Open PowerShell and run:
 
 ```powershell
-.\dist\idios-tui.exe --check --db .\clean-workspace.sqlite3
-$env:IDIOS_DEMO_DB = "$PWD\demo-workspace.sqlite3"
-.\dist\idios-tui-demo.exe --check
+irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex
 ```
 
-## 3. Explore demo data
+The installer adds IDIOS to your user PATH. Close and reopen PowerShell if the `idios` command is not found immediately.
 
-Launch `idios-tui-demo` (or run `go run ./cmd/idios-tui-demo`). Its seed is atomic and idempotent. The sample includes:
+### Quick install on Linux or macOS
 
-- The IDIOS, CDIN and ZINX repositories.
-- Parent and child Issues, plus `depends_on` prerequisite examples.
-- A cross-repository Project with Issues from multiple repositories.
-- Concepts, typed relationships, labels and a milestone.
-- Open and accepted Pull Requests and a Completion record.
-- Notes linked to Issues, Concepts and Repositories, including graph-visible Notes.
-- Rotating Quotes, scheduled Jobs, a Notification, important pins and recent Activity.
+Open a terminal and run:
 
-The demo database persists between launches so you can explore changes. It is separate from the normal workspace by default. If you explicitly run `idios seed demo`, the CLI seeds the database selected by `IDIOS_DB` or `--db`; use that command only when you intend to add sample data to that database. IDIOS never automatically deletes an existing database or removes sample records previously added by an older build.
+```sh
+curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh
+```
 
-## 4. Keyboard basics
+The default install location is `~/.local/bin`. If the terminal cannot find `idios`, open a new terminal or add that directory to your `PATH`.
 
-| Key | Action |
-| --- | --- |
-| `↑` / `↓` or `k` / `j` | Move through a list |
-| `Enter` / `Space` | Open the selected item or activate the focused control |
-| `F6` or `Ctrl+Tab` | Focus visible buttons and form controls; use `↑` / `↓`, then `Enter` |
-| `Tab` / `Shift+Tab` | Move between main destinations |
-| `/` | Search or filter the current list |
-| `Esc` | Back out or return to Overview |
-| `?` | Open the quick guide |
-| `Ctrl+N` | Open the creation hub |
-| `Ctrl+Shift+N` / `Ctrl+Shift+Q` | Open Notes / Quotes |
-| `Ctrl+J` / `Ctrl+L` | Open scheduled Jobs / Logs |
-| `q` | Quit |
+## 2. Open the workspace
 
-Shortcuts are configurable in `~/.idios/config.json`. The Settings screen displays the active key mapping.
+Run:
 
-## 5. First useful workflow
+```sh
+idios
+```
 
-1. Create a **Repository** for an area of work.
-2. Add an **Issue** with a clear title and expected outcome.
-3. Add child Issues when you need to break the work into steps.
-4. If an Issue cannot start until another one is complete, add a **blocking prerequisite** (`depends_on`).
-5. Start an unblocked Issue, create a **Pull Request** with a useful explanation, then accept it to record the completion.
-6. Add the Issue to a **Project** if it belongs to a larger goal. Link a **Concept** for reusable knowledge, or attach a **Note** for a thought worth keeping.
+This opens the full-screen terminal interface. Use it to browse or create repositories, issues, projects, notes, and other workspace items. Press `?` or `h` in the terminal interface to open its help.
 
-See [Workspace guide](WORKSPACE_GUIDE.md) for the distinctions between these relationships. Before using templates heavily, see [Repository, Issue and Pull Request templates](ISSUE_AND_PR_TEMPLATES.md) to customize the default briefs, acceptance criteria and review checklist.
+A new database starts empty. IDIOS does not fill your normal workspace with example records.
 
+## 3. Open the browser interface
 
-## Download a prebuilt release
+Run:
 
-After a release is published, open the project's GitHub Releases page and select the archive that
-matches your operating system and processor:
+```sh
+idios web
+```
 
-- Linux: `linux-amd64` or `linux-arm64` (`.tar.gz`)
-- macOS: `darwin-amd64` for Intel or `darwin-arm64` for Apple Silicon (`.tar.gz`)
-- Windows: `windows-amd64` or `windows-arm64` (`.zip`)
+IDIOS starts its background service if necessary and opens the browser. The default address is `http://127.0.0.1:43170`.
 
-For user-local installation and automatic in-app updates, use `curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh` on Linux/macOS or `irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex` on Windows. To use a portable bundle, extract it and run `./idios` (PowerShell: `.\idios.exe`) to open the normal workspace; use `./idios help` for CLI help and `./idios-tui-demo` for the isolated sample workspace. The release archive includes the CLI and the clean TUI; the demo TUI is provided for development/source use only. `SHA256SUMS.txt` is published alongside the archives for integrity checks.
+Useful server commands:
 
-## In-app upgrades
+```sh
+idios server status   # check whether the service is running
+idios server stop     # stop the service
+idios server install  # start the service and run it automatically at login
+idios server uninstall # remove the automatic-start setting
+```
 
-The standard TUI checks GitHub Releases on startup. When a newer stable release is found, use the small **Upgrade** control in the lower-right corner to view the version changelog and start a verified upgrade. The updater checks the release archive against `SHA256SUMS.txt`, stages the new CLI and TUI together, then relaunches the app. User-local installs are recommended for one-click upgrades; system-owned `.deb`, `.rpm`, and `.pkg` installs may require the OS package manager or administrator permission.
+The service listens on your own computer by default. It does not need to be exposed to your home or office network.
+
+## 4. Learn the basics
+
+1. Create a repository in IDIOS. This is a place to group work; it does not create a Git checkout.
+2. Add an issue and describe the work.
+3. Start the issue when you begin working on it.
+4. Create an IDIOS pull-request record to describe the work, then accept it when the work is complete.
+5. Use projects to group issues from different repositories, and notes to save useful context.
+
+Read the [Workspace guide](WORKSPACE_GUIDE.md) for what these items mean and what IDIOS does not do.
+
+## 5. Where your data lives
+
+The default workspace database is:
+
+- **Linux/macOS:** `~/.idios/idios-engine.sqlite3`
+- **Windows:** `%USERPROFILE%\.idios\idios-engine.sqlite3`
+
+The database holds your workspace items. Your settings are stored separately; see [Settings and data](SETTINGS.md).
+
+## If something does not work
+
+- **`idios` is not recognized / command not found:** reopen your terminal. If needed, check that the install directory is in `PATH`.
+- **The terminal UI exits immediately:** it needs an interactive terminal. Run `idios help` for CLI usage.
+- **The browser does not open:** run `idios web --no-open` to print the address, then open it yourself. Check `idios server status`.
+- **You want to use a different database:** set `IDIOS_DB` or pass `--db PATH` to a supported command.
+- **You want to report a bug:** open an issue at [GitHub Issues](https://github.com/m-mdy-m/idios/issues) and include the steps and error message. Do not attach your database if it contains private information.

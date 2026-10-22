@@ -1,62 +1,55 @@
-# Extending IDIOS safely
+# Adding a feature
 
-The standard path for a feature is **Domain → Store port → SQLite adapter → Application use case →
-CLI/TUI adapter → tests and docs**. This keeps features modular and prevents UI-specific behavior
-from becoming part of the Engine.
+Use this checklist whenever a change affects workspace behavior rather than only text or styling.
 
-## 1. Define the behavior
+## Module ownership
 
-- Add a type or invariant to `internal/domain` only when the model needs one.
-- Put workflow validation and coordination in `internal/application`.
-- Keep `internal/ports/store.go` as the storage boundary, using typed arguments/results.
-- Do not import UI, terminal, SQL or driver types into Domain/Application contracts.
+- **A screen or interaction:** `clients/web/src/pages/` composes focused feature components; the TUI/CLI adapter lives in its corresponding `clients/` package.
+- **A shared UI primitive:** `clients/web/src/components/ui/` (buttons, cards, badges, fields, modal shell, loading/empty/error states). Keep color/spacing/type tokens in `clients/web/src/index.css` and reuse them.
+- **A feature visual:** `clients/web/src/components/<feature>/`; keep SVG/pointer mechanics and inspection panels out of page components.
+- **A protocol command or shared form:** `internal/protocol/`. Keep command metadata, field names, option sources, and handler contract in one place.
+- **Input validation:** `internal/validation/` for reusable pure rules and normalization; `internal/application/` repeats business invariants for every caller.
+- **A workflow/use case:** `internal/application/`; add one method and reuse it across TUI, CLI, and HTTP/protocol paths.
+- **A shared model or invariant:** `internal/domain/`.
+- **Persistence:** add a method to `internal/ports/`, implement it in `internal/storage/sqlite/`, and add a safe, forward-only migration where needed.
+- **HTTP API boundary:** `clients/server/`; parse bounded request bodies, reject malformed/unknown fields, call the application, and return a stable error status/body.
+- **Logs/health:** use `internal/diagnostics` and the local monitoring endpoints; don't create feature-specific log files or silently ship telemetry.
 
-## 2. Persist it
+## Validation order
 
-- Add SQL to the relevant focused file in `internal/storage/sqlite` (for example `issues.go`,
-  `knowledge.go`, `workflow.go` or `labels.go`).
-- If schema changes are needed, add a new `internal/storage/sqlite/migrations/NNNN_description.sql`
-  migration. Shipped migrations are immutable.
-- `connection.go` is the only place allowed to call `sql.Open`; use `database/sql` directly.
-- `query.go` provides package-local row mapping, query and transaction helpers. Do not create a
-  second driver/pool abstraction or pass `*sql.DB` into Application.
-- Keep coupled writes in `s.run(...)`. Classify driver failures in `values.go` using typed
-  `sqlite3.Error` result codes rather than matching error text.
-- For read-only legacy import, use `openDatabase(path, true)` and never write to the source DB.
+1. Resolve the requested command/route and body schema.
+2. Reject unknown keys, malformed JSON, unexpected trailing data, unsupported enums and wrong data types.
+3. Normalize strings and typed values; enforce size limits, UTF-8/null-byte rules, date/time/color/URL formats and required fields.
+4. Validate that referenced entities exist, are in the correct scope, and are in an allowed state.
+5. Validate cross-entity invariants, cycles and blocking dependencies.
+6. Perform the mutation atomically in storage where partial state would be incorrect.
+7. Return actionable errors; log operation/outcome/latency without recording secrets or complete private note/quote bodies.
 
-Read [STORAGE.md](STORAGE.md) for connection options, DSN construction, transactions and migration
-invariants.
+A form-level required marker is only a usability feature. It is never the security or correctness boundary.
 
-## 3. Add application tests
+## Reuse the UI instead of duplicating it
 
-Application tests should prove the user-visible rule (blocked Issue cannot start, parent waits for
-active children, one accepted PR creates one CompletionRecord). Storage tests should verify SQL
-invariants, transaction rollback, foreign keys and migration behavior. Do not rely only on CLI/TUI
-tests to cover core rules.
+- Use `Button` for all standard button variants (`primary`, `secondary`, `ghost`, `danger`) and one loading/disabled behavior.
+- Use `Modal` as the generic modal shell and put page-specific form/detail/confirmation content inside it. Do not create a fresh backdrop or implement Escape/body-scroll behavior per page.
+- Use `Card`, `Badge`, `Field`, `PageHeading`, `EmptyState`, `LoadingState` and `ErrorNotice` before writing another near-identical primitive.
+- Put entity-specific UI (issue creation/edit, PR details, label selector, note editor, graph inspector) into a focused feature component. Repositories and the Issues page should call the same issue-creation command instead of maintaining parallel creation logic.
+- Prefer design tokens and semantic color names over literal page-specific colors. Data-defined label colors are the deliberate exception and must be validated.
 
-## 4. Expose it through adapters
+## Suggested implementation sequence
 
-- Add commands in `internal/cli/registry.go`, flags in the existing declarative flag structures,
-  and machine/human output through `internal/render`.
-- Add TUI menu actions/screens in `tui`. The TUI can format and navigate; it cannot repeat
-  validation, issue SQL or invoke the CLI process.
-- If a GUI might use the feature, consider whether the versioned JSON protocol needs a new field or
-  stable command shape and add regression tests.
+1. Write the behavior and acceptance examples, including invalid and boundary cases.
+2. Add a domain/application contract with clear owners and transitions.
+3. Add central validation and tests before touching persistence.
+4. Extend ports + SQLite + migration transactionally, if needed.
+5. Expose it via the shared protocol and HTTP adapter.
+6. Connect all intended UI adapters and compose reusable components.
+7. Update [Entity relationships](ENTITY_RELATIONSHIPS.md), the user guide and API notes.
+8. Run formatting, Go tests/vet/race, browser lint/build, and migration/packaged smoke tests.
 
-## 5. Add it to the graph deliberately
+## Workflow rules to preserve
 
-Classify each relation before implementing it:
-
-- **Structural**: ownership and parent/child invariants.
-- **Workflow**: `depends_on` or `blocks`; changes readiness and requires cycle detection.
-- **Semantic**: `uses_concept`, `related_to`, `implements`, etc.; informational unless explicitly
-  defined otherwise.
-
-Only explicit workflow dependencies may block work. Add nodes/edges in `graph.go`, but keep cycle
-checking, blocker computation and traversal decisions in Application/Storage, not in the renderer.
-
-## 6. Preserve future Branch compatibility without implementing Git
-
-V1 creates `main` and records accepted work through CompletionRecords. Do not add fake Git hashes,
-file snapshots or merge behavior to complete an Issue. When non-main branches are designed, first
-define what a branch contains and how PRs compare/accept it; then add separate use cases and tests.
+- Only accepting an IDIOS pull request completes an issue and creates its completion record.
+- `depends_on` is the blocking relation; ordinary semantic links do not block progress.
+- Prevent parent/dependency cycles and verify cross-repository constraints.
+- Keep related persistence writes in the same transaction when partial results are incorrect.
+- An IDIOS pull request is not a real Git commit or hosted PR merge.
