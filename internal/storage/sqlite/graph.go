@@ -18,7 +18,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, r := range repos {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("repository", r.ID), Type: "repository", Label: r.Name, Reference: "repo:" + r.Name})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("repository", r.ID), Type: "repository", Label: r.Name, Description: r.Description, Reference: "repo:" + r.Name})
 	}
 
 	branches, err := s.p().all(ctx, `SELECT b.id,b.repository_id,b.name,r.name AS repository_name FROM branches b JOIN repositories r ON r.id=b.repository_id`)
@@ -27,7 +27,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 	}
 	for _, b := range branches {
 		id, repoID, name := str(b, "id"), str(b, "repository_id"), str(b, "name")
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("branch", id), Type: "branch", Label: str(b, "repository_name") + " / " + name, Reference: "branch:" + str(b, "repository_name") + "/" + name})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("branch", id), Type: "branch", Label: str(b, "repository_name") + " / " + name, Description: "Workflow branch in repository " + str(b, "repository_name"), Reference: "branch:" + str(b, "repository_name") + "/" + name})
 		g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("repository", repoID), Target: graphID("branch", id), Type: "has_branch"})
 	}
 
@@ -36,7 +36,32 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, p := range projects {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("project", p.ID), Type: "project", Label: p.Name, Reference: "project:" + p.Name})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("project", p.ID), Type: "project", Label: p.Name, Description: p.Description, Reference: "project:" + p.Name})
+	}
+
+	projectRepositoryLinks, err := s.p().all(ctx, `SELECT project_id,repository_id,relationship,is_primary FROM project_repositories ORDER BY project_id,repository_id`)
+	if err != nil {
+		return g, err
+	}
+	for _, link := range projectRepositoryLinks {
+		edgeType := "related_repository"
+		label := str(link, "relationship")
+		if boolRow(link, "is_primary") {
+			edgeType = "primary_repository"
+			if label == "" {
+				label = "Primary repository"
+			} else {
+				label = "Primary · " + label
+			}
+		} else if label == "" {
+			label = "Related repository"
+		}
+		g.Edges = append(g.Edges, domain.GraphEdge{
+			Source: graphID("project", str(link, "project_id")),
+			Target: graphID("repository", str(link, "repository_id")),
+			Type:   edgeType,
+			Label:  label,
+		})
 	}
 
 	concepts, err := s.ListConcepts(ctx)
@@ -44,7 +69,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, c := range concepts {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("concept", c.ID), Type: "concept", Label: c.Name, Reference: "concept:" + c.Name})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("concept", c.ID), Type: "concept", Label: c.Name, Description: c.Description, Reference: "concept:" + c.Name})
 	}
 
 	issues, err := s.ListIssues(ctx, "", "")
@@ -53,7 +78,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 	}
 	for _, i := range issues {
 		ref := reference(i.RepositoryName, "#", i.Number)
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("issue", i.ID), Type: "issue", Label: ref + " · " + i.Title, Status: string(i.Status), Reference: "issue:" + ref})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("issue", i.ID), Type: "issue", Label: ref + " · " + i.Title, Description: i.Description, Status: string(i.Status), Reference: "issue:" + ref})
 		g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("repository", i.RepositoryID), Target: graphID("issue", i.ID), Type: "owns_issue"})
 		if i.ParentIssueID != nil {
 			g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("issue", *i.ParentIssueID), Target: graphID("issue", i.ID), Type: "has_sub_issue"})
@@ -74,7 +99,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 	}
 	for _, p := range prs {
 		ref := reference(p.RepositoryName, "!", p.Number)
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("pull_request", p.ID), Type: "pull_request", Label: ref + " · " + p.Title, Status: string(p.Status), Reference: "pr:" + ref})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("pull_request", p.ID), Type: "pull_request", Label: ref + " · " + p.Title, Description: p.Description, Status: string(p.Status), Reference: "pr:" + ref})
 		g.Edges = append(g.Edges,
 			domain.GraphEdge{Source: graphID("issue", p.IssueID), Target: graphID("pull_request", p.ID), Type: "has_pull_request"},
 			domain.GraphEdge{Source: graphID("pull_request", p.ID), Target: graphID("branch", p.TargetBranchID), Type: "targets_branch"})
@@ -85,7 +110,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, c := range completions {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("completion", c.ID), Type: "completion", Label: fmt.Sprintf("%s completion %d · %s", c.BranchName, c.Sequence, c.Summary), Reference: completionReference(c)})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("completion", c.ID), Type: "completion", Label: fmt.Sprintf("%s completion %d · %s", c.BranchName, c.Sequence, c.Summary), Description: c.Summary, Reference: completionReference(c)})
 		g.Edges = append(g.Edges,
 			domain.GraphEdge{Source: graphID("completion", c.ID), Target: graphID("issue", c.IssueID), Type: "completes_issue"},
 			domain.GraphEdge{Source: graphID("completion", c.ID), Target: graphID("branch", c.BranchID), Type: "recorded_on"},
@@ -101,7 +126,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		if !n.GraphVisible {
 			continue
 		}
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("note", n.ID), Type: "note", Label: n.Title, Reference: "note:" + n.ID})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("note", n.ID), Type: "note", Label: n.Title, Description: n.Content, Reference: "note:" + n.ID})
 		if n.LinkedEntityType != "" && n.LinkedEntityID != "" {
 			g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("note", n.ID), Target: graphID(n.LinkedEntityType, n.LinkedEntityID), Type: "note_about"})
 		}
@@ -112,7 +137,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, l := range labels {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("label", l.ID), Type: "label", Label: l.Name, Reference: labelReference(l)})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("label", l.ID), Type: "label", Label: l.Name, Description: l.Description, Reference: labelReference(l)})
 		if l.RepositoryID != nil {
 			g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("repository", *l.RepositoryID), Target: graphID("label", l.ID), Type: "defines_label"})
 		}
@@ -123,7 +148,7 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		return g, err
 	}
 	for _, m := range milestones {
-		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("milestone", m.ID), Type: "milestone", Label: m.Title, Reference: milestoneReference(m)})
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("milestone", m.ID), Type: "milestone", Label: m.Title, Description: m.Description, Reference: milestoneReference(m)})
 		g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID(m.ScopeType, m.ScopeID), Target: graphID("milestone", m.ID), Type: "has_milestone"})
 	}
 
