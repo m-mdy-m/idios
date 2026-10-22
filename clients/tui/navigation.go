@@ -4,6 +4,7 @@ package tui
 
 import (
 	"idios/internal/domain"
+	"idios/internal/features"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -19,10 +20,17 @@ func (m *model) goBack() {
 }
 
 func (m *model) cycleNavigation(direction int) {
-	nav := []page{pageOverview, pageRepositories, pageProjects, pageIssues, pagePullRequests, pageGraph, pageConcepts, pageNotes, pageQuotes, pageJobs, pageRemove, pageNotifications, pageLogs, pageSettings}
+	catalog := features.TUICycleNavigation()
+	if len(catalog) == 0 {
+		return
+	}
+	nav := make([]page, 0, len(catalog))
+	for _, item := range catalog {
+		nav = append(nav, page(item.TUIPage))
+	}
 	index := 0
-	for i, p := range nav {
-		if p == m.page {
+	for i, target := range nav {
+		if target == m.page {
 			index = i
 			break
 		}
@@ -32,9 +40,9 @@ func (m *model) cycleNavigation(direction int) {
 }
 
 func (m *model) navigateIndex(index int) {
-	nav := []page{pageOverview, pageRepositories, pageProjects, pageIssues, pagePullRequests, pageGraph, pageConcepts, pageSettings}
-	if index < len(nav) {
-		m.repoContext, m.page, m.cursor, m.scroll = "", nav[index], 0, 0
+	nav := features.TUICycleNavigation()
+	if index >= 0 && index < len(nav) {
+		m.repoContext, m.page, m.cursor, m.scroll = "", page(nav[index].TUIPage), 0, 0
 	}
 }
 
@@ -257,10 +265,33 @@ func formTitle(kind formKind) string {
 		formDependency: "Add blocking prerequisite", formConceptLink: "Link issue to concept", formProjectIssue: "Add issue to project",
 		formRepoSetting: "Edit repository setting", formLabel: "Create label", formMilestone: "Create milestone",
 		formAssignLabel: "Assign label", formAssignMilestone: "Assign milestone", formNote: "Write a note",
-		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Create scheduled job", formProfile: "Edit workspace profile", formDeleteRepositoryConfirm: "Confirm repository deletion",
+		formNoteLink: "Link note to an item", formQuote: "Save a quote", formJob: "Create scheduled job", formProfile: "Edit workspace profile", formDeleteRepositoryConfirm: "Confirm repository deletion", formProtocolCommand: "Run shared command",
 	}
 	if title := titles[kind]; title != "" {
 		return title
 	}
 	return "IDIOS form"
+}
+
+// featureAction maps shared feature metadata to a TUI action without duplicating routing names.
+func featureAction(item features.Feature) string {
+	if item.TUIAction != "" {
+		return item.TUIAction
+	}
+	if item.TUIPage != "" {
+		return "nav:" + item.TUIPage
+	}
+	return ""
+}
+
+func featureTUILabel(item features.Feature) string {
+	glyphs := map[string]string{
+		"projects": "▤", "pull-requests": "⑂", "graph": "◎", "concepts": "◇",
+		"notes": "✎", "quotes": "❝", "remove": "⌫", "notifications": "◉",
+		"logs": "≡", "settings": "⚙", "profile": "◌", "commands": "⌘",
+	}
+	if glyph := glyphs[item.ID]; glyph != "" {
+		return glyph + "  " + item.Label
+	}
+	return item.Label
 }

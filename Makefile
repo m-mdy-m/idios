@@ -3,6 +3,8 @@ PSX ?= psx
 BIN_DIR ?= dist
 DESTDIR ?=
 CGO_ENABLED ?= 1
+PNPM ?= pnpm
+WEB_DIR = clients/web
 
 ifeq ($(OS),Windows_NT)
 PREFIX ?= $(if $(LOCALAPPDATA),$(LOCALAPPDATA)/Programs/IDIOS,$(USERPROFILE)/AppData/Local/Programs/IDIOS)
@@ -15,25 +17,35 @@ GOOS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 EXE_EXT ?= $(if $(filter windows,$(GOOS)),.exe,)
 VERSION ?= $(shell tag=$$(git describe --tags --abbrev=0 2>/dev/null); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else printf '1.0.2'; fi)
 endif
-CLI_LDFLAGS = -s -w -X idios/internal/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
+CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
 TUI_LDFLAGS = -s -w -X idios/internal/updater.Version=$(VERSION)
-GOFILES = $(shell find cmd internal tui -type f -name '*.go' -print)
+GOFILES = $(shell find cmd internal clients -type f -name '*.go' -print)
 CLI_BIN = $(BIN_DIR)/idios$(EXE_EXT)
 TUI_BIN = $(BIN_DIR)/idios-tui$(EXE_EXT)
 DEMO_BIN = $(BIN_DIR)/idios-tui-demo$(EXE_EXT)
 
-.PHONY: all build install install-user uninstall tui tui-demo test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
+.PHONY: all build web-install web-build web-lint install install-user uninstall tui tui-demo test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 
 all: ci
 
+## Web frontend
+web-install: ## Install the web UI's development/build dependencies (pnpm only; no Node runtime is needed after packaging).
+	cd $(WEB_DIR) && $(PNPM) install --no-frozen-lockfile
+
+web-build: web-install ## Build the React/TypeScript UI into the static bundle embedded in the Go server.
+	cd $(WEB_DIR) && $(PNPM) run build
+
+web-lint: web-install ## Type/lint-check the web UI source.
+	cd $(WEB_DIR) && $(PNPM) run lint
+
 ## Build
 ifeq ($(OS),Windows_NT)
-build: ## Build CLI, clean TUI, and demo TUI into $(BIN_DIR)/ using PowerShell on Windows.
+build: ## Build the bundled Web UI, CLI, clean TUI, and demo TUI using PowerShell on Windows.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Version "$(VERSION)"
 else
-build: ## Build CLI, clean TUI, and demo TUI into $(BIN_DIR)/.
+build: web-build ## Build the bundled Web UI, CLI, clean TUI, and demo TUI into $(BIN_DIR)/.
 	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) $(GO) build -trimpath -ldflags='$(CLI_LDFLAGS)' -o $(CLI_BIN) ./cmd/idios
+	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) $(GO) build -tags=embed_web -trimpath -ldflags='$(CLI_LDFLAGS)' -o $(CLI_BIN) ./cmd/idios
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) $(GO) build -trimpath -ldflags='$(TUI_LDFLAGS)' -o $(TUI_BIN) ./cmd/idios-tui
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) $(GO) build -trimpath -ldflags='$(TUI_LDFLAGS)' -o $(DEMO_BIN) ./cmd/idios-tui-demo
 endif
@@ -94,7 +106,7 @@ test-cover: ## Run tests and write coverage.out.
 vet: ## Run go vet.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
 
-check: fmt-check test vet ## Run the fast local quality gate.
+check: fmt-check test vet web-lint ## Run Go and web-source quality checks.
 
 ci: check test-race build smoke ## Run the full local CI gate (PSX is a separate optional target).
 

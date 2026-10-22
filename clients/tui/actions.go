@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"idios/internal/config"
 	"idios/internal/domain"
+	"idios/internal/protocol"
 	"sort"
 	"strings"
 	"time"
@@ -116,6 +117,12 @@ func (m *model) handleAction(action string) tea.Cmd {
 		m.repoContext = ""
 	case "form":
 		m.beginForm(formKind(value))
+	case "protocol":
+		m.protocolCommandID = value
+		m.beginForm(formProtocolCommand)
+		if command, ok := protocol.Find(value); ok {
+			m.formTitle = command.Title
+		}
 	case "batch":
 		switch value {
 		case "retry-failed":
@@ -168,9 +175,13 @@ func (m *model) handleAction(action string) tea.Cmd {
 	case "issue-action":
 		switch value {
 		case "start":
-			return m.runOperation("Issue started.", func() error { _, err := m.app.StartIssue(m.ctx, m.selectedIssueRef); return err })
+			return m.runOperation("Issue started.", func() error {
+				return executeSharedAction(m.ctx, m.app, "issue.start", map[string]any{"ref": m.selectedIssueRef})
+			})
 		case "cancel":
-			return m.runOperation("Issue cancelled.", func() error { _, err := m.app.CancelIssue(m.ctx, m.selectedIssueRef); return err })
+			return m.runOperation("Issue cancelled.", func() error {
+				return executeSharedAction(m.ctx, m.app, "issue.cancel", map[string]any{"ref": m.selectedIssueRef})
+			})
 		case "pr":
 			m.beginForm(formPullRequest)
 		case "dependency":
@@ -198,7 +209,9 @@ func (m *model) handleAction(action string) tea.Cmd {
 		case "edit":
 			m.beginForm(formEditPR)
 		case "close":
-			return m.runOperation("Pull request closed.", func() error { _, err := m.app.ClosePullRequest(m.ctx, m.selectedPRRef); return err })
+			return m.runOperation("Pull request closed.", func() error {
+				return executeSharedAction(m.ctx, m.app, "pull_request.close", map[string]any{"ref": m.selectedPRRef})
+			})
 		case "issue":
 			for _, pr := range m.pullRequests {
 				if prRef(pr) == m.selectedPRRef {
@@ -371,7 +384,9 @@ func (m *model) handleAction(action string) tea.Cmd {
 		case "graph":
 			for _, n := range m.notes {
 				if n.ID == m.selectedNoteID && n.LinkedEntityType != "" {
-					return m.runOperation("Note graph visibility updated.", func() error { return m.app.LinkNote(m.ctx, n.ID, n.LinkedEntityType, n.LinkedEntityID, true) })
+					return m.runOperation("Note graph visibility updated.", func() error {
+						return executeSharedAction(m.ctx, m.app, "note.link", map[string]any{"id": n.ID, "entity_type": n.LinkedEntityType, "entity_ref": n.LinkedEntityID, "graph_visible": true})
+					})
 				}
 			}
 		}
@@ -387,16 +402,17 @@ func (m *model) handleAction(action string) tea.Cmd {
 			m.beginForm(formQuote)
 		}
 	case "job":
-		return m.runOperation("Scheduled job toggled.", func() error { _, err := m.app.ToggleScheduledJob(m.ctx, value); return err })
+		return m.runOperation("Scheduled job toggled.", func() error { return executeSharedAction(m.ctx, m.app, "job.toggle", map[string]any{"id": value}) })
 	case "job-edit":
 		m.selectedJobID = value
 		m.beginForm(formJob)
 	case "job-toggle":
-		return m.runOperation("Scheduled job state updated.", func() error { _, err := m.app.ToggleScheduledJob(m.ctx, value); return err })
+		return m.runOperation("Scheduled job state updated.", func() error { return executeSharedAction(m.ctx, m.app, "job.toggle", map[string]any{"id": value}) })
 	case "job-run":
-		id := value
-		ctx, app, notificationsEnabled := m.ctx, m.app, m.config.Notifications.Enabled
-		return m.runOperation("Scheduled job ran now.", func() error { return app.RunScheduledJobNow(ctx, id, time.Now(), notificationsEnabled) })
+		id, notify := value, m.config.Notifications.Enabled
+		return m.runOperation("Scheduled job ran now.", func() error {
+			return executeSharedAction(m.ctx, m.app, "job.run", map[string]any{"id": id, "notify": notify})
+		})
 	case "job-delete":
 		id := value
 		return m.handleAction("remove:select:job|" + id)
@@ -407,7 +423,7 @@ func (m *model) handleAction(action string) tea.Cmd {
 		}
 	case "notification-action":
 		if value == "read-all" {
-			return m.runOperation("Notifications marked as read.", func() error { return m.app.MarkNotificationsRead(m.ctx) })
+			return m.runOperation("Notifications marked as read.", func() error { return executeSharedAction(m.ctx, m.app, "notification.read_all", map[string]any{}) })
 		}
 	case "pin":
 		pinParts := strings.SplitN(value, ":", 2)
@@ -419,9 +435,15 @@ func (m *model) handleAction(action string) tea.Cmd {
 				color = "warning"
 			}
 			return func() tea.Msg {
-				added, err := m.app.ToggleWorkspacePin(m.ctx, entityType, ref, label, color)
+				result, err := protocol.Execute(m.ctx, m.app, "workspace.pin.toggle", map[string]any{
+					"entity_type": entityType, "entity_ref": ref, "label": label, "color": color,
+				})
+				added := false
+				if payload, ok := result.(map[string]any); ok {
+					added, _ = payload["pinned"].(bool)
+				}
 				message := "Removed from Important items."
-				if added {
+				if err == nil && added {
 					message = "Added to Important items."
 				}
 				return operationMsg{message: message, err: err}
@@ -521,6 +543,7 @@ func (m *model) handleAction(action string) tea.Cmd {
 			return m.submitForm()
 		case "cancel":
 			m.form, m.formFields, m.formError = "", nil, ""
+			m.protocolCommandID = ""
 			m.batchConfirm = false
 			m.batchRetrying, m.batchCarryResults = false, nil
 			m.page = m.formReturnPage
@@ -558,7 +581,9 @@ func (m *model) handleAction(action string) tea.Cmd {
 		refs := strings.SplitN(value, "|", 2)
 		if len(refs) == 2 {
 			issueRefValue, prerequisiteRef := refs[0], refs[1]
-			return m.runOperation("Blocking prerequisite removed.", func() error { return m.app.RemoveDependency(m.ctx, issueRefValue, prerequisiteRef) })
+			return m.runOperation("Blocking prerequisite removed.", func() error {
+				return executeSharedAction(m.ctx, m.app, "issue.dependency.remove", map[string]any{"issue": issueRefValue, "prerequisite": prerequisiteRef})
+			})
 		}
 	case "back":
 		m.goBack()
@@ -619,6 +644,65 @@ func (m *model) fieldsFor(kind formKind) []formField {
 	}
 	if kind == formDeleteRepositoryConfirm {
 		return []formField{{label: "Type the repository name", placeholder: m.deleteTarget.Label, helper: repositoryDeleteConfirmItem(m.deleteTarget)}}
+	}
+	if kind == formProtocolCommand {
+		command, ok := protocol.Find(m.protocolCommandID)
+		if !ok {
+			return []formField{{label: "Command", value: m.protocolCommandID, helper: "This command is no longer available in the shared protocol."}}
+		}
+		fields := make([]formField, 0, len(command.Fields))
+		for _, spec := range command.Fields {
+			value := ""
+			if spec.Default != nil {
+				value = fmt.Sprint(spec.Default)
+			}
+			helper := spec.Help
+			if len(spec.Options) > 0 {
+				options := strings.Join(spec.Options, " · ")
+				if helper != "" {
+					helper += " Allowed: " + options
+				} else {
+					helper = "Allowed: " + options
+				}
+			}
+			if spec.Source != "" {
+				entityType := ""
+				switch spec.Source {
+				case "source_entities":
+					entityType = "concept"
+				case "target_entities":
+					entityType = "issue"
+				case "entities":
+					entityType = "issue"
+				case "owners":
+					entityType = "repository"
+				}
+				for _, related := range command.Fields {
+					if related.Name == "entity_type" || related.Name == "source_type" || related.Name == "target_type" {
+						if related.Default != nil && entityType != "" {
+							entityType = fmt.Sprint(related.Default)
+						}
+					}
+				}
+				if options, err := protocol.Options(m.ctx, m.app, spec.Source, entityType); err == nil && len(options) > 0 {
+					labels := make([]string, 0, min(6, len(options)))
+					for _, option := range options[:min(6, len(options))] {
+						labels = append(labels, option.Label)
+					}
+					available := "Choices from Engine: " + strings.Join(labels, " · ")
+					if len(options) > len(labels) {
+						available += fmt.Sprintf(" · +%d more", len(options)-len(labels))
+					}
+					if helper != "" {
+						helper += " " + available
+					} else {
+						helper = available
+					}
+				}
+			}
+			fields = append(fields, formField{label: spec.Label, value: value, placeholder: spec.Placeholder, helper: helper, multiline: spec.Type == "textarea"})
+		}
+		return fields
 	}
 	if kind == formRepository {
 		return []formField{
@@ -852,6 +936,36 @@ func (m *model) submitForm() tea.Cmd {
 			return ""
 		}
 		return fields[i]
+	}
+	if kind == formProtocolCommand {
+		commandID := m.protocolCommandID
+		app, ctx := m.app, m.ctx
+		input := make(map[string]any, len(m.formFields))
+		if command, ok := protocol.Find(commandID); ok {
+			for i, spec := range command.Fields {
+				if i >= len(fields) {
+					break
+				}
+				value := fields[i]
+				if spec.Type == "boolean" {
+					input[spec.Name] = strings.EqualFold(value, "true") || strings.EqualFold(value, "yes") || value == "1"
+				} else if spec.Type == "number" && value != "" {
+					input[spec.Name] = value
+				} else {
+					input[spec.Name] = value
+				}
+			}
+		}
+		return func() tea.Msg {
+			if _, err := protocol.Execute(ctx, app, commandID, input); err != nil {
+				return operationMsg{err: err}
+			}
+			name := commandID
+			if command, ok := protocol.Find(commandID); ok {
+				name = command.Title
+			}
+			return operationMsg{message: name + " completed."}
+		}
 	}
 	if kind == formDeleteRepositoryConfirm {
 		if m.deleteTarget.ID == "" || m.deleteTarget.Kind != "repository" {

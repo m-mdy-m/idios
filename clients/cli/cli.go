@@ -11,7 +11,7 @@ import (
 	"idios/internal/application"
 	appconfig "idios/internal/config"
 	"idios/internal/logger"
-	"idios/internal/render"
+	"idios/clients/tui/render"
 )
 
 // Version is set to the source version by default and overridden by release builds via -ldflags.

@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+	"idios/internal/application"
+	"idios/internal/protocol"
 )
 
 type removableItem struct {
@@ -301,45 +303,31 @@ func (m *model) runDeleteTarget() tea.Cmd {
 	}
 }
 
-func deleteTargetRecord(ctx context.Context, app interface {
-	DeleteRepository(context.Context, string) error
-	DeleteProject(context.Context, string) error
-	DeleteIssue(context.Context, string) error
-	DeletePullRequest(context.Context, string) error
-	DeleteConcept(context.Context, string) error
-	DeleteNote(context.Context, string) error
-	DeleteQuote(context.Context, string) error
-	DeleteScheduledJob(context.Context, string) error
-	DeleteLabel(context.Context, string) error
-	DeleteMilestone(context.Context, string) error
-	DeleteNotification(context.Context, string) error
-}, target deleteTarget) error {
-	switch target.Kind {
-	case "repository":
-		return app.DeleteRepository(ctx, target.ID)
-	case "issue":
-		return app.DeleteIssue(ctx, target.ID)
-	case "pull_request":
-		return app.DeletePullRequest(ctx, target.ID)
-	case "project":
-		return app.DeleteProject(ctx, target.ID)
-	case "concept":
-		return app.DeleteConcept(ctx, target.ID)
-	case "note":
-		return app.DeleteNote(ctx, target.ID)
-	case "quote":
-		return app.DeleteQuote(ctx, target.ID)
-	case "job":
-		return app.DeleteScheduledJob(ctx, target.ID)
-	case "label":
-		return app.DeleteLabel(ctx, target.ID)
-	case "milestone":
-		return app.DeleteMilestone(ctx, target.ID)
-	case "notification":
-		return app.DeleteNotification(ctx, target.ID)
-	default:
+func deleteTargetRecord(ctx context.Context, app *application.Service, target deleteTarget) error {
+	commandByKind := map[string]string{
+		"repository":   "repository.delete",
+		"issue":        "issue.delete",
+		"pull_request": "pull_request.delete",
+		"project":      "project.delete",
+		"concept":      "concept.delete",
+		"note":         "note.delete",
+		"quote":        "quote.delete",
+		"job":          "job.delete",
+		"label":        "label.delete",
+		"milestone":    "milestone.delete",
+		"notification": "notification.delete",
+	}
+	commandID, ok := commandByKind[target.Kind]
+	if !ok {
 		return fmt.Errorf("unsupported removal category %q", target.Kind)
 	}
+	field := "ref"
+	switch target.Kind {
+	case "note", "quote", "job", "notification":
+		field = "id"
+	}
+	_, err := protocol.Execute(ctx, app, commandID, map[string]any{field: target.ID})
+	return err
 }
 
 func (m *model) beginRepositoryDeleteConfirmation() {

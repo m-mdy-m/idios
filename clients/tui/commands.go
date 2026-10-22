@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"idios/internal/features"
+	"idios/internal/protocol"
 	"strings"
 )
 
@@ -12,21 +14,21 @@ type commandEntry struct {
 }
 
 func (m *model) commandEntries() []commandEntry {
-	return []commandEntry{
-		{"Open Overview", "Workspace summary and recent activity", "nav:overview"},
-		{"Browse repositories", "Search and manage repositories", "nav:repositories"},
-		{"Open projects", "Group work across repositories", "nav:projects"},
-		{"Open issues", "Filter and manage issues", "nav:issues"},
-		{"Open pull requests", "Review local pull-request records", "nav:pull-requests"},
-		{"Open knowledge graph", "Explore typed relationships", "nav:graph"},
-		{"Open concepts", "Manage reusable knowledge", "nav:concepts"},
-		{"Open notes", "Capture and link notes", "nav:notes"},
-		{"Open quotes", "Manage saved quotes", "nav:quotes"},
-		{"Open scheduled jobs", "Manage reminders and schedules", "nav:jobs"},
-		{"Remove items", "Safely remove repositories, Issues, PRs, concepts, notes, quotes, jobs, labels and milestones", "nav:remove-center"},
-		{"Open notifications", "Review reminder notifications", "nav:notifications"},
-		{"Open logs", "Inspect recent UI events", "nav:logs"},
-		{"Open settings", "Theme, density, reminders and random quote notifications", "nav:settings"},
+	entries := []commandEntry{}
+	for _, feature := range features.Catalog() {
+		if feature.TUIPage == "" && feature.TUIAction == "" {
+			continue
+		}
+		action := featureAction(feature)
+		// Context-specific repository screens are reached from the selected repository tab bar.
+		if strings.HasPrefix(feature.ID, "repository-") || feature.ID == "issue-detail" || feature.ID == "pull-request-detail" || feature.ID == "project-detail" || feature.ID == "concept-detail" || strings.HasPrefix(feature.ID, "batch-") || feature.ID == "new-item" {
+			continue
+		}
+		if action != "" {
+			entries = append(entries, commandEntry{"Open " + feature.Label, feature.Description, action})
+		}
+	}
+	entries = append(entries, []commandEntry{
 		{"Toggle random quote reminders", "Enable or disable randomized quote notifications", "settings-action:quote-reminders"},
 		{"Change quote reminder interval", "Cycle between minute and hour ranges", "settings-action:quote-interval"},
 		{"Send test quote notification", "Check whether the desktop notification integration works", "settings-action:test-quote-reminder"},
@@ -40,7 +42,22 @@ func (m *model) commandEntries() []commandEntry {
 		{"Create project", "Group related work", "form:project"},
 		{"Create concept", "Add a reusable knowledge concept", "form:concept"},
 		{"Exit IDIOS", "Close the workspace gracefully", "quit:confirm"},
+	}...)
+	// Commands in this catalog are shared with the HTTP API and Web command center.
+	// Native TUI flows remain available for richer forms; remaining commands are rendered
+	// from protocol metadata and need no TUI-specific registration.
+	native := map[string]bool{
+		"repository.create": true, "project.create": true, "issue.create": true,
+		"concept.create": true, "note.create": true, "quote.create": true, "job.create": true,
+		"notification.read_all": true,
 	}
+	for _, command := range protocol.Catalog() {
+		if native[command.ID] {
+			continue
+		}
+		entries = append(entries, commandEntry{title: command.Title, description: command.Description, action: "protocol:" + command.ID})
+	}
+	return entries
 }
 
 func (m *model) filteredCommandEntries() []commandEntry {

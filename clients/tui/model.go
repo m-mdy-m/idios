@@ -84,6 +84,7 @@ const (
 	formBulkQuotes              formKind = "bulk-quotes"
 	formBulkJobs                formKind = "bulk-jobs"
 	formDeleteRepositoryConfirm formKind = "delete-repository-confirm"
+	formProtocolCommand         formKind = "protocol-command"
 )
 
 type formField struct {
@@ -256,6 +257,7 @@ type model struct {
 	formError           string
 	formTitle           string
 	activeIssueTemplate string
+	protocolCommandID   string
 
 	status       string
 	statusError  bool

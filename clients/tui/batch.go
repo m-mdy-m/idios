@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"idios/internal/application"
 	"idios/internal/domain"
+	"idios/internal/protocol"
 	"strings"
 	"time"
 
@@ -57,7 +58,7 @@ func validateBulkForm(kind formKind, fields []string, repositories []domain.Repo
 			return 0, fmt.Errorf("repository %q does not exist; choose one from Repositories", get(0))
 		}
 		priority := strings.ToLower(get(3))
-		if priority != "" && priority != "low" && priority != "normal" && priority != "high" {
+		if priority != "" && priority != "low" && priority != "normal" && priority != "high" && priority != "urgent" {
 			return 0, fmt.Errorf("priority must be low, normal or high")
 		}
 	case formBulkQuotes:
@@ -245,48 +246,62 @@ func createBatchItem(ctx context.Context, app *application.Service, kind formKin
 		}
 		return strings.TrimSpace(fields[index])
 	}
+	var commandID string
+	input := map[string]any{}
 	switch kind {
 	case formBulkIssues:
 		priority := get(3)
 		if priority == "" {
 			priority = "normal"
 		}
-		created, err := app.CreateIssue(ctx, get(0), item, get(2), "", "", priority)
-		if err != nil {
-			result.Detail, result.Retryable = err.Error(), true
-			return result
-		}
-		result.Success = true
-		result.Detail = fmt.Sprintf("Created %s#%d", created.RepositoryName, created.Number)
+		commandID = "issue.create"
+		input = map[string]any{"repo": get(0), "title": item, "description": get(2), "priority": priority}
 	case formBulkQuotes:
-		created, err := app.CreateQuote(ctx, item, get(1))
-		if err != nil {
-			result.Detail, result.Retryable = err.Error(), true
-			return result
-		}
-		result.Success = true
-		result.Detail = "Saved quote · " + created.ID
+		commandID = "quote.create"
+		input = map[string]any{"text": item, "author": get(1)}
 	case formBulkJobs:
 		job, err := parseScheduledJobFields(get(1), get(2))
 		if err != nil {
 			result.Detail = err.Error()
 			return result
 		}
-		job.ID = ""
-		job.Name = item
-		job.ActionType = strings.ToLower(get(3))
-		job.Description = get(4)
-		job.Enabled = true
-		job.Notify = !strings.EqualFold(get(5), "no") && !strings.EqualFold(get(5), "false") && get(5) != "0"
-		created, err := app.CreateScheduledJob(ctx, job)
-		if err != nil {
-			result.Detail, result.Retryable = err.Error(), true
-			return result
+		scheduleAt := ""
+		if job.NextRunAt != nil {
+			scheduleAt = job.NextRunAt.Local().Format("2006-01-02T15:04")
 		}
-		result.Success = true
-		result.Detail = "Scheduled · " + scheduleSummary(created)
+		notify := !strings.EqualFold(get(5), "no") && !strings.EqualFold(get(5), "false") && get(5) != "0"
+		commandID = "job.create"
+		input = map[string]any{
+			"name": item, "description": get(4), "action_type": strings.ToLower(get(3)),
+			"schedule_type": job.ScheduleType, "interval_minutes": job.IntervalMinutes,
+			"schedule_at": scheduleAt, "schedule_time": job.ScheduleTime,
+			"schedule_weekday": job.ScheduleWeekday, "schedule_day": job.ScheduleDay,
+			"enabled": true, "notify": notify,
+		}
 	default:
 		result.Detail = "Unsupported batch operation."
+		return result
+	}
+
+	created, err := protocol.Execute(ctx, app, commandID, input)
+	if err != nil {
+		result.Detail, result.Retryable = err.Error(), true
+		return result
+	}
+	result.Success = true
+	switch value := created.(type) {
+	case domain.Issue:
+		result.Detail = fmt.Sprintf("Created %s#%d", value.RepositoryName, value.Number)
+	case domain.Quote:
+		result.Detail = "Saved quote · " + value.ID
+	case domain.ScheduledJob:
+		result.Detail = "Scheduled · " + scheduleSummary(value)
+	default:
+		// A single-item protocol command should return its created domain object. If a future
+		// command changes that contract, make the incompatibility visible instead of hiding it.
+		result.Success = false
+		result.Retryable = false
+		result.Detail = fmt.Sprintf("Command %s returned an unexpected result type %T.", commandID, created)
 	}
 	return result
 }

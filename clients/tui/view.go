@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"idios/internal/features"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -39,12 +41,20 @@ func (m *model) View() tea.View {
 	header.end()
 
 	// Profile-style tabs. A Repository replaces these with its own tab bar below the hero.
-	header.tabRow(
-		buttonSpec{"Overview", "nav:overview", m.page == pageOverview && m.repoContext == ""},
-		buttonSpec{fmt.Sprintf(copyText.text("Repositories · %d"), len(m.repositories)), "nav:repositories", m.page == pageRepositories},
-		buttonSpec{fmt.Sprintf(copyText.text("Issues · %d"), len(m.issues)), "nav:issues", m.page == pageIssues},
-		buttonSpec{fmt.Sprintf(copyText.text("Jobs · %d"), len(m.jobs)), "nav:jobs", m.page == pageJobs},
-	)
+	topTabs := make([]buttonSpec, 0, len(features.TUITopNavigation()))
+	for _, item := range features.TUITopNavigation() {
+		label := item.Label
+		switch item.Metric {
+		case "repositories":
+			label = fmt.Sprintf(copyText.text("Repositories · %d"), len(m.repositories))
+		case "open_issues":
+			label = fmt.Sprintf(copyText.text("Issues · %d"), len(m.issues))
+		case "jobs":
+			label = fmt.Sprintf(copyText.text("Jobs · %d"), len(m.jobs))
+		}
+		topTabs = append(topTabs, buttonSpec{label, featureAction(item), m.page == page(item.TUIPage) && m.repoContext == ""})
+	}
+	header.tabRow(topTabs...)
 	if m.page != pageOverview && m.page != pageIntro && m.page != pageDeleteConfirm && m.page != pageForm {
 		header.rule()
 		if m.repoContext != "" {
@@ -86,15 +96,10 @@ func (m *model) View() tea.View {
 		side.title("MORE")
 		// Keep destinations that are not already available in the persistent top tabs.
 		// This rail is a useful secondary index, not a second copy of the primary nav.
-		for _, nav := range []struct {
-			label string
-			page  page
-		}{
-			{"▤  Projects", pageProjects}, {"⑂  Pull requests", pagePullRequests},
-			{"◎  Knowledge graph", pageGraph}, {"◇  Concepts", pageConcepts}, {"✎  Notes", pageNotes},
-			{"❝  Quotes", pageQuotes}, {"⌫  Remove items", pageRemove}, {"◉  Notifications", pageNotifications}, {"≡  Logs", pageLogs}, {"⚙  Settings", pageSettings},
-		} {
-			side.buttonRow(buttonSpec{nav.label, "nav:" + string(nav.page), m.page == nav.page && m.repoContext == ""})
+		for _, item := range features.TUISideNavigation() {
+			action := featureAction(item)
+			active := item.TUIPage != "" && m.page == page(item.TUIPage) && m.repoContext == ""
+			side.buttonRow(buttonSpec{featureTUILabel(item), action, active})
 		}
 		side.blank()
 		side.title("QUICK CREATE")

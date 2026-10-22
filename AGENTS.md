@@ -7,10 +7,10 @@ CompletionRecords, Labels, Milestones and a visible graph. V1 is a logical workf
 ## Non-negotiable architecture
 
 ```text
-cmd/idios ───────────────> internal/cli ───────────┐
+cmd/idios ───────────────> clients/cli ───────────┐
                                                    ├──> internal/application ──> internal/domain
 cmd/idios-tui ───────┐                             │
-                     ├──> internal/tuilaunch ─> tui│
+                     ├──> clients/tui/launch ─> tui│
 cmd/idios-tui-demo ──┘                             v
                                             internal/ports
                                                    ^
@@ -25,11 +25,14 @@ cmd/idios-tui-demo ──┘                             v
   only location allowed to call `sql.Open`; use `database/sql` with `mattn/go-sqlite3` directly.
 - `cli` parses commands and routes output; `tuilaunch` selects the clean or isolated demo SQLite database, and `tui` renders/navigates. Neither adapter duplicates
   workflow validation or writes SQL. CLI and TUI must never import one another.
+- `clients/server` is the explicitly requested loopback HTTP adapter for Web/API and the optional background scheduler. It depends on Application, config and the embedded static bundle; it must not query SQL directly or duplicate workflow rules. The web API must remain loopback-only by default and reject untrusted Host/Origin requests.
+- `clients/web/` is a React + TypeScript presentation adapter built with Vite and Tailwind CSS. It calls `clients/server` through a typed API module; browser state is a cache, not a second source of truth. `internal/protocol` is the client-neutral action catalog used by the Web Action center and TUI command palette. Register new shared actions there once and dispatch through Application; keep richer per-page layouts presentation-only. The production static bundle is embedded in the `idios` binary with the `embed_web` build tag. Node.js/pnpm are build-time tools only, never a runtime server dependency.
 - `render` owns CLI human/JSON output. `logger` owns optional diagnostics on stderr.
 
 Prefer focused files grouped by domain area. Do not add a custom driver, generic repository
-framework, event-sourcing platform, DI framework, service daemon or networking layer unless a
-real requirement justifies it.
+framework, event-sourcing platform or DI framework unless a real requirement justifies it. The
+loopback server and user-level autostart are an explicit product requirement; keep them small and
+use the Go standard library rather than introducing a second runtime or service framework.
 
 ## Workflow invariants
 
@@ -67,7 +70,7 @@ real requirement justifies it.
 - Do not convey `BLOCKED` by color alone. Always print the word.
 - Graph nodes must show type/reference and status when meaningful. Every link is worded ("waits for",
   "uses concept") and `depends_on` is the only link ever presented as blocking; an unknown relation type
-  is context. Ownership links are hidden by default. See `docs/development/TUI.md` (Graph page).
+  is context. Ownership links are hidden by default. See `docs/development/ARCHITECTURE.md` and `docs/user/WORKSPACE_GUIDE.md`.
 - Sort graph nodes/edges deterministically and clip long labels to the panel width.
 
 ## Adding a feature
@@ -76,10 +79,11 @@ real requirement justifies it.
 2. Add a small typed method to `ports.Store`.
 3. Implement persistence and a migration if needed.
 4. Add the Application use case and behavior tests.
-5. Expose it through CLI and/or TUI using the same Application method.
-6. Update graph projection if relevant and test node/edge semantics and depth.
-7. Update `docs/user/CLI_REFERENCE.md`, `docs/development/TUI.md`, `docs/development/WORKFLOW.md`, `docs/development/STORAGE.md` and the JSON
-   protocol if behavior/contracts change.
+5. Publish operations through `internal/protocol` when they are user-facing commands. TUI and Web clients must invoke the same protocol/Application behavior; do not duplicate workflow rules in a client.
+6. Add or update the user-facing destination in `internal/features/catalog.go` if it is a navigable screen or contextual feature. Both TUI navigation/command palette and Web navigation read this catalog.
+7. Expose it through CLI and/or TUI using the same Application method, and Web through the shared protocol/API.
+8. Update graph projection if relevant and test node/edge semantics and depth.
+9. Update `docs/user/CLI_REFERENCE.md`, `docs/user/WORKSPACE_GUIDE.md`, `docs/development/ARCHITECTURE.md`, `docs/development/STORAGE.md`, and `docs/development/WEB_API.md` when behavior or contracts change.
 
 ## Required local checks
 

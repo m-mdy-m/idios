@@ -2,9 +2,7 @@ package tui
 
 import (
 	"context"
-	crand "crypto/rand"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -13,6 +11,8 @@ import (
 	"idios/internal/desktopnotify"
 	"idios/internal/domain"
 	builtinquotes "idios/internal/quotes"
+	"idios/internal/reminders"
+	"idios/clients/server"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -49,66 +49,27 @@ func quoteDedupKey(text string) string {
 }
 
 func normalizeQuoteReminderRange(cfg config.QuoteReminderConfig) (int, int) {
-	const maxMinutesAllowed = 525600 // one year
-	minMinutes, maxMinutes := cfg.MinIntervalMinutes, cfg.MaxIntervalMinutes
-	if minMinutes < 1 {
-		minMinutes = 60
-	}
-	if minMinutes > maxMinutesAllowed {
-		minMinutes = maxMinutesAllowed
-	}
-	if maxMinutes < minMinutes {
-		maxMinutes = minMinutes
-	}
-	if maxMinutes > maxMinutesAllowed {
-		maxMinutes = maxMinutesAllowed
-	}
-	return minMinutes, maxMinutes
+	return reminders.NormalizeRange(cfg)
 }
 
 func randomQuoteIntervalMinutes(cfg config.QuoteReminderConfig) int {
-	minMinutes, maxMinutes := normalizeQuoteReminderRange(cfg)
-	if minMinutes == maxMinutes {
-		return minMinutes
-	}
-	span := int64(maxMinutes - minMinutes + 1)
-	n, err := crand.Int(crand.Reader, big.NewInt(span))
-	if err != nil {
-		return minMinutes
-	}
-	return minMinutes + int(n.Int64())
+	return reminders.RandomIntervalMinutes(cfg)
 }
 
 func nextQuoteReminderAt(now time.Time, cfg config.QuoteReminderConfig) time.Time {
-	return now.Add(time.Duration(randomQuoteIntervalMinutes(cfg)) * time.Minute)
+	return reminders.NextAt(now, cfg)
 }
 
 func quoteReminderDue(cfg config.QuoteReminderConfig, at time.Time) bool {
-	if !cfg.Enabled {
-		return false
-	}
-	if strings.TrimSpace(cfg.NextAt) == "" {
-		return true
-	}
-	next, err := time.Parse(time.RFC3339Nano, cfg.NextAt)
-	return err != nil || !at.Before(next)
+	return reminders.Due(cfg, at)
 }
 
 func scheduleQuoteReminderIfNeeded(cfg *config.AppConfig, now time.Time) bool {
-	if cfg == nil || !cfg.Notifications.QuoteReminders.Enabled {
-		return false
-	}
-	r := &cfg.Notifications.QuoteReminders
-	if r.NextAt != "" {
-		if next, err := time.Parse(time.RFC3339Nano, r.NextAt); err == nil && next.After(now) {
-			return false
-		}
-	}
-	r.NextAt = nextQuoteReminderAt(now, *r).Format(time.RFC3339Nano)
-	return true
+	return reminders.EnsureSchedule(cfg, now)
 }
 
 type quoteReminderMsg struct {
+	skipped      bool
 	quote        domain.Quote
 	notification domain.Notification
 	nextAt       time.Time
@@ -128,6 +89,12 @@ func quoteReminderCmd(ctx context.Context, app *application.Service, cfg config.
 		if !cfg.Enabled {
 			return result
 		}
+		// The always-on Go service owns random quote reminders whenever it is healthy.
+		// Keep this TUI fallback for standalone use without the local server.
+		if server.ProbeActive(ctx) {
+			result.skipped = true
+			return result
+		}
 		items, err := app.ListQuotes(ctx)
 		if err != nil {
 			result.err = fmt.Errorf("load quotes for reminder: %w", err)
@@ -139,10 +106,7 @@ func quoteReminderCmd(ctx context.Context, app *application.Service, cfg config.
 		}
 		item := chooseRandomQuote(items, cfg.LastQuoteID)
 		result.quote = item
-		body := "“" + item.Text + "”"
-		if item.Author != "" {
-			body += "\n— " + item.Author
-		}
+		body := reminders.FormatText(item)
 		stored, storeErr := app.CreateNotification(ctx, "Quote of the moment", body, "quote")
 		if storeErr != nil {
 			result.err = fmt.Errorf("save quote reminder to IDIOS inbox: %w", storeErr)
@@ -166,33 +130,11 @@ func sendTestQuoteCmd(ctx context.Context, app *application.Service, lastID stri
 			return quoteTestMsg{err: fmt.Errorf("the quote library is empty")}
 		}
 		item := chooseRandomQuote(items, lastID)
-		body := "“" + item.Text + "”"
-		if item.Author != "" {
-			body += "\n— " + item.Author
-		}
+		body := reminders.FormatText(item)
 		return quoteTestMsg{quote: item, desktopErr: desktopnotify.Send(ctx, "IDIOS · Test quote notification", body)}
 	}
 }
 
 func chooseRandomQuote(items []domain.Quote, lastID string) domain.Quote {
-	if len(items) == 0 {
-		return domain.Quote{}
-	}
-	candidates := items
-	if len(items) > 1 && lastID != "" {
-		filtered := make([]domain.Quote, 0, len(items)-1)
-		for _, item := range items {
-			if item.ID != lastID {
-				filtered = append(filtered, item)
-			}
-		}
-		if len(filtered) > 0 {
-			candidates = filtered
-		}
-	}
-	index, err := crand.Int(crand.Reader, big.NewInt(int64(len(candidates))))
-	if err != nil {
-		return candidates[0]
-	}
-	return candidates[index.Int64()]
+	return reminders.Choose(items, lastID)
 }

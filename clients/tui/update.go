@@ -119,6 +119,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case schedulerTickMsg:
 		commands := []tea.Cmd{schedulerTickCmd(time.Minute)}
+		if latest, err := config.LoadAppConfig(); err == nil {
+			m.config = latest
+		}
 		if m.app == nil {
 			return m, commands[0]
 		}
@@ -132,6 +135,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(commands...)
 	case quoteReminderMsg:
+		if msg.skipped {
+			// Reload scheduler state written by the background server so both clients
+			// continue from the same persisted next-run time.
+			if latest, err := config.LoadAppConfig(); err == nil {
+				m.config = latest
+			}
+			return m, nil
+		}
 		if !msg.nextAt.IsZero() {
 			m.config.Notifications.QuoteReminders.NextAt = msg.nextAt.Format(time.RFC3339Nano)
 			if msg.quote.ID != "" {
@@ -249,6 +260,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedNoteID = ""
 		}
 		m.form, m.formFields, m.formError = "", nil, ""
+		m.protocolCommandID = ""
 		return m, loadSnapshotCmd(m.ctx, m.app)
 	case tea.MouseClickMsg:
 		if msg.Button == tea.MouseLeft {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"idios/internal/tuilaunch"
+	"idios/clients/tui/launch"
 )
 
 func main() {
