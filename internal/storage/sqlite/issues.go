@@ -10,8 +10,9 @@ import (
 )
 
 func issueSelect() string {
-	return `SELECT i.id,i.number,i.repository_id,r.name AS repository_name,i.title,i.description,i.status,i.priority,i.due_date,i.parent_issue_id,parent_repo.name AS parent_repository_name,parent_issue.number AS parent_issue_number,i.created_at,i.updated_at,i.closed_at
+	return `SELECT i.id,i.number,i.repository_id,r.name AS repository_name,i.title,i.description,i.status,i.issue_type AS issue_type,i.priority,i.due_date,i.parent_issue_id,parent_repo.name AS parent_repository_name,parent_issue.number AS parent_issue_number,i.branch_id,branch.name AS branch_name,i.created_at,i.updated_at,i.closed_at
  FROM issues i JOIN repositories r ON r.id=i.repository_id
+ LEFT JOIN branches branch ON branch.id=i.branch_id
  LEFT JOIN issues parent_issue ON parent_issue.id=i.parent_issue_id
  LEFT JOIN repositories parent_repo ON parent_repo.id=parent_issue.repository_id`
 }
@@ -30,10 +31,13 @@ func issueFrom(r Row) domain.Issue {
 		Title:           str(r, "title"),
 		Description:     str(r, "description"),
 		Status:          domain.IssueStatus(str(r, "status")),
+		Type:            domain.IssueType(str(r, "issue_type")),
 		Priority:        str(r, "priority"),
 		DueDate:         ptrString(r["due_date"]),
 		ParentIssueID:   parentID,
 		ParentReference: parentRef,
+		BranchID:        ptrString(r["branch_id"]),
+		BranchName:      str(r, "branch_name"),
 		CreatedAt:       parseTime(r["created_at"]),
 		UpdatedAt:       parseTime(r["updated_at"]),
 		ClosedAt:        ptrTime(r["closed_at"]),
@@ -50,6 +54,16 @@ func (s *Store) CreateIssue(ctx context.Context, in domain.Issue) (domain.Issue,
 		return domain.Issue{}, err
 	}
 	in.RepositoryID = repo.ID
+	if in.BranchID != nil && strings.TrimSpace(*in.BranchID) != "" {
+		branch, e := s.p().must(ctx, "branch", `SELECT id FROM branches WHERE id=? AND repository_id=?`, *in.BranchID, repo.ID)
+		if e != nil {
+			return domain.Issue{}, fmt.Errorf("branch must belong to repository %q: %w", repo.Name, e)
+		}
+		branchID := str(branch, "id")
+		in.BranchID = &branchID
+	} else {
+		in.BranchID = nil
+	}
 	if in.ParentIssueID != nil && *in.ParentIssueID != "" {
 		parent, err := s.GetIssue(ctx, *in.ParentIssueID)
 		if err != nil {
@@ -62,6 +76,12 @@ func (s *Store) CreateIssue(ctx context.Context, in domain.Issue) (domain.Issue,
 			return domain.Issue{}, fmt.Errorf("%w: the parent Issue must be open while defining its Sub-issues", domain.ErrInvalidTransition)
 		}
 		in.ParentIssueID = &parent.ID
+	}
+	if in.Type == "" {
+		in.Type = domain.IssueTask
+	}
+	if in.Type != domain.IssueTask && in.Type != domain.IssueBug && in.Type != domain.IssueFeature && in.Type != domain.IssueResearch {
+		return domain.Issue{}, fmt.Errorf("%w: issue type must be task, bug, feature, or research", domain.ErrInvalid)
 	}
 	status := in.Status
 	if status == "" {
@@ -98,8 +118,8 @@ func (s *Store) CreateIssue(ctx context.Context, in domain.Issue) (domain.Issue,
 			return e
 		}
 		number = i64(next["next_number"])
-		if _, e := p.changes(ctx, `INSERT INTO issues(id,number,repository_id,title,description,status,priority,due_date,parent_issue_id,created_at,updated_at,closed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-			id, number, repo.ID, in.Title, strings.TrimSpace(in.Description), string(status), in.Priority, in.DueDate, in.ParentIssueID, now, now); e != nil {
+		if _, e := p.changes(ctx, `INSERT INTO issues(id,number,repository_id,title,description,status,issue_type,priority,due_date,parent_issue_id,branch_id,created_at,updated_at,closed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+			id, number, repo.ID, in.Title, strings.TrimSpace(in.Description), string(status), string(in.Type), in.Priority, in.DueDate, in.ParentIssueID, in.BranchID, now, now); e != nil {
 			return e
 		}
 		return activity(ctx, p, "issue", id, "issue.created", marshalPayload(map[string]any{"repository": repo.Name, "number": number, "title": in.Title}))
@@ -153,6 +173,90 @@ func (s *Store) ListIssues(ctx context.Context, repoRef, status string) ([]domai
 		return nil, err
 	}
 	return collect(rows, issueFrom), nil
+}
+
+// AssignIssueBranch associates an issue with an optional branch in its repository.
+// An empty branch reference clears the association.
+func (s *Store) AssignIssueBranch(ctx context.Context, issueRef, branchRef string) error {
+	issue, err := s.GetIssue(ctx, issueRef)
+	if err != nil {
+		return err
+	}
+	branchRef = strings.TrimSpace(branchRef)
+	var branchID any
+	branchName := ""
+	if branchRef != "" {
+		branch, e := s.p().must(ctx, "branch", `SELECT id,name FROM branches WHERE repository_id=? AND (id=? OR name=? COLLATE NOCASE) LIMIT 1`, issue.RepositoryID, branchRef, branchRef)
+		if e != nil {
+			return fmt.Errorf("branch must belong to the issue's repository: %w", e)
+		}
+		branchID = str(branch, "id")
+		branchName = str(branch, "name")
+	}
+	if _, err := s.p().changes(ctx, `UPDATE issues SET branch_id=?,updated_at=? WHERE id=?`, branchID, nowText(), issue.ID); err != nil {
+		return err
+	}
+	return s.RecordActivity(ctx, "issue", issue.ID, "issue.branch_changed", marshalPayload(map[string]string{"branch": branchName}))
+}
+
+// AssignIssueParent changes the parent/sub-issue relationship after creation. Parent links stay
+// inside one repository, and the recursive check prevents cycles.
+func (s *Store) AssignIssueParent(ctx context.Context, issueRef, parentRef string) error {
+	issue, err := s.GetIssue(ctx, issueRef)
+	if err != nil {
+		return err
+	}
+	var parentID any
+	parentPayload := ""
+	if strings.TrimSpace(parentRef) != "" {
+		parent, e := s.GetIssue(ctx, parentRef)
+		if e != nil {
+			return fmt.Errorf("parent issue: %w", e)
+		}
+		if parent.ID == issue.ID {
+			return fmt.Errorf("%w: an issue cannot be its own parent", domain.ErrInvalid)
+		}
+		if parent.RepositoryID != issue.RepositoryID {
+			return fmt.Errorf("%w: parent and sub-issue must belong to the same repository", domain.ErrInvalid)
+		}
+		if parent.Status != domain.IssueOpen {
+			return fmt.Errorf("%w: parent issue must remain open while it has sub-issues", domain.ErrInvalidTransition)
+		}
+		parentID = parent.ID
+		parentPayload = fmt.Sprintf("%s#%d", parent.RepositoryName, parent.Number)
+	}
+	return s.run(ctx, func(p provider) error {
+		fresh, e := p.must(ctx, "issue", `SELECT id,repository_id FROM issues WHERE id=?`, issue.ID)
+		if e != nil {
+			return e
+		}
+		if str(fresh, "repository_id") != issue.RepositoryID {
+			return fmt.Errorf("%w: issue repository changed", domain.ErrInvalidTransition)
+		}
+		if parentID != nil {
+			parent, e := p.must(ctx, "parent issue", `SELECT id,repository_id,status FROM issues WHERE id=?`, parentID)
+			if e != nil {
+				return e
+			}
+			if str(parent, "repository_id") != issue.RepositoryID {
+				return fmt.Errorf("%w: parent and sub-issue must belong to the same repository", domain.ErrInvalid)
+			}
+			if str(parent, "status") != string(domain.IssueOpen) {
+				return fmt.Errorf("%w: parent issue must remain open while it has sub-issues", domain.ErrInvalidTransition)
+			}
+			cycle, _, e := p.row(ctx, `WITH RECURSIVE descendants(id) AS (SELECT id FROM issues WHERE parent_issue_id=? UNION ALL SELECT child.id FROM issues child JOIN descendants d ON child.parent_issue_id=d.id) SELECT EXISTS(SELECT 1 FROM descendants WHERE id=?) AS found`, issue.ID, parentID)
+			if e != nil {
+				return e
+			}
+			if boolRow(cycle, "found") {
+				return fmt.Errorf("%w: parent relationship would create a cycle", domain.ErrInvalid)
+			}
+		}
+		if _, e := p.changes(ctx, `UPDATE issues SET parent_issue_id=?,updated_at=? WHERE id=?`, parentID, nowText(), issue.ID); e != nil {
+			return e
+		}
+		return activity(ctx, p, "issue", issue.ID, "issue.parent.assigned", marshalPayload(map[string]any{"issue": fmt.Sprintf("%s#%d", issue.RepositoryName, issue.Number), "parent": parentPayload}))
+	})
 }
 
 func (s *Store) SetIssueStatus(ctx context.Context, issueRef string, status domain.IssueStatus) (domain.Issue, error) {

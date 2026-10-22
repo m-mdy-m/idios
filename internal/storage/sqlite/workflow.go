@@ -2,6 +2,8 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,8 +12,8 @@ import (
 )
 
 func prSelect() string {
-	return `SELECT p.id,p.number,p.repository_id,r.name AS repository_name,p.issue_id,i.number AS issue_number,i.title AS issue_title,p.title,p.description,p.status,p.target_branch_id,b.name AS target_branch_name,p.source_branch_id,p.created_at,p.updated_at,p.accepted_at
- FROM pull_requests p JOIN repositories r ON r.id=p.repository_id JOIN issues i ON i.id=p.issue_id JOIN branches b ON b.id=p.target_branch_id`
+	return `SELECT p.id,p.number,p.repository_id,r.name AS repository_name,p.issue_id,i.number AS issue_number,i.title AS issue_title,p.title,p.description,p.status,p.target_branch_id,b.name AS target_branch_name,p.source_branch_id,source_branch.name AS source_branch_name,p.is_draft,p.created_at,p.updated_at,p.accepted_at
+ FROM pull_requests p JOIN repositories r ON r.id=p.repository_id JOIN issues i ON i.id=p.issue_id JOIN branches b ON b.id=p.target_branch_id LEFT JOIN branches source_branch ON source_branch.id=p.source_branch_id`
 }
 
 func prFrom(r Row) domain.PullRequest {
@@ -29,6 +31,8 @@ func prFrom(r Row) domain.PullRequest {
 		TargetBranchID:   str(r, "target_branch_id"),
 		TargetBranchName: str(r, "target_branch_name"),
 		SourceBranchID:   ptrString(r["source_branch_id"]),
+		SourceBranchName: str(r, "source_branch_name"),
+		IsDraft:          boolRow(r, "is_draft"),
 		CreatedAt:        parseTime(r["created_at"]),
 		UpdatedAt:        parseTime(r["updated_at"]),
 		AcceptedAt:       ptrTime(r["accepted_at"]),
@@ -37,56 +41,189 @@ func prFrom(r Row) domain.PullRequest {
 
 // CreatePullRequest opens the review record for an in-progress Issue that is not blocked.
 func (s *Store) CreatePullRequest(ctx context.Context, issueRef, title, description string) (domain.PullRequest, error) {
-	i, err := s.GetIssue(ctx, issueRef)
-	if err != nil {
-		return domain.PullRequest{}, err
+	return s.CreatePullRequestWithBranches(ctx, issueRef, title, description, "", "", false)
+}
+
+// CreatePullRequestWithBranches records a review between two workflow branches. It does not
+// execute Git commands or merge filesystem changes; it governs the IDIOS issue lifecycle.
+func (s *Store) CreatePullRequestWithBranches(ctx context.Context, issueRef, title, description, sourceRef, targetRef string, draft bool) (domain.PullRequest, error) {
+	return s.CreatePullRequestWithIssues(ctx, []string{issueRef}, title, description, sourceRef, targetRef, draft)
+}
+
+// CreatePullRequestWithIssues creates one simulated review record covering one or more issues.
+// It does not invoke Git or alter files on disk; accepting the PR appends an immutable IDIOS completion.
+func (s *Store) CreatePullRequestWithIssues(ctx context.Context, issueRefs []string, title, description, sourceRef, targetRef string, draft bool) (domain.PullRequest, error) {
+	if len(issueRefs) == 0 {
+		return domain.PullRequest{}, fmt.Errorf("%w: a pull request must include at least one issue", domain.ErrInvalid)
+	}
+	unique := map[string]bool{}
+	issues := make([]domain.Issue, 0, len(issueRefs))
+	for _, ref := range issueRefs {
+		issue, err := s.GetIssue(ctx, strings.TrimSpace(ref))
+		if err != nil {
+			return domain.PullRequest{}, err
+		}
+		if unique[issue.ID] {
+			continue
+		}
+		unique[issue.ID] = true
+		if issue.Status != domain.IssueInProgress {
+			return domain.PullRequest{}, fmt.Errorf("%w: issue %s#%d must be in progress before creating a PR", domain.ErrInvalidTransition, issue.RepositoryName, issue.Number)
+		}
+		if err := requireUnblocked(ctx, s.p(), issue); err != nil {
+			return domain.PullRequest{}, err
+		}
+		issues = append(issues, issue)
+	}
+	i := issues[0]
+	for _, issue := range issues[1:] {
+		if issue.RepositoryID != i.RepositoryID {
+			return domain.PullRequest{}, fmt.Errorf("%w: all issues in one simulated PR must belong to the same repository", domain.ErrInvalid)
+		}
 	}
 	title, description = strings.TrimSpace(title), strings.TrimSpace(description)
 	if title == "" {
-		title = fmt.Sprintf("Issue #%d: %s", i.Number, i.Title)
+		if len(issues) == 1 {
+			title = fmt.Sprintf("Issue #%d: %s", i.Number, i.Title)
+		} else {
+			title = fmt.Sprintf("Batch completion for %d issues", len(issues))
+		}
 	}
 	if description == "" {
-		return domain.PullRequest{}, fmt.Errorf("%w: Pull Request description is required; put the work explanation and result here", domain.ErrInvalid)
+		return domain.PullRequest{}, fmt.Errorf("%w: Pull Request description is required; explain what was implemented and verified", domain.ErrInvalid)
 	}
-	if i.Status != domain.IssueInProgress {
-		return domain.PullRequest{}, fmt.Errorf("%w: start the issue before creating a PR", domain.ErrInvalidTransition)
-	}
-	if err := requireUnblocked(ctx, s.p(), i); err != nil {
+	repo, err := s.GetRepository(ctx, i.RepositoryID)
+	if err != nil {
 		return domain.PullRequest{}, err
+	}
+	branches, err := s.ListBranches(ctx, repo.ID)
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	var targetID, sourceID string
+	for _, branch := range branches {
+		if targetRef == "" && branch.IsDefault {
+			targetID = branch.ID
+		}
+		if targetRef != "" && (branch.ID == targetRef || strings.EqualFold(branch.Name, targetRef)) {
+			targetID = branch.ID
+		}
+		if sourceRef != "" && (branch.ID == sourceRef || strings.EqualFold(branch.Name, sourceRef)) {
+			sourceID = branch.ID
+		}
+	}
+	if targetRef != "" && targetID == "" {
+		return domain.PullRequest{}, fmt.Errorf("%w: target branch %q does not belong to repository %q", domain.ErrNotFound, targetRef, repo.Name)
+	}
+	if targetID == "" {
+		return domain.PullRequest{}, fmt.Errorf("%w: repository has no default branch", domain.ErrInvalid)
+	}
+	if sourceRef != "" && sourceID == "" {
+		return domain.PullRequest{}, fmt.Errorf("%w: source branch %q does not belong to repository %q", domain.ErrNotFound, sourceRef, repo.Name)
+	}
+	if sourceID != "" && sourceID == targetID {
+		return domain.PullRequest{}, fmt.Errorf("%w: source and target branch must differ", domain.ErrInvalid)
 	}
 	now, id := nowText(), domain.NewID()
 	var number int64
 	err = s.run(ctx, func(p provider) error {
-		freshIssue, e := issueByID(ctx, p, i.ID)
-		if e != nil {
-			return e
-		}
-		if freshIssue.Status != domain.IssueInProgress {
-			return fmt.Errorf("%w: issue must be in_progress before creating a PR", domain.ErrInvalidTransition)
-		}
-		if e = requireUnblocked(ctx, p, freshIssue); e != nil {
-			return e
-		}
-		repo, e := p.must(ctx, "repository", `SELECT default_branch_id FROM repositories WHERE id=?`, i.RepositoryID)
-		if e != nil {
-			return e
+		for _, issue := range issues {
+			fresh, e := issueByID(ctx, p, issue.ID)
+			if e != nil {
+				return e
+			}
+			if fresh.Status != domain.IssueInProgress {
+				return fmt.Errorf("%w: issue %s#%d is no longer in progress", domain.ErrInvalidTransition, issue.RepositoryName, issue.Number)
+			}
+			if e = requireUnblocked(ctx, p, fresh); e != nil {
+				return e
+			}
+			existingPR, found, e := p.row(ctx, `SELECT p.id,p.status FROM pull_requests p LEFT JOIN pull_request_issues pri ON pri.pull_request_id=p.id WHERE (p.issue_id=? OR pri.issue_id=?) AND p.status IN ('open','accepted') LIMIT 1`, fresh.ID, fresh.ID)
+			if e != nil {
+				return e
+			}
+			if found {
+				return fmt.Errorf("%w: issue %s#%d is already included in pull request %s (%s)", domain.ErrInvalidTransition, fresh.RepositoryName, fresh.Number, str(existingPR, "id"), str(existingPR, "status"))
+			}
 		}
 		next, _, e := p.row(ctx, `SELECT COALESCE(MAX(number),0)+1 AS n FROM pull_requests WHERE repository_id=?`, i.RepositoryID)
 		if e != nil {
 			return e
 		}
 		number = i64(next["n"])
-		if _, e = p.changes(ctx, `INSERT INTO pull_requests(id,number,repository_id,issue_id,title,description,status,target_branch_id,source_branch_id,created_at,updated_at,accepted_at)
- VALUES(?,?,?,?,?,?,'open',?,NULL,?,?,NULL)`,
-			id, number, i.RepositoryID, i.ID, title, description, str(repo, "default_branch_id"), now, now); e != nil {
+		var source any
+		if sourceID != "" {
+			source = sourceID
+		}
+		if _, e = p.changes(ctx, `INSERT INTO pull_requests(id,number,repository_id,issue_id,title,description,status,target_branch_id,source_branch_id,is_draft,created_at,updated_at,accepted_at) VALUES(?,?,?,?,?,?,'open',?,?,?,?,?,NULL)`, id, number, i.RepositoryID, i.ID, title, description, targetID, source, boolInt(draft), now, now); e != nil {
 			return e
 		}
-		return activity(ctx, p, "pull_request", id, "pull_request.created", marshalPayload(map[string]any{"number": number, "issue_id": i.ID, "target": "main"}))
+		for pos, issue := range issues {
+			if _, e = p.changes(ctx, `INSERT INTO pull_request_issues(pull_request_id,issue_id,position,created_at) VALUES(?,?,?,?)`, id, issue.ID, pos, now); e != nil {
+				return e
+			}
+		}
+		ids := make([]string, 0, len(issues))
+		for _, issue := range issues {
+			ids = append(ids, issue.ID)
+		}
+		return activity(ctx, p, "pull_request", id, "pull_request.created", marshalPayload(map[string]any{"number": number, "issue_ids": ids, "source_branch_id": sourceID, "target_branch_id": targetID, "draft": draft}))
 	})
 	if err != nil {
 		return domain.PullRequest{}, err
 	}
 	return s.GetPullRequest(ctx, id)
+}
+
+func (s *Store) ListPullRequestIssues(ctx context.Context, prRef string) ([]domain.Issue, error) {
+	pr, err := s.GetPullRequest(ctx, prRef)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.p().all(ctx, issueSelect()+` JOIN pull_request_issues pri ON pri.issue_id=i.id WHERE pri.pull_request_id=? ORDER BY pri.position,i.number`, pr.ID)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, issueFrom), nil
+}
+
+// MarkPullRequestReady turns a draft review record into a normal pull request.
+func (s *Store) MarkPullRequestReady(ctx context.Context, ref string) (domain.PullRequest, error) {
+	p, err := s.GetPullRequest(ctx, ref)
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	if p.Status != domain.PRPending {
+		return domain.PullRequest{}, fmt.Errorf("%w: only an open pull request can be marked ready", domain.ErrInvalidTransition)
+	}
+	if !p.IsDraft {
+		return p, nil
+	}
+	err = s.run(ctx, func(q provider) error {
+		fresh, e := q.must(ctx, "pull request", prSelect()+` WHERE p.id=?`, p.ID)
+		if e != nil {
+			return e
+		}
+		current := prFrom(fresh)
+		if current.Status != domain.PRPending {
+			return fmt.Errorf("%w: only an open pull request can be marked ready", domain.ErrInvalidTransition)
+		}
+		if !current.IsDraft {
+			return nil
+		}
+		changed, e := q.changes(ctx, `UPDATE pull_requests SET is_draft=0,updated_at=? WHERE id=? AND status='open' AND is_draft=1`, nowText(), p.ID)
+		if e != nil {
+			return e
+		}
+		if changed == 0 {
+			return fmt.Errorf("%w: pull request changed before it could be marked ready", domain.ErrInvalidTransition)
+		}
+		return activity(ctx, q, "pull_request", p.ID, "pull_request.ready_for_review", marshalPayload(map[string]any{"number": p.Number, "title": p.Title}))
+	})
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	return s.GetPullRequest(ctx, p.ID)
 }
 
 func (s *Store) GetPullRequest(ctx context.Context, ref string) (domain.PullRequest, error) {
@@ -101,13 +238,24 @@ func (s *Store) GetPullRequest(ctx context.Context, ref string) (domain.PullRequ
 		if err != nil {
 			return domain.PullRequest{}, err
 		}
-		return prFrom(row), nil
+		return s.withPRIssueIDs(ctx, prFrom(row))
 	}
 	row, err := s.p().must(ctx, fmt.Sprintf("Pull Request %q (use Repository!number or stable ID)", ref), prSelect()+` WHERE p.id=? LIMIT 1`, ref)
 	if err != nil {
 		return domain.PullRequest{}, err
 	}
-	return prFrom(row), nil
+	return s.withPRIssueIDs(ctx, prFrom(row))
+}
+
+func (s *Store) withPRIssueIDs(ctx context.Context, pr domain.PullRequest) (domain.PullRequest, error) {
+	rows, err := s.p().all(ctx, `SELECT issue_id FROM pull_request_issues WHERE pull_request_id=? ORDER BY position`, pr.ID)
+	if err != nil {
+		return domain.PullRequest{}, err
+	}
+	for _, row := range rows {
+		pr.IssueIDs = append(pr.IssueIDs, str(row, "issue_id"))
+	}
+	return pr, nil
 }
 
 func (s *Store) ListPullRequests(ctx context.Context, repoRef, status string) ([]domain.PullRequest, error) {
@@ -130,7 +278,15 @@ func (s *Store) ListPullRequests(ctx context.Context, repoRef, status string) ([
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, prFrom), nil
+	items := collect(rows, prFrom)
+	for i := range items {
+		var e error
+		items[i], e = s.withPRIssueIDs(ctx, items[i])
+		if e != nil {
+			return nil, e
+		}
+	}
+	return items, nil
 }
 
 // UpdatePullRequest rewrites the title and description of a PR that is still open, so the PR can
@@ -199,17 +355,35 @@ func (s *Store) AcceptPullRequest(ctx context.Context, prRef, summary string) (d
 		if freshPR.Status != domain.PRPending {
 			return fmt.Errorf("%w: PR is not open", domain.ErrInvalidTransition)
 		}
+		if freshPR.IsDraft {
+			return fmt.Errorf("%w: mark the draft PR ready for review before accepting it", domain.ErrInvalidTransition)
+		}
 		issue, e := issueByID(ctx, q, freshPR.IssueID)
 		if e != nil {
 			return fmt.Errorf("Issue: %w", e)
 		}
-		if issue.Status != domain.IssueInProgress {
-			return fmt.Errorf("%w: issue must be in_progress before its PR can be accepted", domain.ErrInvalidTransition)
-		}
-		if e := requireUnblocked(ctx, q, issue); e != nil {
+		includedRows, e := q.all(ctx, `SELECT issue_id FROM pull_request_issues WHERE pull_request_id=? ORDER BY position`, freshPR.ID)
+		if e != nil {
 			return e
 		}
-		// V1 records a workflow completion, not a Git commit or file merge.
+		if len(includedRows) == 0 {
+			return fmt.Errorf("%w: PR has no linked issues", domain.ErrInvalid)
+		}
+		included := make([]domain.Issue, 0, len(includedRows))
+		for _, linked := range includedRows {
+			member, memberErr := issueByID(ctx, q, str(linked, "issue_id"))
+			if memberErr != nil {
+				return memberErr
+			}
+			if member.Status != domain.IssueInProgress {
+				return fmt.Errorf("%w: issue %s#%d must be in_progress before merge", domain.ErrInvalidTransition, member.RepositoryName, member.Number)
+			}
+			if memberErr = requireUnblocked(ctx, q, member); memberErr != nil {
+				return memberErr
+			}
+			included = append(included, member)
+		}
+		// The IDIOS engine appends a simulated commit record; no Git operation or disk merge occurs.
 		if _, e = q.changes(ctx, `UPDATE pull_requests SET status='accepted',accepted_at=?,updated_at=? WHERE id=? AND status='open'`, now, now, freshPR.ID); e != nil {
 			return e
 		}
@@ -218,17 +392,26 @@ func (s *Store) AcceptPullRequest(ctx context.Context, prRef, summary string) (d
 			return e
 		}
 		completionID = domain.NewID()
-		if _, e = q.changes(ctx, `INSERT INTO completions(id,repository_id,branch_id,issue_id,pull_request_id,summary,sequence,parent_completion_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-			completionID, issue.RepositoryID, freshPR.TargetBranchID, issue.ID, freshPR.ID, summary, sequence, parent, now); e != nil {
+		commitHash := simulatedCommitHash(freshPR.ID, sequence, summary, now)
+		if _, e = q.changes(ctx, `INSERT INTO completions(id,repository_id,branch_id,issue_id,pull_request_id,summary,sequence,parent_completion_id,created_at,commit_hash,file_snapshot_ready) VALUES(?,?,?,?,?,?,?,?,?,?,1)`, completionID, issue.RepositoryID, freshPR.TargetBranchID, issue.ID, freshPR.ID, summary, sequence, parent, now, commitHash); e != nil {
 			return e
 		}
-		if _, e = q.changes(ctx, `UPDATE issues SET status='done',closed_at=?,updated_at=? WHERE id=? AND status='in_progress'`, now, now, issue.ID); e != nil {
+		for _, member := range included {
+			if _, e = q.changes(ctx, `UPDATE issues SET status='done',closed_at=?,updated_at=? WHERE id=? AND status='in_progress'`, now, now, member.ID); e != nil {
+				return e
+			}
+			if e = activity(ctx, q, "issue", member.ID, "issue.completed", marshalPayload(map[string]any{"pull_request_id": freshPR.ID, "completion_id": completionID, "commit_hash": commitHash})); e != nil {
+				return e
+			}
+		}
+		if _, e = q.changes(ctx, `INSERT INTO completion_files(completion_id,path,content) SELECT ?,path,content FROM repository_files WHERE repository_id=?`, completionID, issue.RepositoryID); e != nil {
 			return e
 		}
-		if e = activity(ctx, q, "pull_request", freshPR.ID, "pull_request.accepted", marshalPayload(map[string]any{"issue_id": issue.ID, "completion_id": completionID})); e != nil {
-			return e
+		linkedIDs := make([]string, 0, len(included))
+		for _, member := range included {
+			linkedIDs = append(linkedIDs, member.ID)
 		}
-		return activity(ctx, q, "issue", issue.ID, "issue.completed", marshalPayload(map[string]any{"pull_request_id": freshPR.ID, "completion_id": completionID}))
+		return activity(ctx, q, "pull_request", freshPR.ID, "pull_request.merged", marshalPayload(map[string]any{"issue_ids": linkedIDs, "completion_id": completionID, "commit_hash": commitHash, "sequence": sequence}))
 	})
 	if err != nil {
 		return domain.PullRequest{}, domain.CompletionRecord{}, domain.Issue{}, err
@@ -243,6 +426,11 @@ func (s *Store) AcceptPullRequest(ctx context.Context, prRef, summary string) (d
 	}
 	completion, err := s.completionByID(ctx, completionID)
 	return updatedPR, completion, issue, err
+}
+
+func simulatedCommitHash(prID string, sequence int64, summary, createdAt string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("idios-simulated-commit:%s:%d:%s:%s", prID, sequence, summary, createdAt)))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 // nextCompletion appends to the branch-local sequence and links the previous record.
@@ -271,11 +459,12 @@ func completionFrom(r Row) domain.CompletionRecord {
 		Sequence:           i64(r["sequence"]),
 		ParentCompletionID: ptrString(r["parent_completion_id"]),
 		CreatedAt:          parseTime(r["created_at"]),
+		CommitHash:         str(r, "commit_hash"),
 	}
 }
 
 func completionSelect() string {
-	return `SELECT c.id,c.repository_id,r.name AS repository_name,c.branch_id,b.name AS branch_name,c.issue_id,i.number AS issue_number,c.pull_request_id,c.summary,c.sequence,c.parent_completion_id,c.created_at
+	return `SELECT c.id,c.repository_id,r.name AS repository_name,c.branch_id,b.name AS branch_name,c.issue_id,i.number AS issue_number,c.pull_request_id,c.summary,c.sequence,c.parent_completion_id,c.created_at,c.commit_hash
  FROM completions c JOIN branches b ON b.id=c.branch_id JOIN repositories r ON r.id=c.repository_id JOIN issues i ON i.id=c.issue_id`
 }
 
