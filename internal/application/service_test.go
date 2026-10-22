@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"idios/internal/application"
@@ -20,6 +21,28 @@ func newApp(t *testing.T) (*application.Service, *sqlite.Store) {
 	t.Cleanup(func() { _ = st.Close() })
 	return application.New(st), st
 }
+func TestMutationValidationRunsBeforeEntityLookup(t *testing.T) {
+	a, _ := newApp(t)
+	ctx := context.Background()
+
+	// The repository reference intentionally does not exist. The invalid title must
+	// be reported first, proving input validation precedes database lookups.
+	_, err := a.CreateIssue(ctx, "missing-repository", strings.Repeat("x", 201), "", "", "", "")
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected invalid title before repository lookup, got %v", err)
+	}
+
+	_, err = a.CreateRelation(ctx, "unknown-type", "missing-source", "issue", "missing-target", "related_to")
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected unsupported relation endpoint to be rejected before lookup, got %v", err)
+	}
+
+	_, err = a.CreateLabel(ctx, "bug", "repository", "", "", "")
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected repository-scoped label without owner to be rejected, got %v", err)
+	}
+}
+
 func createRepo(t *testing.T, a *application.Service, c context.Context, name, desc string) domain.Repository {
 	t.Helper()
 	v, e := a.CreateRepository(c, name, desc)
@@ -378,4 +401,170 @@ func createConceptForTest(t *testing.T, app *application.Service, ctx context.Co
 		t.Fatal(err)
 	}
 	return c
+}
+
+func TestGraphLayoutRejectsInvalidModesAndCoordinates(t *testing.T) {
+	app, _ := newApp(t)
+	ctx := context.Background()
+	layout := domain.DefaultGraphLayout()
+	layout.Mode = "circular"
+	if _, err := app.SaveGraphLayout(ctx, layout); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected invalid mode to be rejected, got %v", err)
+	}
+	layout = domain.DefaultGraphLayout()
+	layout.Positions["organic"]["issue:bad"] = domain.GraphPosition{X: 100000, Y: 15}
+	if _, err := app.SaveGraphLayout(ctx, layout); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected out-of-bounds node position to be rejected, got %v", err)
+	}
+}
+
+func TestGraphLayoutResetPreservesOtherMode(t *testing.T) {
+	app, _ := newApp(t)
+	ctx := context.Background()
+	layout := domain.DefaultGraphLayout()
+	layout.Mode = "flowchart"
+	layout.Positions["organic"]["repository:one"] = domain.GraphPosition{X: 400, Y: 200}
+	layout.Positions["flowchart"]["issue:one"] = domain.GraphPosition{X: 600, Y: 300}
+	saved, err := app.SaveGraphLayout(ctx, layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reset, err := app.ResetGraphLayout(ctx, "flowchart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reset.Mode != "flowchart" {
+		t.Fatalf("mode after reset = %q", reset.Mode)
+	}
+	if len(reset.Positions["flowchart"]) != 0 {
+		t.Fatalf("flowchart positions not cleared: %+v", reset.Positions["flowchart"])
+	}
+	if point := reset.Positions["organic"]["repository:one"]; point != saved.Positions["organic"]["repository:one"] {
+		t.Fatalf("organic layout changed by flowchart reset: %+v", point)
+	}
+}
+
+func TestSimulatedMultiIssuePRCreatesOneCommitAndTagRanges(t *testing.T) {
+	ctx := context.Background()
+	app, _ := newApp(t)
+	repo := createRepo(t, app, ctx, "Gland", "A simulated project repository")
+
+	first, err := app.CreateIssueWithTypeAndBranch(ctx, repo.Name, "Build emitter", "Implement the emitter", "", "", "high", "", string(domain.IssueFeature))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := app.CreateIssueWithTypeAndBranch(ctx, repo.Name, "Research event model", "Compare event models", "", "", "normal", "", string(domain.IssueResearch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, app, ctx, first.ID)
+	start(t, app, ctx, second.ID)
+
+	pr, err := app.CreatePullRequestWithIssues(ctx, []string{first.ID, second.ID}, "Implement emitter foundation", "Adds the emitter foundation and documents the event model.", "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pr.IssueIDs) != 2 {
+		t.Fatalf("PR issue IDs = %v, want two linked issues", pr.IssueIDs)
+	}
+	linked, err := app.ListPullRequestIssues(ctx, pr.ID)
+	if err != nil || len(linked) != 2 {
+		t.Fatalf("linked PR issues = %d, err %v; want 2", len(linked), err)
+	}
+	if _, err := app.CreatePullRequestWithIssues(ctx, []string{first.ID}, "Duplicate open PR", "Should not duplicate the active review.", "", "", false); !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("expected an issue to be restricted to one open PR, got %v", err)
+	}
+
+	if _, err := app.SaveRepositoryFile(ctx, repo.Name, "README.md", "# Gland\n\nInitial simulated release.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SaveRepositoryFile(ctx, repo.Name, "src/emitter.go", "package emitter\n"); err != nil {
+		t.Fatal(err)
+	}
+	_, completion, primary, err := app.AcceptPullRequest(ctx, pr.ID, "Emitter foundation completed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primary.Status != domain.IssueDone {
+		t.Fatalf("primary issue status = %s, want done", primary.Status)
+	}
+	if len(completion.CommitHash) != 12 || completion.Sequence != 1 {
+		t.Fatalf("simulated commit metadata = %+v", completion)
+	}
+	for _, ref := range []string{first.ID, second.ID} {
+		if got := getIssue(t, app, ctx, ref).Status; got != domain.IssueDone {
+			t.Fatalf("issue %s status = %s, want done", ref, got)
+		}
+	}
+	if commits := listCompletions(t, app, ctx, repo.Name); len(commits) != 1 {
+		t.Fatalf("commits after merging one multi-issue PR = %d, want exactly 1", len(commits))
+	}
+	if _, err := app.SaveRepositoryFile(ctx, repo.Name, "README.md", "# Gland\n\nUncommitted change should not ship.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SaveRepositoryFile(ctx, repo.Name, "src", "a file cannot replace a virtual directory"); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected virtual file/directory overlap to be rejected, got %v", err)
+	}
+	firstTag, err := app.CreateRepositoryTag(ctx, repo.Name, "0.0.0", "Initial simulated release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstTag.PreviousTagName != "" || firstTag.FileCount != 2 {
+		t.Fatalf("initial tag should have no previous tag and 2 files: %+v", firstTag)
+	}
+	firstSnapshot, err := app.GetRepositoryTagFiles(ctx, firstTag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range firstSnapshot {
+		if file.Path == "README.md" && (!strings.Contains(file.Content, "Initial simulated release") || strings.Contains(file.Content, "Uncommitted change")) {
+			t.Fatalf("release tag should snapshot the last merge, not uncommitted file edits: %q", file.Content)
+		}
+	}
+
+	third, err := app.CreateIssueWithTypeAndBranch(ctx, repo.Name, "Fix emitter edge case", "Handle an empty event", "", "", "urgent", "", string(domain.IssueBug))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, app, ctx, third.ID)
+	if _, err := app.SaveRepositoryFile(ctx, repo.Name, "README.md", "# Gland\n\nUpdated for 0.1.0.\n"); err != nil {
+		t.Fatal(err)
+	}
+	bugPR, err := app.CreatePullRequestWithIssues(ctx, []string{third.ID}, "Fix empty event handling", "Avoid the empty event edge case.", "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := app.AcceptPullRequest(ctx, bugPR.ID, "Empty event handled"); err != nil {
+		t.Fatal(err)
+	}
+	secondTag, err := app.CreateRepositoryTag(ctx, repo.Name, "0.1.0", "Empty event handling")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondTag.PreviousTagName != "0.0.0" || secondTag.CompletionSequence != 2 {
+		t.Fatalf("second tag should link to 0.0.0 and sequence 2: %+v", secondTag)
+	}
+	changes, err := app.CompareRepositoryTags(ctx, repo.Name, secondTag.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Path != "README.md" || changes[0].Status != "modified" {
+		t.Fatalf("tag diff = %+v, want one modified README.md", changes)
+	}
+	history, err := app.ListTagHistory(ctx, secondTag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Sequence != 2 {
+		t.Fatalf("0.1.0 release history = %+v, want only the commit after 0.0.0", history)
+	}
+	snapshot, err := app.GetRepositoryTagFiles(ctx, secondTag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range snapshot {
+		if file.Path == "README.md" && !strings.Contains(file.Content, "Updated for 0.1.0") {
+			t.Fatalf("tagged README snapshot has stale content: %q", file.Content)
+		}
+	}
 }
