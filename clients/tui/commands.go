@@ -57,7 +57,18 @@ func (m *model) commandEntries() []commandEntry {
 		}
 		entries = append(entries, commandEntry{title: command.Title, description: command.Description, action: "protocol:" + command.ID})
 	}
-	return entries
+	// Native forms and protocol commands share titles; keep the first (richer) variant.
+	seen := make(map[string]bool)
+	unique := entries[:0]
+	for _, entry := range entries {
+		key := strings.ToLower(entry.title)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		unique = append(unique, entry)
+	}
+	return unique
 }
 
 func (m *model) filteredCommandEntries() []commandEntry {
