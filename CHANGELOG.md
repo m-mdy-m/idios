@@ -1,10 +1,93 @@
-# Changelog
-
-# Changelog
+﻿# Changelog
 
 All notable changes to IDIOS are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.2.0] â€” 2026-10-22
+
+Version 1.2.0 adds the local Web workspace over the existing Go engine, adds dated Plans with daily
+reminders and a simulated repository history (issues, virtual files, immutable tags), and restructures
+the client adapters from `internal/` into `clients/` (`cli`, `tui`, `server`, `web`) around a shared
+protocol and feature catalog.
+
+### Changed
+- Reworked Overview to follow a calmer, atmospheric dark layout: a full quote panel beside Notes, with Latest changes spanning the lower workspace.
+- Moved quote controls to a compact lower toolbar and simplified the quote label to â€œQuotesâ€.
+- Added subtle local SVG atmosphere assets for Quotes, Notes, and Latest changes; no external image requests or runtime network dependencies.
+- Refined the Notes card with a soft visual backdrop, tag chips, and compact carousel controls.
+- Reworked Recent activity into a date-grouped tree timeline with tighter rows, grouped event counts, and clearer hover affordances.
+- Removed the redundant desktop Overview heading so content begins below the app breadcrumb; desktop layout fills the viewport without page scrolling, while narrow screens preserve natural scrolling.
+- Rebalanced the Dashboard overview into a quote panel beside one compact Notes card, with the recent-activity tree across the full lower row.
+- Removed Quick Capture from Overview, simplified the quote heading to â€œQuotesâ€, refined the quote panel into a quieter dark surface, and strengthened the activity connectors, row hierarchy, typography, and hover states.
+- The desktop Overview now fills the available viewport without page scrolling at normal desktop heights; smaller screens and short windows retain natural scrolling instead of clipping content.
+
+### Fixed
+- Daily Plans now presents a forward-looking seven-day strip anchored on the selected date, so the default Today view starts with today at the far left rather than the previous Sunday.
+- Replaced the simple notification beep with a three-stage, escalating original IDIOS plan alarm: on reminder arrival, again 5 seconds later, and a final action-style sequence 15 seconds after the second alarm.
+- Added layered synthetic klaxon, impact, crack and ricochet-style effects plus an urgent system-generated voice line for later stages; no recorded firearm/explosion audio or copied film-character voice is used.
+- Increased the default alert volume to 100% on the new volume preference key, retained an adjustable per-browser volume slider, and added a preview of the final alarm.
+- Opening the plan/date or checking off a task stops pending repeat stages so the alert does not continue nagging after acknowledgement.
+
+### Added
+
+- **Dated Plans and task checklists:** added reusable plans with a local calendar date, description, and ordered checklist of completable tasks, with optional links to a Repository or Issue and a dedicated Plans page.
+- **Plan input safety:** the application layer rejects plans with no non-empty checklist tasks, even when a client bypasses browser-side validation; plans may remain intentionally unlinked to an Issue or Repository.
+- **Daily plan reminders:** added idempotent morning, midday, and evening check-ins configured in local 24-hour time. Reminders are persisted in the notification inbox and can trigger native desktop notifications; clicking a date reminder opens that day's plans.
+- **IDIOS notification alert and browser permission controls:** added a three-stage escalating alarm for plan reminders, persistent per-browser volume control, sound toggle and final-stage preview, and an explicit browser-notification permission action. Audio playback respects browser autoplay permission and can be muted per browser.
+- **Plan progress in Activity Atlas:** dates with planned tasks use a coral-to-teal color blend based on completed task ratio; manually marked rough days continue to override all activity and plan colors.
+- **Simulated repository workflow:** PRs can include multiple in-progress Issues from one Repository. Merging a PR atomically completes all included Issues and records exactly one immutable simulated Commit/Completion with a short identifier; no Git binary, real branch, or host filesystem merge is invoked.
+- **Issue classification:** added Task, Bug, Feature, and Research types, with repository-level delivered-work counts by type.
+- **Virtual repository File Tree:** every Repository receives a virtual `README.md`; users can create, edit, inspect, and delete safely validated virtual files stored in SQLite.
+- **Repository history tree:** repository history expands each simulated PR/Commit into its PR description and linked Issues, including issue type, saved description, priority, and completion timestamps.
+- **Immutable release tags:** tags such as `0.0.0` and `0.1.0` keep independent file snapshots, changes from the previous tag, simulated commits included in the release interval, and a direct download link to the previous tag. ZIP downloads include IDIOS tag/history manifests and are explicitly not Git bundles.
+- **Merge-snapshot safety:** once a new-format simulated Commit exists, tags use its immutable file snapshot and do not accidentally publish later unmerged virtual file edits; empty snapshots are distinguishable from legacy completions that predate snapshots.
+- **Activity Atlas redesign:** replaced the wall of open monthly calendars with a compact, equal-height month selector and one expanded calendar at a time. The selected calendar always uses a fixed six-week, seven-day grid; month selection and day selection drive the existing activity timeline.
+- **Repository README preview:** render each simulated repository README in Overview with safe Markdown formatting for headings, lists, links, quotes, and code blocks; provide a direct Edit README action.
+- **Repository Insights disclosure:** group delivery metrics, completed-issue type counts, and latest merges behind one collapsed-by-default Insights control. Selecting a recent commit opens the full History tab with that commit expanded and its linked issues loaded.
+- **Consistent repository tab spacing:** add a shared content frame and responsive padding across Issues, Pull requests, Branches, History, Files, Tags, Labels, Milestones, Settings, Activity, and Graph.
+
+- **Personal rough-day markers:** added per-day red flags that override the green activity intensity, can be toggled from the selected-day action or by right-clicking a date, and persist in browser local storage. Activity days otherwise use five green intensity levels.
+- **Activity month insights:** added a monthly snapshot, weekly event pulse, equal-height month selectors, and a fixed 6 Ã— 7 calendar canvas with future dates left unselectable.
+- **Activity timeline refinement:** added a count/type summary and structured date-grouped event rows with clear type badges and timestamps; full details are now collapsed by default and open on demand or when a date/filter is selected.
+- **Overview redesign:** removed the redundant Active issues panel and generic metric-card wall, replaced the decorative Workspace Pulse with a compact context bar, displayed recent changes as visual event tiles, and condensed Notes into a small quick-capture card.
+
+- **Local Web workspace:** added a responsive React + TypeScript interface for Dashboard, Issues, Repositories, Projects, Knowledge Graph, Notes, Activity, Notifications, and Settings.
+- **Go HTTP server:** exposed a typed loopback-only API over the existing Application service and served the production Web UI from the `idios` binary.
+- **Background scheduler:** added a user-level Go service option to process scheduled jobs while the server is running.
+- **Autostart controls:** added `idios server install|uninstall|start|stop|status` and `idios web` commands, with per-user startup integration for Linux, macOS, and Windows.
+- **Shared configuration:** added XDG config-path support, legacy config-path fallback, server/Web settings, and lexical `config.d/*.json` fragments.
+- **Shared feature catalog:** added `internal/features` metadata for Web routes, TUI top/side/cycle navigation, feature descriptions, and route-specific entry points; clients read the same catalog from `/api/features`.
+- **Client parity:** surfaced profile and pins, TUI keyboard-shortcut editing, notification/settings deep links, repository subview deep links, scheduled queue and history timestamps, and batch-create actions in Web.
+- **Single-operation batch path:** TUI batch creation now executes each item through the same Go protocol command as single-item and Web actions.
+- **Interactive knowledge graph:** extracted a graph canvas with manual node positioning, persisted local layout, cursor-centered zoom, drag-to-pan, focus controls, keyboard selection, and a relationship inspector.
+- **Graph presentation modes:** introduced distinct Organic and Flowchart layouts, type-specific node shapes/sizes/colors, orthogonal flowchart connectors, and branch-hover subgraphs for relevant labels and milestones (hidden by default).
+- **Graph motion design:** added smooth position morphing between layouts, animated relationship emphasis for a selected node, gentle node hover/selection feedback, and fade-in transitions for graph entities/edges. Animations respect `prefers-reduced-motion`, while pointer-driven dragging remains immediate.
+- **Durable graph layout:** added SQLite-backed GraphLayout persistence for active mode, per-mode node positions, and per-mode pan/zoom, plus a reset endpoint that resets only the active layout; added storage, validation and HTTP API tests.
+- **Reusable UI flows:** unified issue creation across Dashboard, Issues, and Repository views; added a common confirmation dialog built on the existing modal shell.
+- **Validation pipeline:** added shared protocol validation for unknown fields, required values, types, choices, dates, colors, UTF-8, null bytes, and input-size limits, with application-layer checks before store access.
+- **Internal diagnostics:** added log categories/filters, safe log clearing, structured request error context, request and failure counters, latency/memory/goroutine measurements, and database health detail.
+- **Architecture references:** documented module boundaries, entity ownership and relations, issue/PR lifecycle, graph semantics, template precedence, and settings scope.
+- **Gland workflow guidance:** documented how Projects, primary/supporting Repositories, Issues, Branches, IDIOS Pull Requests, Completions and linked Notes work together, including the current boundary between workflow tracking and real Git operations.
+
+- **Web theme studio:** added a custom web-theme studio with live palette preview, editable dark/light base, color tokens, saved custom palettes, and a persisted per-browser selection.
+
+### Changed
+
+- **Minimal dashboard redesign:** replaced the oversized quote spotlight with a restrained dark editorial panel, removed the Current Focus block, turned Notes into a compact animated carousel, and grouped latest activity into a dense day-based tree timeline. Responsive behavior and reduced-motion preferences are preserved.
+- **Build pipeline:** added React/TypeScript/Vite asset compilation and embedded Web UI bundles for release builds. Node.js/pnpm are build-time requirements only.
+- **Documentation:** documented the local server, Web API, configuration layout and autostart behavior.
+- **Application architecture:** strengthened validation at protocol and application boundaries so adapters share behavior and state transitions remain an application concern.
+- **Log hygiene:** successful reads of the logs/monitoring endpoints no longer add repetitive log entries; error details are bounded and request bodies are not logged.
+- **Graph semantics:** clarified the difference between blocking `depends_on` dependencies and descriptive/organizational relationships.
+
+### Fixed
+
+- Custom web themes validate their keys, base appearance, and all hex color values before the shared config is persisted, so existing built-in palettes and validated user-defined palettes are accepted rather than rejecting everything except `system`, `dark`, and `light`.
+- Prevented unknown protocol/JSON fields and malformed mutation inputs from reaching handlers or storage.
+- Made clearing logs truncate the shared log and remove the legacy log file, while preserving private file permissions.
+- Ensured empty log history is represented as an empty list in the API, not as a fake log entry.
+- Guarded command submission synchronously against rapid repeat submits and cleared stale â€œrepository not foundâ€ route errors after navigating back to the repository index following deletion.
 
 ## [1.1.0] - 2026-10-20
 
@@ -18,7 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Removal safeguards:** Added confirmation flows, exact-name confirmation for Repository removal, and protections for entities with relevant dependencies or completion history.
 - **Quote library:** Added 11 sourced quotations from notable figures in software engineering, computer science, mathematics, and statistics.
 - **Quote attribution:** Added source metadata and reference links for seeded quotations.
-- **Random quote reminders:** Introduced configurable, randomized Quote of the Moment notifications, with a default interval of 60–240 minutes.
+- **Random quote reminders:** Introduced configurable, randomized Quote of the Moment notifications, with a default interval of 60â€“240 minutes.
 - **Desktop notifications:** Added native notification integrations for Windows, macOS, and Linux, with an internal notification inbox as a fallback for retaining reminders.
 - **Graceful shutdown:** Added keyboard-driven exit flows, shutdown feedback, and resource cleanup while retaining `Ctrl+C` as an emergency exit path.
 - **UI tests:** Added tests covering batch operations, retry behavior, command palette behavior, shutdown flows, and related UI functionality.
@@ -50,10 +133,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.0.4]
 ### Fixed
 - show view upgrade
-## [1.0.3] — 2026-10-20
+## [1.0.3] â€” 2026-10-20
 ### Fixed
 - fix build in powershell
-## [1.0.2] — 2026-10-20
+## [1.0.2] â€” 2026-10-20
 
 - **Launch command:** running `idios` without arguments opens the normal interactive workspace, while explicit CLI commands such as `idios version` remain unchanged. `make install` and `make install-user` install the named executables on Unix-like systems and Windows; release builds include user-level Linux/macOS and Windows installers that put `idios` on PATH.
 - **Cross-platform updates:** the TUI checks the latest stable GitHub Release in the background at startup. A lower-right Upgrade control opens the release changelog; the updater verifies `SHA256SUMS.txt`, stages both executables, replaces the old build after the current process exits, and relaunches the updated application. A responsive `IDIOS UPGRADE` animation shows download, verification and hand-off activity.
@@ -65,20 +148,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Graph page:** rewritten to be readable. It now opens with a summary and a short legend, then **What is blocked right now** (each waiting Issue with its unfinished prerequisite), then every node with its links worded as sentences (“has pull request”, “uses concept”, “waits for”) and ordered blocking → workflow → context. Each link is printed once, under the more central node, instead of repeating relationship groups plus a separate all-nodes list. Ownership links (repository owns issue, PR targets branch) and unlinked branches/labels/milestones are hidden by default behind **Ownership links: hidden → show**; a focused graph has a **Distance** control and shows links in both directions. Long lists say how many nodes were left out instead of silently stopping at 40.
-- **Templates:** the bundled Issue (`task`, `bug`, `feature`, `research`) and Pull Request templates in `internal/config/defaults.json` are shorter and use fill-in lines, a checkable “Done when” list, a verification block for real command output, and a risk/undo section. The GitHub issue forms and pull request template were rewritten the same way (duplicate-search and latest-version checks, “where does it happen”, version field, project checks and compatibility checklist). `.github/ISSUE_TEMPLATE/config.yml` now points to `SECURITY.md` at the repository root.
+- **Graph page:** rewritten to be readable. It now opens with a summary and a short legend, then **What is blocked right now** (each waiting Issue with its unfinished prerequisite), then every node with its links worded as sentences (â€œhas pull requestâ€, â€œuses conceptâ€, â€œwaits forâ€) and ordered blocking â†’ workflow â†’ context. Each link is printed once, under the more central node, instead of repeating relationship groups plus a separate all-nodes list. Ownership links (repository owns issue, PR targets branch) and unlinked branches/labels/milestones are hidden by default behind **Ownership links: hidden â†’ show**; a focused graph has a **Distance** control and shows links in both directions. Long lists say how many nodes were left out instead of silently stopping at 40.
+- **Templates:** the bundled Issue (`task`, `bug`, `feature`, `research`) and Pull Request templates in `internal/config/defaults.json` are shorter and use fill-in lines, a checkable â€œDone whenâ€ list, a verification block for real command output, and a risk/undo section. The GitHub issue forms and pull request template were rewritten the same way (duplicate-search and latest-version checks, â€œwhere does it happenâ€, version field, project checks and compatibility checklist). `.github/ISSUE_TEMPLATE/config.yml` now points to `SECURITY.md` at the repository root.
 - **TUI redesign:** navigation items are now tabs (filled for the current page, quiet otherwise), the top bar no longer repeats the tabs, the repository header is one line instead of a banner, and panel titles use the accent color. The footer shows only the keys that work on the current screen (forms, filter mode, intro, lists).
 - **Themes:** `midnight` (now cyan instead of purple), `paper` and `forest` were retuned for contrast, and `ocean`, `ember` and a high-contrast `contrast` theme were added. Packaged themes are now always loaded from the application, so configs written by older releases no longer freeze the old purple colors. and the new optional `on_accent` token controls text on accent backgrounds (fixes unreadable button text on light themes).
-- **Copy:** all in-app text was rewritten to say what a screen is for and what to do next. Marketing phrases and repeated "local-first" taglines were removed. The intro screen now shows a "Get started" checklist that follows the real state of the database.
+- **Copy:** all in-app text was rewritten to say what a screen is for and what to do next. Marketing phrases and repeated slogans were removed. The intro screen now shows a "Get started" checklist that follows the real state of the database.
 
 ### Fixed
 
 - **Clean end-user downloads:** exclude `idios-tui-demo` and extended guides from portable archives and native installers. User-facing packages contain only the `idios` CLI, clean `idios-tui`, `README.md`, and `LICENSE`; the demo executable and extended guides remain available in the source repository for development and CI smoke tests.
 - Release checks validate the exact four-file portable bundle and verify that native package payloads do not contain the demo executable.
 
-## [1.0.0] — 2026-10-19
+## [1.0.0] â€” 2026-10-19
 
-IDIOS 1.0.0 is a re-platforming of IDIOS into a local-first Go workspace engine. It introduces a
+IDIOS 1.0.0 re-platformed IDIOS as a Go workspace engine. It introduces a
 repository and Issue workflow with structured dependencies, Pull Request-based completion,
 knowledge relationships, a separate CLI and TUI, local SQLite persistence, and a refreshed
 keyboard-first terminal experience. This release is **not** a claim of full feature parity with the
@@ -169,7 +252,7 @@ former Python application, and it does not perform real Git operations or remote
 - **Completion semantics:** an Issue is not considered complete merely because its status is edited;
   Pull Request acceptance and Completion Record creation are the supported completion path.
 - **Interface boundaries:** the CLI and TUI are separate entry points. The TUI calls the Application
-  service directly instead of spawning the CLI as a subprocess. TUI code lives in the top-level `tui/`
+  service directly instead of spawning the CLI as a subprocess. TUI code lives in the top-level `clients/tui/`
   package, separated from `internal/` application internals and split across navigation, rendering,
   actions, scheduling, logging, and page modules.
 - **Configuration and UI copy:** user preferences are stored separately from packaged UI copy. The
@@ -273,7 +356,7 @@ former Python application, and it does not perform real Git operations or remote
 The following entries document releases of the former Python implementation, retained as
 historical context. They are separate from the Go Engine's `1.x` version line.
 
-## [0.4.3] — Legacy Python application
+## [0.4.3] â€” Legacy Python application
 
 ### Added
 - Windows desktop notifications using WinRT Toast and per-user `idios:` URI activation, so clicking a notification can open the schedule details after the reminder process exits.
@@ -315,9 +398,9 @@ historical context. They are separate from the Go Engine's `1.x` version line.
 ## [0.4.0]
 
 ### Added
-- Evening loop: `did: …` records what you did, `plan[ when]: …` plans a day (default tomorrow),
+- Evening loop: `did: â€¦` records what you did, `plan[ when]: â€¦` plans a day (default tomorrow),
   `done tk1 tk2` / `skip tk3` update tasks, `:plan` shows today and tomorrow.
-- `:review` walks through the day's open items (done / not yet → tomorrow / skip) and saves a note.
+- `:review` walks through the day's open items (done / not yet â†’ tomorrow / skip) and saves a note.
   Offered automatically on launch after the review time; never in scripts or pipes.
 - Scheduled reminder: `:schedule HH:MM|install|remove|test` and `idios schedule`, backed by the
   OS scheduler (crontab / Task Scheduler) installed only after confirmation. `idios remind`
@@ -342,10 +425,10 @@ historical context. They are separate from the Go Engine's `1.x` version line.
   CODE_OF_CONDUCT, SUPPORT, ROADMAP, ADRs, ARCHITECTURE, Makefile, CODEOWNERS, CodeQL and
   secret-scan workflows, pre-commit, editorconfig). `psx check` runs in CI.
 
-## [0.3.0] — Rewrite
+## [0.3.0] â€” Rewrite
 
 IDIOS was rewritten from scratch to follow `SKILL.md` and `AGENTS.md`:
-a local-first learning environment where `idios` opens an interactive shell,
+a personal learning environment where `idios` opens an interactive shell,
 instead of a decision engine with an LLM client and a JSON state file.
 
 ### Added
@@ -367,4 +450,5 @@ instead of a decision engine with an LLM client and a JSON state file.
 ### Removed
 - Decision engine, JEV, model registry, LLM client, JSON state storage,
   `rich` and `pydantic` dependencies. The core now has no runtime dependencies.
+
 
