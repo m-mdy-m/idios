@@ -121,6 +121,13 @@
       "desktop_enabled": true,
       "min_interval_minutes": 60,
       "max_interval_minutes": 240
+    },
+    "plan_reminders": {
+      "enabled": true,
+      "desktop_enabled": true,
+      "morning_time": "08:30",
+      "midday_time": "13:00",
+      "evening_time": "20:30"
     }
   },
   "keyboard": {
@@ -190,5 +197,17 @@
   "PULL_REQUEST_TEMPLATE": {
     "title_prefix": "",
     "body": "## Summary\n\nWhat changed and why, in 1-3 sentences. Lead with the outcome, not a file list.\n\nResolves: (Issue reference, e.g. IDIOS#12)\nScope: complete / partial (say what is left)\n\n## Changes\n\n- \n\n## Verification\n\n- [ ] Tests added or updated\n- [ ] Checks run (paste the real output below)\n- [ ] Main flow tried by hand\n\n```text\n$ command\nresult\n```\n\n## Risk\n\nImpact: low / medium / high\nWhat could break:\nHow to undo it:\n\n## Review focus\n\nStart with:\nSafe to skim:\nQuestions for the reviewer:\n"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 43170,
+    "open_browser": false,
+    "refresh_interval_seconds": 30
+  },
+  "web": {
+    "theme": "system",
+    "custom_themes": {},
+    "sidebar_collapsed": false,
+    "compact": false
   }
 }

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>IDIOS Web UI</title>
+    <style>
+      :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1017;color:#e8edf5}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}.card{width:min(560px,100%);padding:32px;border:1px solid #283344;border-radius:20px;background:#111923;box-shadow:0 20px 80px #0005}h1{margin:12px 0;font-size:32px;letter-spacing:-.04em}p{color:#9aaabd;line-height:1.7}.mark{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#213c5d;color:#9ed0ff;font-weight:800;font-size:20px}.command{display:block;padding:13px 15px;border-radius:10px;background:#080d13;color:#a5d4ff;font:13px ui-monospace,monospace;overflow-wrap:anywhere}small{color:#6f8198}
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark">ID</div>
+      <h1>IDIOS Web is ready to be built.</h1>
+      <p>The Go server is running, but this development build does not yet contain the React interface. Build the local frontend and run the release-tag build to embed it into the executable.</p>
+      <code class="command">pnpm --dir web install<br />pnpm --dir web build<br />go build -tags=embed_web ./cmd/idios</code>
+      <p><small>API status: <a href="/api/health" style="color:inherit">/api/health</a></small></p>
+    </main>
+  </body>
+</html>

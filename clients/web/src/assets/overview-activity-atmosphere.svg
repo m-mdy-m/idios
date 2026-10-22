@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" fill="none">
+  <defs>
+    <radialGradient id="washA"><stop stop-color="#244A68" stop-opacity=".22"/><stop offset="1" stop-color="#244A68" stop-opacity="0"/></radialGradient>
+    <radialGradient id="washB"><stop stop-color="#22665F" stop-opacity=".14"/><stop offset="1" stop-color="#22665F" stop-opacity="0"/></radialGradient>
+    <linearGradient id="fade" x1="700" y1="0" x2="700" y2="600" gradientUnits="userSpaceOnUse"><stop stop-color="#0D1117" stop-opacity=".05"/><stop offset="1" stop-color="#0D1117" stop-opacity=".78"/></linearGradient>
+  </defs>
+  <ellipse cx="80" cy="30" rx="470" ry="250" fill="url(#washA)"/>
+  <ellipse cx="1335" cy="580" rx="420" ry="270" fill="url(#washB)"/>
+  <g stroke="#7291AF" stroke-opacity=".055" stroke-width="1"><path d="M0 445C230 360 365 508 570 420S905 300 1100 389 1318 425 1400 360"/><path d="M0 472C230 387 365 535 570 447S905 327 1100 416 1318 452 1400 387"/><path d="M0 499C230 414 365 562 570 474S905 354 1100 443 1318 479 1400 414"/></g>
+  <g fill="#9CB8D1" fill-opacity=".18"><circle cx="128" cy="95" r="1.5"/><circle cx="286" cy="128" r="1"/><circle cx="1105" cy="85" r="1.2"/><circle cx="1242" cy="142" r=".9"/><circle cx="962" cy="204" r="1.1"/><circle cx="76" cy="252" r="1"/></g>
+  <rect width="1400" height="600" fill="url(#fade)"/>
+</svg>

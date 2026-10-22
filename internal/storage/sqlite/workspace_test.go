@@ -156,6 +156,24 @@ func TestNotesCanReuseMultipleLabelsAndReplaceThemOnEdit(t *testing.T) {
 	if len(first.Labels) != 2 {
 		t.Fatalf("first note labels = %+v, want 2 distinct labels", first.Labels)
 	}
+	if err := store.SetNoteLabelColor(ctx, "research", "#d1242f"); err != nil {
+		t.Fatalf("set note label color: %v", err)
+	}
+	colored, err := store.ListNotes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundColor := false
+	for _, note := range colored {
+		for _, label := range note.Labels {
+			if label.Name == "research" && label.Color == "#d1242f" {
+				foundColor = true
+			}
+		}
+	}
+	if !foundColor {
+		t.Fatalf("custom note label color was not persisted: %+v", colored)
+	}
 	second, err := store.CreateNoteWithLabels(ctx, "A second thought", "Another note", []string{"idea"})
 	if err != nil {
 		t.Fatal(err)
@@ -335,5 +353,111 @@ func TestSourcedQuotesPersistTheirProvenanceAndNotificationsReachInbox(t *testin
 	}
 	if len(inbox) != 1 || inbox[0].ID != notification.ID || inbox[0].Title != notification.Title || inbox[0].Body != notification.Body || inbox[0].Level != "quote" {
 		t.Fatalf("quote reminder was not persisted to the inbox: notification=%+v inbox=%+v", notification, inbox)
+	}
+}
+
+func TestProjectRepositoryLinksPersistPrimaryRolesAndEnterMainGraph(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "project-repositories.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	project, err := store.CreateProject(ctx, "XORON", "A small operating system research project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mainRepo, err := store.CreateRepository(ctx, "xoron", "Main implementation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bsdRepo, err := store.CreateRepository(ctx, "386bsd", "BSD reference")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.LinkRepositoryToProject(ctx, project.ID, mainRepo.ID, "Main implementation", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.LinkRepositoryToProject(ctx, project.ID, bsdRepo.ID, "Historical reference", false); err != nil {
+		t.Fatal(err)
+	}
+
+	links, err := store.ListProjectRepositories(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 2 || !links[0].IsPrimary || links[0].RepositoryID != mainRepo.ID {
+		t.Fatalf("first linked repository should become primary: %+v", links)
+	}
+	if links[1].Relationship != "Historical reference" || links[1].RepositoryName != "386bsd" {
+		t.Fatalf("repository role/name were not retained: %+v", links[1])
+	}
+	if err := store.SetPrimaryProjectRepository(ctx, project.ID, bsdRepo.ID); err != nil {
+		t.Fatal(err)
+	}
+	links, err = store.ListProjectRepositories(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	primaries := 0
+	for _, link := range links {
+		if link.IsPrimary {
+			primaries++
+			if link.RepositoryID != bsdRepo.ID {
+				t.Errorf("wrong primary repository: %+v", link)
+			}
+		}
+	}
+	if primaries != 1 {
+		t.Fatalf("primary count = %d, links=%+v", primaries, links)
+	}
+
+	graph, err := store.ListGraph(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundPrimary, foundRelated := false, false
+	for _, edge := range graph.Edges {
+		if edge.Source == "project:"+project.ID && edge.Target == "repository:"+bsdRepo.ID && edge.Type == "primary_repository" {
+			foundPrimary = true
+		}
+		if edge.Source == "project:"+project.ID && edge.Target == "repository:"+mainRepo.ID && edge.Type == "related_repository" {
+			foundRelated = true
+		}
+	}
+	if !foundPrimary || !foundRelated {
+		t.Fatalf("project repository links missing from global graph: primary=%v related=%v", foundPrimary, foundRelated)
+	}
+
+	if err := store.UnlinkRepositoryFromProject(ctx, project.ID, bsdRepo.ID); err != nil {
+		t.Fatal(err)
+	}
+	links, err = store.ListProjectRepositories(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 1 || !links[0].IsPrimary || links[0].RepositoryID != mainRepo.ID {
+		t.Fatalf("removing the primary should promote a remaining repository: %+v", links)
+	}
+}
+
+func TestRepositoryDescriptionCanBeUpdated(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "repository-description.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	repo, err := store.CreateRepository(ctx, "XORON5", "Old description")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpdateRepositoryDescription(ctx, repo.ID, "A compact x86-64 research OS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != "A compact x86-64 research OS" {
+		t.Fatalf("description = %q", updated.Description)
 	}
 }

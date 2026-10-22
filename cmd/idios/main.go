@@ -6,12 +6,15 @@ import (
 	"os"
 
 	"idios/internal/application"
-	"idios/internal/cli"
+	"idios/clients/cli"
 	"idios/internal/storage/sqlite"
-	"idios/internal/tuilaunch"
+	"idios/clients/tui/launch"
 )
 
 func main() {
+	if len(os.Args) > 1 && isServerCommand(os.Args[1]) {
+		os.Exit(runServerCommand(os.Args[1:], os.Stdout, os.Stderr))
+	}
 	// Running `idios` opens the interactive workspace. Explicit arguments continue to
 	// use the scriptable CLI, e.g. `idios version`, `idios issue list`, or `idios --json`.
 	if len(os.Args) == 1 {

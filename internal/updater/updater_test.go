@@ -160,3 +160,20 @@ func TestWindowsHelperStartsNewAppBeforeRemovingBackups(t *testing.T) {
 		t.Fatalf("Windows helper must start the new executable before deleting backups:\n%s", script)
 	}
 }
+
+func TestUpdateHelpersRestartWithRequestedArguments(t *testing.T) {
+	prepared := Prepared{
+		StagedCLI: "/tmp/.idios.new",
+		StagedTUI: "/tmp/.idios-tui.new",
+		DestCLI:   "/opt/idios/idios",
+		DestTUI:   "/opt/idios/idios-tui",
+	}
+	unix := unixHelperWithArgs(prepared, 42, []string{"web", "--no-open"})
+	if !strings.Contains(unix, `"$DEST_CLI" 'web' '--no-open'`) {
+		t.Fatalf("Unix helper does not quote web restart arguments:\n%s", unix)
+	}
+	windows := windowsHelperWithArgs(prepared, 42, []string{"web", "--no-open"})
+	if !strings.Contains(windows, "$launchArgs = @('web', '--no-open')") || !strings.Contains(windows, "Start-Process -FilePath $destCli -ArgumentList $launchArgs") {
+		t.Fatalf("Windows helper does not include the requested restart arguments:\n%s", windows)
+	}
+}

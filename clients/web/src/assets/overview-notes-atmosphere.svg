@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420" fill="none">
+  <defs>
+    <radialGradient id="teal"><stop stop-color="#2F9F9A" stop-opacity=".25"/><stop offset="1" stop-color="#2F9F9A" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blue"><stop stop-color="#4F82C4" stop-opacity=".22"/><stop offset="1" stop-color="#4F82C4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="700" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#0E1B24" stop-opacity=".05"/><stop offset="1" stop-color="#0A1018" stop-opacity=".76"/></linearGradient>
+  </defs>
+  <ellipse cx="555" cy="55" rx="230" ry="190" fill="url(#teal)"/>
+  <ellipse cx="300" cy="390" rx="300" ry="210" fill="url(#blue)"/>
+  <path d="M452 -25C526 48 452 100 507 145S634 193 601 262 569 352 735 405" stroke="#6DA8AF" stroke-opacity=".11" stroke-width="1.2"/>
+  <path d="M400 -30C478 54 402 111 459 159S584 208 552 277 524 354 682 426" stroke="#6DA8AF" stroke-opacity=".08" stroke-width="1.2"/>
+  <path d="M515 -32C583 36 514 92 569 135S681 195 649 253" stroke="#79A7D8" stroke-opacity=".1" stroke-width="1"/>
+  <rect width="700" height="420" fill="url(#veil)"/>
+</svg>

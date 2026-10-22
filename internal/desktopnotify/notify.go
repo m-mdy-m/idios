@@ -15,6 +15,13 @@ import (
 
 // Send attempts a platform-native notification. It never invokes a shell on Unix-like systems.
 func Send(ctx context.Context, title, body string) error {
+	return SendWithAction(ctx, title, body, "")
+}
+
+// SendWithAction optionally opens a local follow-up URL when the native Windows balloon is clicked.
+// Platforms whose native notification API does not expose click actions still show the notification;
+// the IDIOS inbox remains actionable on every platform.
+func SendWithAction(ctx context.Context, title, body, actionURL string) error {
 	title = compact(title, 100)
 	body = compact(body, 400)
 	if title == "" {
@@ -40,7 +47,7 @@ func Send(ctx context.Context, title, body string) error {
 		script := `display notification "` + escapeAppleScript(body) + `" with title "` + escapeAppleScript(title) + `"`
 		return run(ctx, path, "-e", script)
 	case "windows":
-		return sendWindows(ctx, title, body)
+		return sendWindows(ctx, title, body, actionURL)
 	default:
 		return fmt.Errorf("desktop notifications are not implemented for %s", runtime.GOOS)
 	}
@@ -58,7 +65,7 @@ func run(ctx context.Context, path string, args ...string) error {
 	return nil
 }
 
-func sendWindows(ctx context.Context, title, body string) error {
+func sendWindows(ctx context.Context, title, body, actionURL string) error {
 	path, err := exec.LookPath("powershell.exe")
 	if err != nil {
 		path, err = exec.LookPath("powershell")
@@ -67,11 +74,18 @@ func sendWindows(ctx context.Context, title, body string) error {
 		}
 	}
 	// NotifyIcon balloon delivery works for unpackaged console applications without requiring
-	// a separately installed PowerShell module or registering an AppUserModelID.
+	// a separately installed PowerShell module or registering an AppUserModelID. Pump the WinForms
+	// message queue while visible so BalloonTipClicked can open the requested local IDIOS page.
+	clickHandler := ""
+	if actionURL != "" && strings.HasPrefix(actionURL, "http://127.0.0.1:") {
+		clickHandler = "$actionUrl='" + escapePowerShell(actionURL) + "'; $n.add_BalloonTipClicked({ if ($actionUrl) { Start-Process -FilePath $actionUrl } }); "
+	}
 	script := "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; " +
 		"$n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; " +
-		"$n.BalloonTipTitle='" + escapePowerShell(title) + "'; $n.BalloonTipText='" + escapePowerShell(body) + "'; " +
-		"$n.Visible=$true; $n.ShowBalloonTip(6000); Start-Sleep -Milliseconds 6500; $n.Visible=$false; $n.Dispose()"
+		"$n.BalloonTipTitle='" + escapePowerShell(title) + "'; $n.BalloonTipText='" + escapePowerShell(body) + "'; " + clickHandler +
+		"$n.Visible=$true; $n.ShowBalloonTip(6000); $deadline=[DateTime]::UtcNow.AddMilliseconds(6500); " +
+		"while([DateTime]::UtcNow -lt $deadline) { [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 50 }; " +
+		"$n.Visible=$false; $n.Dispose()"
 	encoded := base64.StdEncoding.EncodeToString(utf16LE(script))
 	return run(ctx, path, "-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand", encoded)
 }

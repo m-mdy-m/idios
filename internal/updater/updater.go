@@ -539,6 +539,13 @@ func writeStaged(dir, pattern string, contents []byte) (string, error) {
 // replaces both binaries and launches the new idios command. No binary is removed before both
 // replacement files have been downloaded, checksum-verified, extracted, and staged successfully.
 func Schedule(prepared Prepared, parentPID int) error {
+	return ScheduleWithArgs(prepared, parentPID, nil)
+}
+
+// ScheduleWithArgs stages the same verified two-binary update as Schedule, then starts the
+// replacement CLI with explicitly supplied arguments after the current process exits. Args are
+// quoted for the platform helper; callers must still use fixed, application-owned arguments.
+func ScheduleWithArgs(prepared Prepared, parentPID int, args []string) error {
 	if parentPID <= 0 {
 		prepared.Cleanup()
 		return errors.New("invalid parent process id")
@@ -550,7 +557,7 @@ func Schedule(prepared Prepared, parentPID int) error {
 	var script string
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		script = windowsHelper(prepared, parentPID)
+		script = windowsHelperWithArgs(prepared, parentPID, args)
 		file, err := os.CreateTemp("", "idios-upgrade-*.ps1")
 		if err != nil {
 			prepared.Cleanup()
@@ -570,7 +577,7 @@ func Schedule(prepared Prepared, parentPID int) error {
 		}
 		cmd = exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", path)
 	} else {
-		script = unixHelper(prepared, parentPID)
+		script = unixHelperWithArgs(prepared, parentPID, args)
 		file, err := os.CreateTemp("", "idios-upgrade-*.sh")
 		if err != nil {
 			prepared.Cleanup()
@@ -605,6 +612,14 @@ func Schedule(prepared Prepared, parentPID int) error {
 }
 
 func unixHelper(p Prepared, pid int) string {
+	return unixHelperWithArgs(p, pid, nil)
+}
+
+func unixHelperWithArgs(p Prepared, pid int, args []string) string {
+	launch := `"$DEST_CLI"`
+	for _, arg := range args {
+		launch += " " + shellQuote(arg)
+	}
 	return "#!/bin/sh\n" +
 		"PARENT_PID=" + shellQuote(fmt.Sprint(pid)) + "\n" +
 		"STAGED_CLI=" + shellQuote(p.StagedCLI) + "\n" +
@@ -620,7 +635,7 @@ func unixHelper(p Prepared, pid int) string {
 		"if mv \"$STAGED_CLI\" \"$DEST_CLI\"; then installed_cli=1; else [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; [ \"$had_tui\" -eq 0 ] || mv \"$BACKUP_TUI\" \"$DEST_TUI\"; exit 1; fi\n" +
 		"if mv \"$STAGED_TUI\" \"$DEST_TUI\"; then installed_tui=1; else rm -f \"$DEST_CLI\"; [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; [ \"$had_tui\" -eq 0 ] || mv \"$BACKUP_TUI\" \"$DEST_TUI\"; exit 1; fi\n" +
 		"chmod 755 \"$DEST_CLI\" \"$DEST_TUI\"\n" +
-		"\"$DEST_CLI\"\n" +
+		launch + "\n" +
 		"launch_status=$?\n" +
 		"if [ \"$launch_status\" -eq 126 ] || [ \"$launch_status\" -eq 127 ]; then\n" +
 		"  rm -f \"$DEST_CLI\" \"$DEST_TUI\"\n" +
@@ -635,7 +650,19 @@ func unixHelper(p Prepared, pid int) string {
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 
 func windowsHelper(p Prepared, pid int) string {
+	return windowsHelperWithArgs(p, pid, nil)
+}
+
+func windowsHelperWithArgs(p Prepared, pid int, args []string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	startProcess := "  Start-Process -FilePath $destCli\n"
+	if len(args) > 0 {
+		quoted := make([]string, 0, len(args))
+		for _, arg := range args {
+			quoted = append(quoted, q(arg))
+		}
+		startProcess = "  $launchArgs = @(" + strings.Join(quoted, ", ") + ")\n" + "  Start-Process -FilePath $destCli -ArgumentList $launchArgs\n"
+	}
 	return "$ErrorActionPreference = 'Stop'\n" +
 		"$parentPid = " + fmt.Sprint(pid) + "\n" +
 		"$stagedCli = " + q(p.StagedCLI) + "\n" +
@@ -654,7 +681,7 @@ func windowsHelper(p Prepared, pid int) string {
 		"  $installedCli = $true\n" +
 		"  Move-Item -LiteralPath $stagedTui -Destination $destTui -Force\n" +
 		"  $installedTui = $true\n" +
-		"  Start-Process -FilePath $destCli\n" +
+		startProcess +
 		"  if (Test-Path -LiteralPath $backupCli) { Remove-Item -LiteralPath $backupCli -Force -ErrorAction SilentlyContinue }\n" +
 		"  if (Test-Path -LiteralPath $backupTui) { Remove-Item -LiteralPath $backupTui -Force -ErrorAction SilentlyContinue }\n" +
 		"} catch {\n" +

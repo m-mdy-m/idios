@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 300" fill="none" role="img" aria-label="Moonlit blue mountain silhouettes">
+  <defs>
+    <radialGradient id="moonHalo" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1114 76) rotate(90) scale(150)">
+      <stop offset="0" stop-color="#9CCDF7" stop-opacity=".48"/>
+      <stop offset=".34" stop-color="#5C9DD4" stop-opacity=".27"/>
+      <stop offset=".7" stop-color="#2C5B86" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#18344D" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="moonFace" cx=".36" cy=".26" r=".9">
+      <stop offset="0" stop-color="#F0F7FF" stop-opacity=".88"/>
+      <stop offset=".62" stop-color="#BCD9F2" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#83ADD2" stop-opacity=".62"/>
+    </radialGradient>
+    <linearGradient id="farRange" x1="785" y1="126" x2="1250" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#688BAD" stop-opacity=".67"/>
+      <stop offset=".46" stop-color="#385B7C" stop-opacity=".82"/>
+      <stop offset="1" stop-color="#1C2D41" stop-opacity=".96"/>
+    </linearGradient>
+    <linearGradient id="middleRange" x1="800" y1="164" x2="1325" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#527DA2" stop-opacity=".78"/>
+      <stop offset=".48" stop-color="#315574" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#17293C" stop-opacity=".99"/>
+    </linearGradient>
+    <linearGradient id="frontRange" x1="990" y1="202" x2="1380" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#345C7E" stop-opacity=".9"/>
+      <stop offset=".52" stop-color="#203A53" stop-opacity=".97"/>
+      <stop offset="1" stop-color="#101D2B"/>
+    </linearGradient>
+    <linearGradient id="snowLight" x1="940" y1="140" x2="1130" y2="204" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D6E9F8" stop-opacity=".83"/>
+      <stop offset="1" stop-color="#8CB8DC" stop-opacity=".14"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Soft moonlight and a clearly defined moon -->
+  <circle cx="1114" cy="76" r="150" fill="url(#moonHalo)"/>
+  <circle cx="1114" cy="76" r="37" fill="url(#moonFace)"/>
+  <circle cx="1114" cy="76" r="37" stroke="#DBEEFF" stroke-opacity=".68" stroke-width="1.2"/>
+  <circle cx="1102" cy="65" r="6" fill="#789CBD" fill-opacity=".24"/>
+  <circle cx="1127" cy="88" r="4.5" fill="#789CBD" fill-opacity=".2"/>
+  <circle cx="1129" cy="58" r="2.5" fill="#789CBD" fill-opacity=".22"/>
+  <path d="M1078 68a37 37 0 0 1 53-25" stroke="#F5FAFF" stroke-opacity=".4" stroke-width="1.1" stroke-linecap="round"/>
+
+  <!-- Small, crisp stars kept away from the quote text -->
+  <g fill="#C6E0F5" fill-opacity=".78">
+    <circle cx="880" cy="56" r="1.5"/><circle cx="938" cy="34" r="1.1"/>
+    <circle cx="1000" cy="94" r="1.25"/><circle cx="1182" cy="30" r="1.35"/>
+    <circle cx="1238" cy="91" r="1.5"/><circle cx="1301" cy="47" r="1.1"/>
+    <circle cx="1350" cy="113" r="1.35"/><circle cx="1050" cy="126" r="1"/>
+  </g>
+  <g stroke="#A8D1F3" stroke-opacity=".58" stroke-linecap="round" stroke-width="1.2">
+    <path d="M1269 64v7M1265.5 67.5h7"/><path d="M961 119v5M958.5 121.5h5"/>
+  </g>
+
+  <!-- Distant ridge: bright enough to remain visible beneath the overlay -->
+  <path d="M570 300 705 235 756 246 850 180 904 207 982 137 1038 172 1115 118 1170 164 1231 140 1301 184 1365 158 1400 177V300Z" fill="url(#farRange)"/>
+  <path d="M705 235 756 246 850 180 904 207 982 137 1038 172 1115 118 1170 164 1231 140 1301 184 1365 158" stroke="#B9D8F1" stroke-opacity=".72" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M961 155 982 137 1004 151 990 149 979 145 969 154Z" fill="url(#snowLight)"/>
+  <path d="M1096 132 1115 118 1132 132 1118 128 1111 125 1104 132Z" fill="#E3F1FC" fill-opacity=".62"/>
+  <path d="M1214 147 1231 140 1250 151 1233 147 1227 145Z" fill="#D0E4F5" fill-opacity=".5"/>
+
+  <!-- Midground range with distinct ridgelines -->
+  <path d="M650 300 770 250 820 258 895 202 948 228 1017 180 1073 205 1150 166 1216 205 1274 178 1330 210 1400 196V300Z" fill="url(#middleRange)"/>
+  <path d="M770 250 820 258 895 202 948 228 1017 180 1073 205 1150 166 1216 205 1274 178 1330 210" stroke="#91BDE0" stroke-opacity=".54" stroke-width="1.25" stroke-linejoin="round"/>
+  <path d="M879 214 895 202 914 211 899 208 891 208Z" fill="#D2E6F6" fill-opacity=".58"/>
+  <path d="M1001 192 1017 180 1035 189 1019 187 1013 184Z" fill="#D2E6F6" fill-opacity=".46"/>
+  <path d="M1135 176 1150 166 1169 179 1152 173 1145 171Z" fill="#D2E6F6" fill-opacity=".47"/>
+
+  <!-- Foreground slopes frame the right and bottom edge -->
+  <path d="M830 300 930 258 984 266 1064 224 1114 237 1196 206 1247 225 1321 190 1360 211 1400 205V300Z" fill="url(#frontRange)"/>
+  <path d="M930 258 984 266 1064 224 1114 237 1196 206 1247 225 1321 190 1360 211" stroke="#759DC1" stroke-opacity=".46" stroke-width="1.15" stroke-linejoin="round"/>
+  <path d="M1047 233 1064 224 1083 230 1066 229 1058 227Z" fill="#C6DDF0" fill-opacity=".36"/>
+</svg>

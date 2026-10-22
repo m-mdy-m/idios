@@ -84,6 +84,30 @@ func (s *Store) ListNoteLabels(ctx context.Context) ([]domain.NoteLabel, error) 
 	return collect(rows, noteLabelFrom), nil
 }
 
+func (s *Store) SetNoteLabelColor(ctx context.Context, name, color string) error {
+	name = strings.TrimSpace(name)
+	color = strings.TrimSpace(color)
+	if name == "" {
+		return fmt.Errorf("%w: note label name is required", domain.ErrInvalid)
+	}
+	if len(color) != 7 || color[0] != '#' {
+		return fmt.Errorf("%w: label color must be a six-digit hex color", domain.ErrInvalid)
+	}
+	for _, r := range color[1:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return fmt.Errorf("%w: label color must be a six-digit hex color", domain.ErrInvalid)
+		}
+	}
+	changed, err := s.p().changes(ctx, `UPDATE note_labels SET color=? WHERE name=? COLLATE NOCASE`, strings.ToLower(color), name)
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return fmt.Errorf("%w: note label %q", domain.ErrNotFound, name)
+	}
+	return nil
+}
+
 func (s *Store) CreateNote(ctx context.Context, title, content string) (domain.Note, error) {
 	return s.CreateNoteWithLabels(ctx, title, content, nil)
 }
@@ -186,8 +210,8 @@ func cleanupUnusedNoteLabels(ctx context.Context, p provider) error {
 }
 
 func noteLabelColor(name string) string {
-	// Stable colors make a label recognizable across notes and application restarts.
-	colors := []string{"blue", "purple", "green", "orange", "pink", "cyan", "yellow", "accent"}
+	// Stable, readable GitHub-like colors make a note label recognizable across restarts.
+	colors := []string{"#1f6feb", "#8957e5", "#238636", "#bc4c00", "#bf3989", "#0f8b8d", "#9a6700", "#6e7781"}
 	var hash uint32 = 2166136261
 	for _, r := range strings.ToLower(name) {
 		hash ^= uint32(r)
@@ -335,11 +359,11 @@ func (s *Store) NextQuote(ctx context.Context) (domain.Quote, error) {
 }
 
 func (s *Store) GetWorkspaceProfile(ctx context.Context) (domain.WorkspaceProfile, error) {
-	r, err := s.p().must(ctx, "workspace profile", `SELECT username,full_name,bio,readme,updated_at FROM workspace_profile WHERE singleton_id='default'`)
+	r, err := s.p().must(ctx, "workspace profile", `SELECT username,full_name,focus,topics,website,bio,readme,updated_at FROM workspace_profile WHERE singleton_id='default'`)
 	if err != nil {
 		return domain.WorkspaceProfile{}, err
 	}
-	return domain.WorkspaceProfile{Username: str(r, "username"), FullName: str(r, "full_name"), Bio: str(r, "bio"), Readme: str(r, "readme"), UpdatedAt: parseTime(r["updated_at"])}, nil
+	return domain.WorkspaceProfile{Username: str(r, "username"), FullName: str(r, "full_name"), Focus: str(r, "focus"), Topics: str(r, "topics"), Website: str(r, "website"), Bio: str(r, "bio"), Readme: str(r, "readme"), UpdatedAt: parseTime(r["updated_at"])}, nil
 }
 
 func (s *Store) UpdateWorkspaceProfile(ctx context.Context, profile domain.WorkspaceProfile) (domain.WorkspaceProfile, error) {
@@ -347,7 +371,7 @@ func (s *Store) UpdateWorkspaceProfile(ctx context.Context, profile domain.Works
 	if profile.Username == "" || profile.FullName == "" {
 		return domain.WorkspaceProfile{}, fmt.Errorf("%w: username and display name are required", domain.ErrInvalid)
 	}
-	_, err := s.p().changes(ctx, `INSERT INTO workspace_profile(singleton_id,username,full_name,bio,readme,updated_at) VALUES('default',?,?,?,?,?) ON CONFLICT(singleton_id) DO UPDATE SET username=excluded.username,full_name=excluded.full_name,bio=excluded.bio,readme=excluded.readme,updated_at=excluded.updated_at`, profile.Username, profile.FullName, strings.TrimSpace(profile.Bio), strings.TrimSpace(profile.Readme), nowText())
+	_, err := s.p().changes(ctx, `INSERT INTO workspace_profile(singleton_id,username,full_name,focus,topics,website,bio,readme,updated_at) VALUES('default',?,?,?,?,?,?,?,?) ON CONFLICT(singleton_id) DO UPDATE SET username=excluded.username,full_name=excluded.full_name,focus=excluded.focus,topics=excluded.topics,website=excluded.website,bio=excluded.bio,readme=excluded.readme,updated_at=excluded.updated_at`, profile.Username, profile.FullName, strings.TrimSpace(profile.Focus), strings.TrimSpace(profile.Topics), strings.TrimSpace(profile.Website), strings.TrimSpace(profile.Bio), strings.TrimSpace(profile.Readme), nowText())
 	if err != nil {
 		return domain.WorkspaceProfile{}, err
 	}
@@ -399,7 +423,7 @@ func (s *Store) ToggleWorkspacePin(ctx context.Context, entityType, entityRef, l
 	return added, err
 }
 
-const scheduledJobColumns = `id,name,description,action_type,schedule_type,interval_minutes,schedule_time,schedule_weekday,schedule_day,enabled,notify,next_run_at,last_run_at,completed_at,created_at,updated_at`
+const scheduledJobColumns = `id,name,description,action_type,schedule_type,interval_minutes,schedule_time,schedule_weekday,schedule_day,enabled,notify,next_run_at,last_run_at,completed_at,branch_id,created_at,updated_at`
 
 func scheduledJobFrom(r Row) domain.ScheduledJob {
 	scheduleType := str(r, "schedule_type")
@@ -409,7 +433,7 @@ func scheduledJobFrom(r Row) domain.ScheduledJob {
 	}
 	return domain.ScheduledJob{
 		ID: str(r, "id"), Name: str(r, "name"), Description: str(r, "description"), ActionType: str(r, "action_type"),
-		ScheduleType: scheduleType, IntervalMinutes: intervalMinutes,
+		ScheduleType: scheduleType, IntervalMinutes: intervalMinutes, BranchID: ptrString(r["branch_id"]),
 		ScheduleTime: str(r, "schedule_time"), ScheduleWeekday: int(i64(r["schedule_weekday"])), ScheduleDay: int(i64(r["schedule_day"])),
 		Enabled: boolRow(r, "enabled"), Notify: boolRow(r, "notify"), NextRunAt: ptrTime(r["next_run_at"]),
 		LastRunAt: ptrTime(r["last_run_at"]), CompletedAt: ptrTime(r["completed_at"]),
@@ -435,10 +459,10 @@ func (s *Store) CreateScheduledJob(ctx context.Context, job domain.ScheduledJob)
 	}
 	id, now := domain.NewID(), nowText()
 	err = s.run(ctx, func(p provider) error {
-		_, err := p.changes(ctx, `INSERT INTO scheduled_jobs(id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,created_at,updated_at,schedule_type,schedule_time,schedule_weekday,schedule_day,completed_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`, id, job.Name, job.Description, job.ActionType,
+		_, err := p.changes(ctx, `INSERT INTO scheduled_jobs(id,name,description,action_type,interval_minutes,enabled,notify,next_run_at,created_at,updated_at,schedule_type,schedule_time,schedule_weekday,schedule_day,completed_at,branch_id)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)`, id, job.Name, job.Description, job.ActionType,
 			max(1, job.IntervalMinutes), boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), now, now,
-			job.ScheduleType, job.ScheduleTime, job.ScheduleWeekday, job.ScheduleDay)
+			job.ScheduleType, job.ScheduleTime, job.ScheduleWeekday, job.ScheduleDay, job.BranchID)
 		if err != nil {
 			return err
 		}
@@ -466,9 +490,9 @@ func (s *Store) UpdateScheduledJob(ctx context.Context, job domain.ScheduledJob)
 	}
 	now := nowText()
 	err = s.run(ctx, func(p provider) error {
-		changed, err := p.changes(ctx, `UPDATE scheduled_jobs SET name=?,description=?,action_type=?,schedule_type=?,interval_minutes=?,schedule_time=?,schedule_weekday=?,schedule_day=?,enabled=?,notify=?,next_run_at=?,completed_at=NULL,updated_at=? WHERE id=?`,
+		changed, err := p.changes(ctx, `UPDATE scheduled_jobs SET name=?,description=?,action_type=?,schedule_type=?,interval_minutes=?,schedule_time=?,schedule_weekday=?,schedule_day=?,enabled=?,notify=?,next_run_at=?,completed_at=NULL,branch_id=?,updated_at=? WHERE id=?`,
 			job.Name, job.Description, job.ActionType, job.ScheduleType, max(1, job.IntervalMinutes), job.ScheduleTime, job.ScheduleWeekday, job.ScheduleDay,
-			boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), now, job.ID)
+			boolInt(job.Enabled), boolInt(job.Notify), timeText(*job.NextRunAt), job.BranchID, now, job.ID)
 		if err != nil {
 			return err
 		}
@@ -643,7 +667,7 @@ func (s *Store) RunScheduledJobNow(ctx context.Context, id string, now time.Time
 }
 
 func notificationFrom(r Row) domain.Notification {
-	return domain.Notification{ID: str(r, "id"), Title: str(r, "title"), Body: str(r, "body"), Level: str(r, "level"), ReadAt: ptrTime(r["read_at"]), CreatedAt: parseTime(r["created_at"])}
+	return domain.Notification{ID: str(r, "id"), Title: str(r, "title"), Body: str(r, "body"), Level: str(r, "level"), RelatedEntityType: str(r, "related_entity_type"), RelatedEntityID: str(r, "related_entity_id"), ReadAt: ptrTime(r["read_at"]), CreatedAt: parseTime(r["created_at"])}
 }
 
 func (s *Store) CreateNotification(ctx context.Context, title, body, level string) (domain.Notification, error) {
@@ -666,7 +690,7 @@ func (s *Store) ListNotifications(ctx context.Context, limit int) ([]domain.Noti
 	if limit < 1 || limit > 500 {
 		limit = 50
 	}
-	rows, err := s.p().all(ctx, `SELECT id,title,body,level,read_at,created_at FROM notifications ORDER BY created_at DESC LIMIT ?`, limit)
+	rows, err := s.p().all(ctx, `SELECT id,title,body,level,read_at,created_at,related_entity_type,related_entity_id FROM notifications ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
 //go:embed defaults.json
@@ -24,6 +26,8 @@ type AppConfig struct {
 	RepositoryTemplate  RepositoryTemplateConfig     `json:"REPOSITORY_TEMPLATE"`
 	IssueTemplate       IssueTemplateConfig          `json:"ISSUE_TEMPLATE"`
 	PullRequestTemplate PullRequestTemplateConfig    `json:"PULL_REQUEST_TEMPLATE"`
+	Server              ServerConfig                 `json:"server"`
+	Web                 WebConfig                    `json:"web"`
 }
 
 type RepositoryTemplateConfig struct {
@@ -60,9 +64,49 @@ type NotificationConfig struct {
 	Enabled             bool                `json:"enabled"`
 	PollIntervalMinutes int                 `json:"poll_interval_minutes"`
 	QuoteReminders      QuoteReminderConfig `json:"quote_reminders"`
+	PlanReminders       PlanReminderConfig  `json:"plan_reminders"`
 }
 
-// QuoteReminderConfig controls random quote reminders while the interactive TUI is running.
+// PlanReminderConfig schedules three date-scoped check-ins for plans. Times use local 24-hour HH:MM.
+type PlanReminderConfig struct {
+	Enabled        bool   `json:"enabled"`
+	DesktopEnabled bool   `json:"desktop_enabled"`
+	MorningTime    string `json:"morning_time"`
+	MiddayTime     string `json:"midday_time"`
+	EveningTime    string `json:"evening_time"`
+}
+
+// ServerConfig controls the local-only HTTP service. The listener is restricted to loopback.
+type ServerConfig struct {
+	Host                   string `json:"host"`
+	Port                   int    `json:"port"`
+	OpenBrowser            bool   `json:"open_browser"`
+	RefreshIntervalSeconds int    `json:"refresh_interval_seconds"`
+}
+
+// WebConfig stores presentation preferences shared by every browser session.
+type CustomWebTheme struct {
+	Name       string `json:"name"`
+	Base       string `json:"base"`
+	Background string `json:"background"`
+	Surface    string `json:"surface"`
+	Text       string `json:"text"`
+	Muted      string `json:"muted"`
+	Accent     string `json:"accent"`
+	Border     string `json:"border"`
+	Success    string `json:"success"`
+	Warning    string `json:"warning"`
+	Danger     string `json:"danger"`
+}
+
+type WebConfig struct {
+	Theme            string                    `json:"theme"`
+	CustomThemes     map[string]CustomWebTheme `json:"custom_themes"`
+	SidebarCollapsed bool                      `json:"sidebar_collapsed"`
+	Compact          bool                      `json:"compact"`
+}
+
+// QuoteReminderConfig controls random quote reminders shared by the Go service and TUI fallback.
 // NextAt and LastQuoteID are persisted scheduler state, not user-facing preferences.
 type QuoteReminderConfig struct {
 	Enabled            bool   `json:"enabled"`
@@ -82,17 +126,32 @@ func DefaultAppConfig() AppConfig {
 	return cfg
 }
 
-// AppConfigPath is the user-editable configuration file path.
+// AppConfigPath is the user-editable configuration file path. IDIOS_CONFIG wins, then the
+// XDG config directory, with compatibility for an existing ~/.idios/config.json.
 func AppConfigPath() string {
 	if value := strings.TrimSpace(os.Getenv("IDIOS_CONFIG")); value != "" {
 		return value
 	}
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, "idios", "config.json")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(".", ".idios", "config.json")
+		return filepath.Join(".", ".config", "idios", "config.json")
 	}
-	return filepath.Join(home, ".idios", "config.json")
+	modern := filepath.Join(home, ".config", "idios", "config.json")
+	legacy := filepath.Join(home, ".idios", "config.json")
+	if _, err := os.Stat(modern); os.IsNotExist(err) {
+		if _, legacyErr := os.Stat(legacy); legacyErr == nil {
+			return legacy
+		}
+	}
+	return modern
 }
+
+// ConfigDir returns the directory containing the active config file and its optional config.d
+// fragments. Every adapter uses this same resolved location.
+func ConfigDir() string { return filepath.Dir(AppConfigPath()) }
 
 // LoadAppConfig creates a default config for new installations and overlays any supplied values
 // onto packaged defaults. Unknown fields are tolerated to allow forward-compatible local edits.
@@ -107,13 +166,13 @@ func LoadAppConfig() (AppConfig, error) {
 		if err := SaveAppConfig(cfg); err != nil {
 			return cfg, err
 		}
-		return cfg, nil
+		data, err = os.ReadFile(path)
 	}
 	if err != nil {
 		return cfg, fmt.Errorf("read IDIOS config %q: %w", path, err)
 	}
-	// Merge user JSON over packaged defaults instead of replacing whole nested structs.
-	// This lets users keep a tiny config containing just the options they want to change.
+	// Merge the main file over packaged defaults, then apply config.d fragments in lexical
+	// order. The same resolved config is consumed by CLI, TUI and the local server.
 	var base, override map[string]any
 	if err := json.Unmarshal(defaultConfigJSON, &base); err != nil {
 		return cfg, fmt.Errorf("parse embedded IDIOS defaults: %w", err)
@@ -122,6 +181,29 @@ func LoadAppConfig() (AppConfig, error) {
 		return cfg, fmt.Errorf("parse IDIOS config %q: %w", path, err)
 	}
 	mergeConfig(base, override)
+	fragmentDir := filepath.Join(filepath.Dir(path), "config.d")
+	entries, err := os.ReadDir(fragmentDir)
+	if err != nil && !os.IsNotExist(err) {
+		return cfg, fmt.Errorf("read IDIOS config fragments %q: %w", fragmentDir, err)
+	}
+	if err == nil {
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+				continue
+			}
+			fragmentPath := filepath.Join(fragmentDir, entry.Name())
+			fragmentData, readErr := os.ReadFile(fragmentPath)
+			if readErr != nil {
+				return cfg, fmt.Errorf("read IDIOS config fragment %q: %w", fragmentPath, readErr)
+			}
+			var fragment map[string]any
+			if decodeErr := json.Unmarshal(fragmentData, &fragment); decodeErr != nil {
+				return cfg, fmt.Errorf("parse IDIOS config fragment %q: %w", fragmentPath, decodeErr)
+			}
+			mergeConfig(base, fragment)
+		}
+	}
 	merged, err := json.Marshal(base)
 	if err != nil {
 		return cfg, fmt.Errorf("merge IDIOS config: %w", err)
@@ -137,6 +219,9 @@ func LoadAppConfig() (AppConfig, error) {
 	}
 	if cfg.Appearance.Colors == nil {
 		cfg.Appearance.Colors = map[string]string{}
+	}
+	if cfg.Web.CustomThemes == nil {
+		cfg.Web.CustomThemes = map[string]CustomWebTheme{}
 	}
 	if cfg.Appearance.Density == "" {
 		cfg.Appearance.Density = "comfortable"
@@ -169,6 +254,32 @@ func LoadAppConfig() (AppConfig, error) {
 	if cfg.Notifications.PollIntervalMinutes < 1 {
 		cfg.Notifications.PollIntervalMinutes = 1
 	}
+	if cfg.Notifications.PollIntervalMinutes > 1440 {
+		cfg.Notifications.PollIntervalMinutes = 1440
+	}
+	if cfg.Notifications.PlanReminders.MorningTime == "" {
+		cfg.Notifications.PlanReminders.MorningTime = defaults.Notifications.PlanReminders.MorningTime
+	}
+	if cfg.Notifications.PlanReminders.MiddayTime == "" {
+		cfg.Notifications.PlanReminders.MiddayTime = defaults.Notifications.PlanReminders.MiddayTime
+	}
+	if cfg.Notifications.PlanReminders.EveningTime == "" {
+		cfg.Notifications.PlanReminders.EveningTime = defaults.Notifications.PlanReminders.EveningTime
+	}
+	if !validLocalReminderTime(cfg.Notifications.PlanReminders.MorningTime) {
+		cfg.Notifications.PlanReminders.MorningTime = defaults.Notifications.PlanReminders.MorningTime
+	}
+	if !validLocalReminderTime(cfg.Notifications.PlanReminders.MiddayTime) {
+		cfg.Notifications.PlanReminders.MiddayTime = defaults.Notifications.PlanReminders.MiddayTime
+	}
+	if !validLocalReminderTime(cfg.Notifications.PlanReminders.EveningTime) {
+		cfg.Notifications.PlanReminders.EveningTime = defaults.Notifications.PlanReminders.EveningTime
+	}
+	if !validPlanReminderOrder(cfg.Notifications.PlanReminders) {
+		cfg.Notifications.PlanReminders.MorningTime = defaults.Notifications.PlanReminders.MorningTime
+		cfg.Notifications.PlanReminders.MiddayTime = defaults.Notifications.PlanReminders.MiddayTime
+		cfg.Notifications.PlanReminders.EveningTime = defaults.Notifications.PlanReminders.EveningTime
+	}
 	const maxQuoteReminderMinutes = 525600 // one year; also bounds time.Duration arithmetic.
 	if cfg.Notifications.QuoteReminders.MinIntervalMinutes < 1 {
 		cfg.Notifications.QuoteReminders.MinIntervalMinutes = defaults.Notifications.QuoteReminders.MinIntervalMinutes
@@ -185,11 +296,38 @@ func LoadAppConfig() (AppConfig, error) {
 	if cfg.Notifications.QuoteReminders.MaxIntervalMinutes > maxQuoteReminderMinutes {
 		cfg.Notifications.QuoteReminders.MaxIntervalMinutes = maxQuoteReminderMinutes
 	}
+	if cfg.Server.Host == "" {
+		cfg.Server.Host = "127.0.0.1"
+	}
+	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
+		cfg.Server.Port = 43170
+	}
+	if cfg.Server.RefreshIntervalSeconds < 10 {
+		cfg.Server.RefreshIntervalSeconds = 30
+	}
+	if cfg.Web.Theme == "" {
+		cfg.Web.Theme = "system"
+	}
 	return cfg, nil
+}
+
+func validLocalReminderTime(value string) bool {
+	parsed, err := time.Parse("15:04", value)
+	return err == nil && parsed.Format("15:04") == value
+}
+
+func validPlanReminderOrder(settings PlanReminderConfig) bool {
+	morning, morningErr := time.Parse("15:04", settings.MorningTime)
+	midday, middayErr := time.Parse("15:04", settings.MiddayTime)
+	evening, eveningErr := time.Parse("15:04", settings.EveningTime)
+	return morningErr == nil && middayErr == nil && eveningErr == nil && morning.Before(midday) && midday.Before(evening)
 }
 
 // SaveAppConfig writes config atomically with private file permissions.
 func SaveAppConfig(cfg AppConfig) error {
+	if cfg.Web.CustomThemes == nil {
+		cfg.Web.CustomThemes = map[string]CustomWebTheme{}
+	}
 	path := AppConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create IDIOS config directory: %w", err)
