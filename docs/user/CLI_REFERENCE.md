@@ -35,6 +35,22 @@ The example identifiers (`Demo#1`, `Demo!1`) mean repository `Demo`, issue 1, an
 
 An issue becomes done when its IDIOS pull request is accepted. That operation only records completion inside IDIOS; it does not merge Git code or create a GitHub pull request.
 
+## Browser workspace and background server
+
+The browser workspace is served locally by the `idios` binary:
+
+```sh
+idios web                  # start the browser workspace and open it
+idios serve --no-open      # run the local server without opening a browser
+idios server status        # show whether a local server is running
+idios server start         # launch the background server for your user
+idios server stop          # stop the background server
+idios server install       # register per-user autostart (Linux, macOS, Windows)
+idios server uninstall     # remove the autostart registration
+```
+
+`idios serve install`, `idios serve status`, and so on are accepted as aliases of the `idios server` control actions. The server listens on the loopback interface only.
+
 ## Other command groups
 
 Use `idios help` to see the full list. Depending on the group, commands also cover concepts, graph relationships, labels, milestones, dependencies, activity, repository settings, and importing an older IDIOS database.

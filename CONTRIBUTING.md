@@ -49,7 +49,7 @@ make build
 make smoke
 ```
 
-On Windows, `make build` runs `scripts/build.ps1`. You can also run Go tests directly with `go test ./...` and `go vet ./...`.
+On Windows, all Go checks (`make fmt-check`, `make test`, `make vet`, `make test-race`) and `make build` (which runs `scripts/build.ps1`) work from the normal Windows console. `make smoke` runs the POSIX smoke script through Git Bash; install [Git for Windows](https://git-scm.com/download/win) and the Makefile will call `C:/Program Files/Git/bin/bash.exe` automatically. You can also run Go tests directly with `go test ./...` and `go vet ./...`.
 
 If a check cannot run on your machine, mention that in the pull request rather than saying it passed.
 

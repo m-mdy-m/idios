@@ -98,6 +98,8 @@ go vet ./...
 go test -race ./...
 ```
 
+On Windows, the Go checks (`fmt-check`, `test`, `vet`, `test-race`) and `make build` run from the normal Windows console; the Makefile exports the CGO/GOOS variables for `cmd.exe`. `make smoke` executes the POSIX smoke script through Git Bash, so install [Git for Windows](https://git-scm.com/download/win) with its included Git Bash.
+
 Tests use temporary databases. Do not point tests at your personal workspace database.
 
 ## Install a build for your own user
