@@ -10,15 +10,15 @@ A repository is a named group of work inside IDIOS. It has its own issues, label
 
 ### Issues
 
-An issue describes one piece of work. Give it a title, details, priority, and due date when useful. Large issues can have child issues. Issues can be open, in progress, done, or cancelled.
+An issue describes one piece of work. Give it a title, details, priority, and due date when useful. Large issues can have child issues. Issues can be open, in progress, done, or cancelled. Each issue also carries a type — `task`, `bug`, `feature`, or `research` — so delivered work can be counted by kind.
 
 An issue can depend on another issue. For example, `Write tests` can depend on `Implement parser`. IDIOS marks that dependency as a blocker; other knowledge links do not automatically block work.
 
 ### IDIOS pull requests
 
-An IDIOS pull request records the work done for an issue and the explanation of the result. You can update it while working and accept it when ready. Accepting it creates a completion record and marks the issue done.
+An IDIOS pull request records the work done for an issue and the explanation of the result. You can update it while working and accept it when ready. Accepting it creates a completion record and marks the issue done. One simulated pull request can also cover several in-progress issues of the same repository; accepting it completes them together and records one immutable simulated commit.
 
-**This is not a GitHub pull request.** IDIOS does not create commits, merge code, switch branches, or upload files.
+**This is not a GitHub pull request.** IDIOS has no Git binary and does not merge real code or touched files; the repository history, virtual files, and release tags you see inside IDIOS are records the IDIOS Engine stores itself. See [Simulated repository workflow](SIMULATED_REPOSITORY_WORKFLOW.md).
 
 ### Projects
 
@@ -33,6 +33,10 @@ Notes hold decisions, ideas, investigation results, or context you want to keep.
 Jobs can run once at a chosen date and time, at an interval, daily, weekly, or monthly. You can pause a schedule, enable it again, run it immediately, edit it, or delete it. Scheduled work is processed while the terminal UI or the installed background service is running.
 
 Notifications collect reminders and other events. Browser notification pop-ups also depend on your browser's permission settings.
+
+### Daily plans
+
+A plan is a dated checklist for a day: a title, a description, and an ordered list of completable tasks. A plan can stay personal or link to a repository or issue. Morning, midday, and evening reminders can check in on the plans of the current date, and the Activity Atlas colors days by completed task ratio. See [Daily Plans](DAILY_PLANS.md).
 
 ### Concepts and graph
 
