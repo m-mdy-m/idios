@@ -1,4 +1,4 @@
-# PSX project-shape policy for the Go Engine and its UI adapters.
+# PSX project-shape policy for the Go Engine, CLI/TUI, and embedded local Web UI.
 # Rules are an allow-list: omitted rules are intentionally not checked.
 # Reference: https://github.com/m-mdy-m/psx/blob/main/docs/CONFIGURATION.md
 version: 1
@@ -35,7 +35,7 @@ rules:
   roadmap: false
   pull_request_template: warning
   issue_templates: info
-  api_docs: false          # CLI + versioned JSON protocol, no HTTP server
+  api_docs: warning       # Browser API development notes live in docs/development/WEB_API.md
   openapi: false
   runbook: false
 
@@ -53,9 +53,9 @@ rules:
   editorconfig: info
   pre_commit: info
   code_owners: info
-  node_version: false
+  node_version: false # Node/pnpm are a scoped build-time toolchain under clients/web/, not the root runtime
 
-  # This is a local desktop/terminal app, not a service deployment.
+  # IDIOS runs as a desktop-local application with an optional loopback service.
   dockerfile: false
   dockerignore: false
   docker_compose: false

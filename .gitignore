@@ -7,3 +7,9 @@
 *.db-shm
 *.db-wal
 coverage.out
+
+# Compiled front-end assets are embedded into release binaries.
+/clients/web/dist/
+/clients/web/node_modules/
+/clients/web/.vite/
+/clients/web/*.tsbuildinfo
