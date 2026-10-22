@@ -4,22 +4,22 @@ All notable changes to IDIOS are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] â€” 2026-10-22
+## [2.0.0] — 2026-10-22
 
-Version 1.2.0 adds the local Web workspace over the existing Go engine, adds dated Plans with daily
+Version 2.0.0 adds the local Web workspace over the existing Go engine, adds dated Plans with daily
 reminders and a simulated repository history (issues, virtual files, immutable tags), and restructures
 the client adapters from `internal/` into `clients/` (`cli`, `tui`, `server`, `web`) around a shared
 protocol and feature catalog.
 
 ### Changed
 - Reworked Overview to follow a calmer, atmospheric dark layout: a full quote panel beside Notes, with Latest changes spanning the lower workspace.
-- Moved quote controls to a compact lower toolbar and simplified the quote label to â€œQuotesâ€.
+- Moved quote controls to a compact lower toolbar and simplified the quote label to “Quotes”.
 - Added subtle local SVG atmosphere assets for Quotes, Notes, and Latest changes; no external image requests or runtime network dependencies.
 - Refined the Notes card with a soft visual backdrop, tag chips, and compact carousel controls.
 - Reworked Recent activity into a date-grouped tree timeline with tighter rows, grouped event counts, and clearer hover affordances.
 - Removed the redundant desktop Overview heading so content begins below the app breadcrumb; desktop layout fills the viewport without page scrolling, while narrow screens preserve natural scrolling.
 - Rebalanced the Dashboard overview into a quote panel beside one compact Notes card, with the recent-activity tree across the full lower row.
-- Removed Quick Capture from Overview, simplified the quote heading to â€œQuotesâ€, refined the quote panel into a quieter dark surface, and strengthened the activity connectors, row hierarchy, typography, and hover states.
+- Removed Quick Capture from Overview, simplified the quote heading to “Quotes”, refined the quote panel into a quieter dark surface, and strengthened the activity connectors, row hierarchy, typography, and hover states.
 - The desktop Overview now fills the available viewport without page scrolling at normal desktop heights; smaller screens and short windows retain natural scrolling instead of clipping content.
 
 ### Fixed
@@ -48,7 +48,7 @@ protocol and feature catalog.
 - **Consistent repository tab spacing:** add a shared content frame and responsive padding across Issues, Pull requests, Branches, History, Files, Tags, Labels, Milestones, Settings, Activity, and Graph.
 
 - **Personal rough-day markers:** added per-day red flags that override the green activity intensity, can be toggled from the selected-day action or by right-clicking a date, and persist in browser local storage. Activity days otherwise use five green intensity levels.
-- **Activity month insights:** added a monthly snapshot, weekly event pulse, equal-height month selectors, and a fixed 6 Ã— 7 calendar canvas with future dates left unselectable.
+- **Activity month insights:** added a monthly snapshot, weekly event pulse, equal-height month selectors, and a fixed 6 × 7 calendar canvas with future dates left unselectable.
 - **Activity timeline refinement:** added a count/type summary and structured date-grouped event rows with clear type badges and timestamps; full details are now collapsed by default and open on demand or when a date/filter is selected.
 - **Overview redesign:** removed the redundant Active issues panel and generic metric-card wall, replaced the decorative Workspace Pulse with a compact context bar, displayed recent changes as visual event tiles, and condensed Notes into a small quick-capture card.
 
@@ -87,7 +87,7 @@ protocol and feature catalog.
 - Prevented unknown protocol/JSON fields and malformed mutation inputs from reaching handlers or storage.
 - Made clearing logs truncate the shared log and remove the legacy log file, while preserving private file permissions.
 - Ensured empty log history is represented as an empty list in the API, not as a fake log entry.
-- Guarded command submission synchronously against rapid repeat submits and cleared stale â€œrepository not foundâ€ route errors after navigating back to the repository index following deletion.
+- Guarded command submission synchronously against rapid repeat submits and cleared stale “repository not found” route errors after navigating back to the repository index following deletion.
 
 ## [1.1.0] - 2026-10-20
 
@@ -101,7 +101,7 @@ protocol and feature catalog.
 - **Removal safeguards:** Added confirmation flows, exact-name confirmation for Repository removal, and protections for entities with relevant dependencies or completion history.
 - **Quote library:** Added 11 sourced quotations from notable figures in software engineering, computer science, mathematics, and statistics.
 - **Quote attribution:** Added source metadata and reference links for seeded quotations.
-- **Random quote reminders:** Introduced configurable, randomized Quote of the Moment notifications, with a default interval of 60â€“240 minutes.
+- **Random quote reminders:** Introduced configurable, randomized Quote of the Moment notifications, with a default interval of 60–240 minutes.
 - **Desktop notifications:** Added native notification integrations for Windows, macOS, and Linux, with an internal notification inbox as a fallback for retaining reminders.
 - **Graceful shutdown:** Added keyboard-driven exit flows, shutdown feedback, and resource cleanup while retaining `Ctrl+C` as an emergency exit path.
 - **UI tests:** Added tests covering batch operations, retry behavior, command palette behavior, shutdown flows, and related UI functionality.
@@ -133,10 +133,10 @@ protocol and feature catalog.
 ## [1.0.4]
 ### Fixed
 - show view upgrade
-## [1.0.3] â€” 2026-10-20
+## [1.0.3] — 2026-10-20
 ### Fixed
 - fix build in powershell
-## [1.0.2] â€” 2026-10-20
+## [1.0.2] — 2026-10-20
 
 - **Launch command:** running `idios` without arguments opens the normal interactive workspace, while explicit CLI commands such as `idios version` remain unchanged. `make install` and `make install-user` install the named executables on Unix-like systems and Windows; release builds include user-level Linux/macOS and Windows installers that put `idios` on PATH.
 - **Cross-platform updates:** the TUI checks the latest stable GitHub Release in the background at startup. A lower-right Upgrade control opens the release changelog; the updater verifies `SHA256SUMS.txt`, stages both executables, replaces the old build after the current process exits, and relaunches the updated application. A responsive `IDIOS UPGRADE` animation shows download, verification and hand-off activity.
@@ -148,8 +148,8 @@ protocol and feature catalog.
 
 ### Changed
 
-- **Graph page:** rewritten to be readable. It now opens with a summary and a short legend, then **What is blocked right now** (each waiting Issue with its unfinished prerequisite), then every node with its links worded as sentences (â€œhas pull requestâ€, â€œuses conceptâ€, â€œwaits forâ€) and ordered blocking â†’ workflow â†’ context. Each link is printed once, under the more central node, instead of repeating relationship groups plus a separate all-nodes list. Ownership links (repository owns issue, PR targets branch) and unlinked branches/labels/milestones are hidden by default behind **Ownership links: hidden â†’ show**; a focused graph has a **Distance** control and shows links in both directions. Long lists say how many nodes were left out instead of silently stopping at 40.
-- **Templates:** the bundled Issue (`task`, `bug`, `feature`, `research`) and Pull Request templates in `internal/config/defaults.json` are shorter and use fill-in lines, a checkable â€œDone whenâ€ list, a verification block for real command output, and a risk/undo section. The GitHub issue forms and pull request template were rewritten the same way (duplicate-search and latest-version checks, â€œwhere does it happenâ€, version field, project checks and compatibility checklist). `.github/ISSUE_TEMPLATE/config.yml` now points to `SECURITY.md` at the repository root.
+- **Graph page:** rewritten to be readable. It now opens with a summary and a short legend, then **What is blocked right now** (each waiting Issue with its unfinished prerequisite), then every node with its links worded as sentences (“has pull request”, “uses concept”, “waits for”) and ordered blocking → workflow → context. Each link is printed once, under the more central node, instead of repeating relationship groups plus a separate all-nodes list. Ownership links (repository owns issue, PR targets branch) and unlinked branches/labels/milestones are hidden by default behind **Ownership links: hidden → show**; a focused graph has a **Distance** control and shows links in both directions. Long lists say how many nodes were left out instead of silently stopping at 40.
+- **Templates:** the bundled Issue (`task`, `bug`, `feature`, `research`) and Pull Request templates in `internal/config/defaults.json` are shorter and use fill-in lines, a checkable “Done when” list, a verification block for real command output, and a risk/undo section. The GitHub issue forms and pull request template were rewritten the same way (duplicate-search and latest-version checks, “where does it happen”, version field, project checks and compatibility checklist). `.github/ISSUE_TEMPLATE/config.yml` now points to `SECURITY.md` at the repository root.
 - **TUI redesign:** navigation items are now tabs (filled for the current page, quiet otherwise), the top bar no longer repeats the tabs, the repository header is one line instead of a banner, and panel titles use the accent color. The footer shows only the keys that work on the current screen (forms, filter mode, intro, lists).
 - **Themes:** `midnight` (now cyan instead of purple), `paper` and `forest` were retuned for contrast, and `ocean`, `ember` and a high-contrast `contrast` theme were added. Packaged themes are now always loaded from the application, so configs written by older releases no longer freeze the old purple colors. and the new optional `on_accent` token controls text on accent backgrounds (fixes unreadable button text on light themes).
 - **Copy:** all in-app text was rewritten to say what a screen is for and what to do next. Marketing phrases and repeated slogans were removed. The intro screen now shows a "Get started" checklist that follows the real state of the database.
@@ -159,7 +159,7 @@ protocol and feature catalog.
 - **Clean end-user downloads:** exclude `idios-tui-demo` and extended guides from portable archives and native installers. User-facing packages contain only the `idios` CLI, clean `idios-tui`, `README.md`, and `LICENSE`; the demo executable and extended guides remain available in the source repository for development and CI smoke tests.
 - Release checks validate the exact four-file portable bundle and verify that native package payloads do not contain the demo executable.
 
-## [1.0.0] â€” 2026-10-19
+## [1.0.0] — 2026-10-19
 
 IDIOS 1.0.0 re-platformed IDIOS as a Go workspace engine. It introduces a
 repository and Issue workflow with structured dependencies, Pull Request-based completion,
@@ -356,7 +356,7 @@ former Python application, and it does not perform real Git operations or remote
 The following entries document releases of the former Python implementation, retained as
 historical context. They are separate from the Go Engine's `1.x` version line.
 
-## [0.4.3] â€” Legacy Python application
+## [0.4.3] — Legacy Python application
 
 ### Added
 - Windows desktop notifications using WinRT Toast and per-user `idios:` URI activation, so clicking a notification can open the schedule details after the reminder process exits.
@@ -398,9 +398,9 @@ historical context. They are separate from the Go Engine's `1.x` version line.
 ## [0.4.0]
 
 ### Added
-- Evening loop: `did: â€¦` records what you did, `plan[ when]: â€¦` plans a day (default tomorrow),
+- Evening loop: `did: …` records what you did, `plan[ when]: …` plans a day (default tomorrow),
   `done tk1 tk2` / `skip tk3` update tasks, `:plan` shows today and tomorrow.
-- `:review` walks through the day's open items (done / not yet â†’ tomorrow / skip) and saves a note.
+- `:review` walks through the day's open items (done / not yet → tomorrow / skip) and saves a note.
   Offered automatically on launch after the review time; never in scripts or pipes.
 - Scheduled reminder: `:schedule HH:MM|install|remove|test` and `idios schedule`, backed by the
   OS scheduler (crontab / Task Scheduler) installed only after confirmation. `idios remind`
@@ -425,7 +425,7 @@ historical context. They are separate from the Go Engine's `1.x` version line.
   CODE_OF_CONDUCT, SUPPORT, ROADMAP, ADRs, ARCHITECTURE, Makefile, CODEOWNERS, CodeQL and
   secret-scan workflows, pre-commit, editorconfig). `psx check` runs in CI.
 
-## [0.3.0] â€” Rewrite
+## [0.3.0] — Rewrite
 
 IDIOS was rewritten from scratch to follow `SKILL.md` and `AGENTS.md`:
 a personal learning environment where `idios` opens an interactive shell,

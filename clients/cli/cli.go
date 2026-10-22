@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"idios/clients/tui/render"
 	"idios/internal/application"
 	appconfig "idios/internal/config"
 	"idios/internal/logger"
-	"idios/clients/tui/render"
 )
 
 // Version is set to the source version by default and overridden by release builds via -ldflags.
-var Version = "1.0.2"
+var Version = "2.0.0"
 
 // config holds the global flags, which may appear anywhere in the argument list.
 type config struct {
