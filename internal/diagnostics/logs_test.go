@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -70,8 +71,11 @@ func TestClearTruncatesHistoryAndKeepsPrivatePermissions(t *testing.T) {
 	if info.Size() != 0 {
 		t.Fatalf("cleared log size = %d, want 0", info.Size())
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("cleared log permissions = %o, want 600", got)
+	// POSIX file permissions are not emulated on Windows; keep asserting them on Unix/CI.
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("cleared log permissions = %o, want 600", got)
+		}
 	}
 	if _, err := os.Stat(legacyPath()); !os.IsNotExist(err) {
 		t.Fatalf("legacy log still exists after clear: %v", err)

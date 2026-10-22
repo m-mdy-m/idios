@@ -66,8 +66,8 @@ func TestWebNavigationOrderingIsStableAndIncludesProfileJobsAndRemove(t *testing
 	}
 	want := []string{
 		"overview", "issues", "repositories", "projects", "pull-requests", "profile",
-		"graph", "concepts", "notes", "quotes", "activity", "planning", "jobs", "commands",
-		"remove", "logs", "help", "notifications", "settings",
+		"graph", "concepts", "notes", "quotes", "activity", "plans", "planning", "jobs",
+		"commands", "remove", "logs", "help", "notifications", "settings",
 	}
 	if !reflect.DeepEqual(ids, want) {
 		t.Fatalf("WebNavigation() IDs = %v, want %v", ids, want)
