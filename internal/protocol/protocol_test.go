@@ -57,13 +57,13 @@ func TestExecuteValidatesRequestsBeforeRequiringApplication(t *testing.T) {
 	if _, err := Execute(context.Background(), nil, "does.not.exist", nil); err == nil || !strings.Contains(err.Error(), "unknown protocol command") {
 		t.Fatalf("unknown command error = %v", err)
 	}
-	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{}); err == nil || !strings.Contains(err.Error(), "Repository is required") {
+	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{}); err == nil || !strings.Contains(err.Error(), "required field(s) missing or empty: Repository, Title") {
 		t.Fatalf("missing required field error = %v", err)
 	}
-	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{"repo": "X", "title": "Y", "priority": "impossible"}); err == nil || !strings.Contains(err.Error(), "Priority must be one of") {
+	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{"repo": "X", "title": "Y", "priority": "impossible"}); err == nil || !strings.Contains(err.Error(), "Priority: must be one of") {
 		t.Fatalf("invalid select error = %v", err)
 	}
-	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{"repo": "X", "title": "Y", "priority": "normal", "due": "2026-14-70"}); err == nil || !strings.Contains(err.Error(), "Due date must use YYYY-MM-DD") {
+	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{"repo": "X", "title": "Y", "priority": "normal", "due": "2026-14-70"}); err == nil || !strings.Contains(err.Error(), "Due date: must use YYYY-MM-DD") {
 		t.Fatalf("invalid date error = %v", err)
 	}
 	if _, err := Execute(context.Background(), nil, "issue.create", map[string]any{"repo": "X", "title": "Y", "priority": "normal", "due": "2026-10-22"}); err == nil || !strings.Contains(err.Error(), "Application is unavailable") {
