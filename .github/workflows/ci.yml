@@ -208,7 +208,7 @@ jobs:
       - name: Checkout smoke scripts
         uses: actions/checkout@v4
       - name: Download native build artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: idios-ci-${{ matrix.target }}
           path: dist
