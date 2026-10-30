@@ -611,7 +611,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }
     const chunkSeparators = chunkRanges.slice(0, -1).map((range, index) => {
       const gap = source.slice(range.end, chunkRanges[index + 1].start);
-      return /\\r?\\n\\s*\\r?\\n/.test(gap) ? '\\n\\n' : /\\r?\\n/.test(gap) ? '\\n' : ' ';
+      return /\r?\n\s*\r?\n/.test(gap) ? '\n\n' : /\r?\n/.test(gap) ? '\n' : ' ';
     });
     const mergeCompletedChunks = (parts: ReaderTranslationData[]) => mergeReaderTranslations(parts, chunkSeparators.slice(0, Math.max(0, parts.length - 1)));
     const results: ReaderTranslationData[] = [];
