@@ -601,6 +601,19 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     };
     const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1050);
     if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
+    const chunkRanges: Array<{ start: number; end: number }> = [];
+    let sourceCursor = 0;
+    for (const chunk of chunks) {
+      const start = source.indexOf(chunk, sourceCursor);
+      if (start < 0) throw new Error('The page text could not be aligned safely for chunked translation.');
+      chunkRanges.push({ start, end: start + chunk.length });
+      sourceCursor = start + chunk.length;
+    }
+    const chunkSeparators = chunkRanges.slice(0, -1).map((range, index) => {
+      const gap = source.slice(range.end, chunkRanges[index + 1].start);
+      return /\\r?\\n\\s*\\r?\\n/.test(gap) ? '\\n\\n' : /\\r?\\n/.test(gap) ? '\\n' : ' ';
+    });
+    const mergeCompletedChunks = (parts: ReaderTranslationData[]) => mergeReaderTranslations(parts, chunkSeparators.slice(0, Math.max(0, parts.length - 1)));
     const results: ReaderTranslationData[] = [];
     const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
     const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
@@ -617,7 +630,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const cached = translationChunkCache.current.get(cacheKey);
       if (cached) {
         results.push(cached);
-        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeReaderTranslations(results));
+        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeCompletedChunks(results));
         for (const term of cached.terms) {
           const key = normalizeTranslationMatch(term.source);
           if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
@@ -645,7 +658,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       updateProgress(index + 1, chunks.length);
     }
     updateProgress(chunks.length, chunks.length);
-    const combined = results.length === 1 ? results[0] : mergeReaderTranslations(results);
+    const combined = results.length === 1 ? results[0] : mergeCompletedChunks(results);
     return combined;
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage, translationTimeoutSeconds]);
 
