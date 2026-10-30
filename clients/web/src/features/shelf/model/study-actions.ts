@@ -120,7 +120,7 @@ export function parseBookActionResponse(raw: string, page: number): { visible: s
   }
   const removeIndexes = new Set([...markLines.map((item) => item.index), ...noteLines.map((item) => item.index)]);
   const visible = lines.filter((_, index) => !removeIndexes.has(index)).join('\n')
-    .replace(/```(?:json)?\s*[\s\S]*?```/gi, (fence) => /idios_book_actions|\"actions\"|HIGHLIGHT\s*:/i.test(fence) ? '' : fence)
+    .replace(/```(?:json)?\s*[\s\S]*?```/gi, (fence) => /idios_book_actions|"actions"|HIGHLIGHT\s*:/i.test(fence) ? '' : fence)
     .replace(/^\s*(?:BOOK\s+)?ACTIONS?\s*:\s*.*$/gim, '')
     .replace(/\n{3,}/g, '\n\n').trim();
   const normalized = normalizeRequestedActions({ actions }, page);
