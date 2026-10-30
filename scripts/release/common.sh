@@ -15,30 +15,37 @@ idios_prepare_target() {
       export CC=clang
       command -v clang >/dev/null 2>&1 || { echo "Xcode Command Line Tools (clang) are required." >&2; exit 1; }
       ;;
+    # The shared workflow provisions MSYS2 and runs both release commands in
+    # the matching "msys2 {0}" shell. Do not run pacman -Syu here: a runtime
+    # upgrade terminates the active MSYS2 shell.
     windows-amd64)
       [[ "${MSYSTEM:-}" == "UCRT64" ]] || {
-        echo "windows-amd64 requires the MSYS2 UCRT64 environment." >&2
+        echo "windows-amd64 requires the MSYS2 UCRT64 shell (msystem: UCRT64)." >&2
         exit 1
       }
       command -v gcc >/dev/null 2>&1 || {
-        echo "The UCRT64 GCC toolchain is missing; provision mingw-w64-ucrt-x86_64-gcc first." >&2
+        echo "UCRT64 GCC is not on PATH; use msys2/setup-msys2@v2 with mingw-w64-ucrt-x86_64-gcc." >&2
         exit 1
       }
       export CC=gcc
       ;;
     windows-arm64)
       [[ "${MSYSTEM:-}" == "CLANGARM64" ]] || {
-        echo "windows-arm64 requires the MSYS2 CLANGARM64 environment." >&2
+        echo "windows-arm64 requires the MSYS2 CLANGARM64 shell (msystem: CLANGARM64)." >&2
         exit 1
       }
       command -v clang >/dev/null 2>&1 || {
-        echo "The CLANGARM64 compiler is missing; provision mingw-w64-clang-aarch64-clang first." >&2
+        echo "CLANGARM64 Clang is not on PATH; use msys2/setup-msys2@v2 with mingw-w64-clang-aarch64-clang." >&2
         exit 1
       }
       export CC=clang
       ;;
     *) echo "Unknown release target: $target" >&2; exit 2 ;;
   esac
+
+  if [[ -n "${GITHUB_ENV:-}" ]]; then
+    printf 'CC=%s\\nCGO_ENABLED=1\\n' "$CC" >> "$GITHUB_ENV"
+  fi
 }
 
 idios_prepare_web() {
