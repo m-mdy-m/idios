@@ -47,7 +47,7 @@ const paragraphMerge = mergeReaderTranslations([
   { translation: 'First paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
   { translation: 'Second paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
 ], ['\\n\\n']);
-assert.equal(paragraphMerge.translation, 'First paragraph.\\n\\nSecond paragraph.', 'chunk merging must preserve PDF paragraph breaks');
+assert.equal(paragraphMerge.translation, 'First paragraph.\n\nSecond paragraph.', 'chunk merging must preserve PDF paragraph breaks');
 
 const merged = mergeReaderTranslations([
   { translation: 'ترجمه یک.', segments: [{ source: 'Sentence one.', translation: 'ترجمه یک.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }], grammar: [], ielts: [] },
