@@ -2,7 +2,7 @@
 
 All notable changes to IDIOS are recorded here. This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.1] - 2026-10-31
 
 ### Changed
 
@@ -155,6 +155,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
+[3.1.1]: https://github.com/m-mdy-m/idios/compare/v3.1.0...v3.1.1
 [3.0.2]: https://github.com/m-mdy-m/idios/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.1
 [3.0.0]: https://github.com/m-mdy-m/idios/compare/v3.0.0...v3.0.1
