@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, CircleHelp, EyeOff, LoaderCircle, Maximize2, MessagesSquare, Minimize2, Search, Send, SlidersHorizontal, Sparkles, UsersRound, X } from 'lucide-react';
 import { api, type AIAgent, type AIAgentContribution, type AIModel, type AIProvider, type AIRuntimeConfig, type AITask } from '@/lib/api';
 import type { ShelfAnnotation } from '@/types/idios';
+import { buildDiscussionHistory } from '../model/discussion-history';
 import './ShelfAgentDiscussion.css';
 
 type Props = {
@@ -321,6 +322,10 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     const turnOrder = continuationIDs.length ? continuationIDs : agentIDs;
     const localAgents = turnOrder.filter((id) => usableIDs.includes(id));
     if (!localAgents.length) { setError('Choose at least one agent assigned to an available Ollama Local model.'); return; }
+    if (!localAgents.includes('discussion-chair')) {
+      setError('Mira · Chair must be selected and assigned to an available Ollama Local model before a discussion can start or continue.');
+      return;
+    }
     const originalTopic = topic.trim();
     const base = firstTurn ? originalTopic : readerMessage.trim()
       ? `Original discussion topic: ${originalTopic}\nReader's reply: ${readerMessage.trim()}\n\nContinue from the waiting agents. Respond to the reader first, then add only one useful point.`
@@ -344,24 +349,25 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     }
     // Avoid duplicate source IDs if the selected text is the only context.
     const uniqueContext = context.filter((item, index) => context.findIndex((candidate) => candidate.id === item.id) === index);
-    const prior = turns.filter((item) => item.status === 'completed' && item.content?.trim()).slice(-8).map(({ threadKey: _key, runID: _runID, ...item }) => {
-      void _key;
-      void _runID;
-      return { ...item, content: item.content!.slice(0, 1200) };
-    });
+    const history = firstTurn
+      ? { contributions: [], omittedCount: 0, truncatedCount: 0 }
+      : buildDiscussionHistory(turns);
+    const historyBoundary = history.omittedCount > 0 || history.truncatedCount > 0
+      ? `\n\nHistory boundary: ${history.omittedCount} older completed turn(s) were omitted and ${history.truncatedCount} retained turn(s) were shortened to fit the bounded carry-over. Do not claim to remember omitted content; verify every retained claim against the supplied passages.`
+      : '';
     const payload = {
       book_id: bookID,
       book_title: bookTitle,
       page_start: Math.min(pageNumber, ...sourceEntries.map((item) => item.page)),
       page_end: pageNumber,
-      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}\n\nRound-table contract: conduct ${discussionRounds} sequential debate rounds, never parallel. Every agent after the first must respond to one specific earlier claim by the speaker's displayed name, assess it as supported/partly supported/unclear/unsupported, give a textual reason, and add a correction or refinement. The final agent is Mira · Chair: compare actual positions, name remaining disagreement, and give a refined conclusion. Use only supplied page/highlight/note evidence; never invent citations or make claims about unseen chapters. Separate text from inference. Do not repeat, offer generic summaries, or ask questions during peer debate. Only the Chair at the final turn may ask exactly one "Question for you: ..." line, and only if the answer could materially change the interpretation. Explain public reasons, not hidden chain-of-thought.`,
+      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}${historyBoundary}\n\nRound-table contract: conduct ${discussionRounds} sequential debate rounds, never parallel. Every agent must perform its configured specialist role and add an independent contribution. Every agent after the first must address one actual earlier claim by the speaker's displayed name, assess it as supported/partly supported/unclear/unsupported, give a source-based reason, and add a new qualification, correction, or implication. Do not imitate another agent, repeat its wording, or paraphrase the latest Chair as a substitute for analysis. Treat peer statements as claims to verify, not as source evidence. The final agent is Mira · Chair: compare actual positions, weigh the supplied text rather than counting agreement, preserve explicit negations and qualifications, identify resolved and unresolved disagreements, and give a refined conclusion. Use only supplied page/highlight/note evidence; never invent citations or claim knowledge of unseen chapters. Separate direct text from inference. Do not ask questions during peer debate. Only Mira on the final turn may ask one consequential "Question for you: ..." line. Explain concise public reasons, not hidden chain-of-thought.`,
       context: uniqueContext,
       agent_ids: localAgents.slice(0, maxAgents),
       parallel: false,
       rounds: discussionRounds,
       ...(effectiveThinking !== 'off' ? { reasoning_effort: effectiveThinking } : {}),
       skip_synthesis: true,
-      previous_contributions: firstTurn ? [] : prior,
+      previous_contributions: history.contributions,
     };
     setStarting(true); setError('');
     try {
@@ -390,7 +396,8 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
   const visibleTurns = turns.slice(-24);
 
   if (!open) return null;
-  const promptCanStart = Boolean(topic.trim() && agentIDs.length > 0 && usableIDs.some((id) => agentIDs.includes(id)) && pageText.trim());
+  const chairReady = usableIDs.includes('discussion-chair') && agentIDs.includes('discussion-chair');
+  const promptCanStart = Boolean(topic.trim() && agentIDs.length > 0 && usableIDs.some((id) => agentIDs.includes(id)) && chairReady && pageText.trim());
   const dialog = <Fragment>
     {expanded && <button type="button" className="shelf-agent-room__expanded-backdrop" aria-label="Collapse expanded discussion" onClick={() => setExpanded(false)} />}
     <aside className={`shelf-agent-room ${expanded ? 'shelf-agent-room--expanded' : ''}`} role="dialog" aria-modal={expanded} aria-label={`Agent discussion for ${bookTitle}`}>
@@ -486,8 +493,9 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
           <label title={hasThinkingSupport ? (nativeThinkingOnly ? 'Enables native thinking for supported Ollama models; unsupported selected models ignore it.' : 'Reasoning effort is sent only to selected models that support it.') : 'The selected models do not advertise native thinking support.'}><span>Thinking</span><select aria-label={nativeThinkingOnly ? 'Native thinking' : 'Thinking effort'} value={effectiveThinking} onChange={(event) => setThinkingEffort(event.target.value as 'off' | 'low' | 'medium' | 'high')} disabled={!hasThinkingSupport || busy || starting}><option value="off">Off</option>{nativeThinkingOnly ? <option value="high">On</option> : <><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></>}</select></label>
           <span className="shelf-agent-room__source-hint" title="Only the current page and saved notes are evidence; web results are not automatically injected into the discussion.">Page {pageNumber} · {annotations.length} notes</span>
         </div>
+        {!chairReady && <p className="shelf-agent-room__source-hint" role="status">Mira · Chair is required. Assign it an available Ollama Local model in Settings → AI Runtime to start or continue this discussion.</p>}
         <div className="shelf-agent-room__composer-bottom">
-          <button type="submit" className="shelf-agent-room__send" aria-label={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} title={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} disabled={starting || busy || (!turns.length ? !promptCanStart : !agentIDs.length || !usableIDs.some((id) => agentIDs.includes(id)))}>{starting || busy ? <LoaderCircle size={15} className="shelf-agent-room__spin" /> : <Send size={14} />}</button>
+          <button type="submit" className="shelf-agent-room__send" aria-label={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} title={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} disabled={starting || busy || (!turns.length ? !promptCanStart : !agentIDs.length || !usableIDs.some((id) => agentIDs.includes(id)) || !chairReady)}>{starting || busy ? <LoaderCircle size={15} className="shelf-agent-room__spin" /> : <Send size={14} />}</button>
         </div>
         {selectedText.trim() && !turns.length && !topic.trim() && <button type="button" className="shelf-agent-room__use-selection" onClick={() => setTopic(`Let's discuss this passage: “${selectedText.trim().slice(0, 500)}”`)}>Use selected passage</button>}
         {busy && <button type="button" className="shelf-agent-room__stop" onClick={() => activeRun && void api.cancelAIAgentRun(activeRun.id).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not stop the discussion.'))}>Stop</button>}

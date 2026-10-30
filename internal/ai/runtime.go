@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -56,7 +57,12 @@ type Manager struct {
 	lastError       error
 }
 
-const maxConfiguredAgents = 256
+const (
+	maxConfiguredAgents             = 256
+	maxPreviousDiscussionTurns      = 40
+	maxPreviousDiscussionTurnBytes  = 5000
+	maxPreviousDiscussionTotalBytes = 48000
+)
 
 var sourceMarker = regexp.MustCompile(`\[source:([^\]\s]+)\]`)
 var agentQuestionMarker = regexp.MustCompile(`(?im)^\s*(?:\*\*)?Question for you(?:\*\*)?\s*:`)
@@ -1371,21 +1377,21 @@ func validateDiscussionRequest(req DiscussionRequest) error {
 	if req.Rounds < 0 || req.Rounds > 5 {
 		return &Error{Code: "resource_limit_exceeded", Message: "A discussion must request between 1 and 5 rounds when a round count is supplied"}
 	}
-	if len(req.PreviousContributions) > 20 {
-		return &Error{Code: "resource_limit_exceeded", Message: "A discussion may include at most 20 prior agent turns"}
+	if len(req.PreviousContributions) > maxPreviousDiscussionTurns {
+		return &Error{Code: "resource_limit_exceeded", Message: fmt.Sprintf("A discussion may include at most %d prior agent turns", maxPreviousDiscussionTurns)}
 	}
 	priorChars := 0
 	for i := range req.PreviousContributions {
 		item := &req.PreviousContributions[i]
 		item.AgentName = strings.TrimSpace(item.AgentName)
 		item.Content = strings.TrimSpace(item.Content)
-		if len(item.Content) > 5000 {
-			return &Error{Code: "resource_limit_exceeded", Message: "Each prior agent turn is limited to 5,000 characters"}
+		if len(item.Content) > maxPreviousDiscussionTurnBytes {
+			return &Error{Code: "resource_limit_exceeded", Message: "Each prior agent turn is limited to 5,000 bytes"}
 		}
 		priorChars += len(item.Content)
 	}
-	if priorChars > 24000 {
-		return &Error{Code: "resource_limit_exceeded", Message: "Prior discussion context is limited to 24,000 characters"}
+	if priorChars > maxPreviousDiscussionTotalBytes {
+		return &Error{Code: "resource_limit_exceeded", Message: "Prior discussion context is limited to 48,000 bytes"}
 	}
 	if req.PageStart < 0 || req.PageEnd < 0 || (req.PageStart > 0 && req.PageEnd > 0 && req.PageEnd < req.PageStart) {
 		return &Error{Code: "invalid_request", Message: "The requested page range is invalid"}
@@ -1665,6 +1671,47 @@ func (m *Manager) DeleteAgent(id string) error {
 	return &Error{Code: "invalid_request", Message: "Agent was not found"}
 }
 
+func discussionRoleFocus(agentID string) string {
+	switch agentID {
+	case "reader":
+		return "Find the page's central argumentative move and its strongest exact support. Preserve explicit negations, contrasts, and qualifications; do not turn a rejected reading into the author's conclusion."
+	case "tutor":
+		return "Explain one difficult relationship or implication in plain language. Do not merely paraphrase the latest speaker or Chair; add a distinct clarification and preserve the author's qualifications."
+	case "steelman":
+		return "Reconstruct the strongest fair version of one actual peer claim before testing its key premise. State whether the objection refutes, narrows, or leaves the claim intact."
+	case "concept-connector":
+		return "Connect concepts only through relationships actually present in supplied passages or notes. Label the relationship; when no grounded cross-page connection exists, say so rather than inventing one."
+	case "context-keeper":
+		return "Track the precise unresolved claim, accepted correction, and strongest remaining reason. Advance one unresolved issue and identify repetition that adds no evidence."
+	case "example-builder":
+		return "Use one short hypothetical example only to clarify an abstract point, then state where the analogy stops. Never present the example as evidence from the book."
+	case "socratic-questioner":
+		return "Identify one consequential assumption or missing premise in a named peer's claim. Ask the group one precise question; do not pause or question the reader."
+	case "scope-keeper":
+		return "Separate direct statements, reasonable inferences, and claims not established by the supplied page. Narrow overreach without asserting the opposite."
+	case "signal-scout":
+		return "Offer at most one low-confidence candidate assumption or ambiguity for peers to verify. Mark it as a candidate, not a conclusion, and do not manufacture disagreement."
+	case "translator":
+		return "Focus on one material wording or terminology choice. Preserve the author's force, negation, and uncertainty; do not expand a translation choice into an unsupported philosophical claim."
+	case "ambiguity-scout":
+		return "Test whether a genuine ambiguity exists. Offer at most two readings only when both are textually plausible; explicitly reject false ambiguity when the wording settles the point."
+	case "reviewer":
+		return "Audit one consequential claim from a named peer. Give a precise verdict and the evidence gap; missing evidence is not proof that the opposite is true."
+	case "evidence-auditor":
+		return "Audit one exact peer claim against the supplied passage. Classify it as supported, partly supported, inferred, unsupported, contradicted, or unverifiable, and cite the strongest relevant evidence."
+	case "counterexample-tester":
+		return "Test one precise claim with a fair boundary case. Label the case hypothetical and state whether it refutes, narrows, or leaves the claim intact; do not disagree for show."
+	case "code-cartographer":
+		return "Trace one technical claim to its implementation consequences. Separate what the text specifies from what an implementation might choose; do not invent missing code or architecture."
+	case "note-writer":
+		return "Extract one concise study insight grounded in the supplied passage. Keep a proposed quotation exact and distinguish a draft from a saved annotation."
+	case "discussion-chair":
+		return "Adjudicate the actual named positions rather than counting votes. Direct textual evidence, explicit negations, and qualifications outweigh repeated agreement; preserve unresolved disagreement and never invent a consensus."
+	default:
+		return "Make one distinct contribution that fulfils your configured role. Respond to an actual earlier claim when present, verify it against the supplied source, and add a new reason rather than paraphrasing consensus."
+	}
+}
+
 func discussionAgentPriority(id string) int {
 	priority := map[string]int{
 		// Reuse the common 3B model for the opening analysis and first critique.
@@ -1727,6 +1774,15 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			return WorkflowResult{BookID: req.BookID, Question: req.Question}, &Error{Code: "resource_limit_exceeded", Message: fmt.Sprintf("This runtime allows at most %d agents per discussion", maxAgents)}
 		}
 		chosen = chosen[:maxAgents]
+	}
+	if req.SkipSynthesis && len(chosen) > 1 {
+		hasChair := false
+		for _, agent := range chosen {
+			hasChair = hasChair || agent.ID == "discussion-chair"
+		}
+		if !hasChair {
+			return WorkflowResult{BookID: req.BookID, Question: req.Question}, &Error{Code: "invalid_request", Message: "Mira · Chair is required for a multi-agent discussion when separate synthesis is disabled"}
+		}
 	}
 	// Use a predictable role order so the discussion reads like a conversation rather
 	// than an arbitrary checkbox order. The Chair is always last, which is required
@@ -2021,12 +2077,15 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	} else {
 		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 55 words in 2–3 short sentences. Cite only supplied source IDs.\n", round)
 	}
+	if !finalTurn && agent.ID != "discussion-chair" && len(previous) > 0 && previous[len(previous)-1].AgentID == "discussion-chair" {
+		review.WriteString("\nCHAIR-REVIEW RULE: Mira's prior Chair turn is a conclusion to verify, not wording to echo. Independently test one concrete claim or qualification against the supplied source and earlier peer reasoning. Add your own role-specific point, or state that no additional supported point is available.")
+	}
 	start := 0
 	if len(previous) > 8 {
 		start = len(previous) - 8
 		review.WriteString("\nEARLIER DISCUSSION LEDGER (compressed; preserve these original claims and accepted corrections):\n")
 		for _, item := range previous[:start] {
-			content := compactDiscussionExcerpt(item.Content, 180)
+			content := compactDiscussionExcerpt(item.Content, 500)
 			if content == "" && item.Error != nil {
 				content = "No usable response; " + compactDiscussionExcerpt(item.Error.Message, 100)
 			}
@@ -2035,7 +2094,7 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 		review.WriteString("RECENT PEER TURNS (fuller context; address one actual claim and advance it):\n")
 	}
 	for _, item := range previous[start:] {
-		content := compactDiscussionExcerpt(item.Content, 600)
+		content := compactDiscussionExcerpt(item.Content, 700)
 		if content == "" && item.Error != nil {
 			content = "No usable response."
 		}
@@ -2062,6 +2121,22 @@ func compactDiscussionExcerpt(content string, maxRunes int) string {
 	runes := []rune(content)
 	if len(runes) <= maxRunes {
 		return content
+	}
+	// Preserve source markers at the end of bounded excerpts so later agents
+	// retain the citation trail even when older prose must be compacted.
+	markers := sourceMarker.FindAllString(content, -1)
+	uniqueMarkers := make([]string, 0, len(markers))
+	seenMarkers := make(map[string]bool, len(markers))
+	for _, marker := range markers {
+		if !seenMarkers[marker] {
+			uniqueMarkers = append(uniqueMarkers, marker)
+			seenMarkers[marker] = true
+		}
+	}
+	suffix := strings.Join(uniqueMarkers, " ")
+	prefixLimit := maxRunes - len([]rune(suffix)) - 2
+	if suffix != "" && prefixLimit > 0 {
+		return strings.TrimSpace(string(runes[:prefixLimit])) + " … " + suffix
 	}
 	return string(runes[:maxRunes]) + "…"
 }
@@ -2109,6 +2184,7 @@ func discussionAnswerNeedsCitation(content string) bool {
 var sectionSymbolReference = regexp.MustCompile(`§{1,2}\s*(\d+)(?:\s*[-–—]\s*(\d+))?`)
 var namedSectionReference = regexp.MustCompile(`(?i)\bsections?\s+(\d+)(?:\s*(?:[-–—]|to|and)\s*(\d+))?`)
 var namedChapterReference = regexp.MustCompile(`(?i)\bchapters?\s+([ivxlcdm]+|\d+)(?:\s*(?:[-–—]|to|and)\s*([ivxlcdm]+|\d+))?`)
+var sourceChapterReferencePattern = regexp.MustCompile(`(?i)\bchapters?\s+([ivxlcdm]+|\d+)(?:\s*(to|[-–—]|and)\s*([ivxlcdm]+|\d+))?`)
 var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|following|next|other)\s+chapters?\b`)
 
 func validateDiscussionOutput(content string, allowedSources map[string]bool, passages []ContextPassage, finalTurn bool) string {
@@ -2205,8 +2281,70 @@ func sourceSectionNumberExists(text, number string) bool {
 }
 
 func sourceChapterReferenceExists(text, chapter string) bool {
-	pattern := regexp.MustCompile(`(?i)\bchapters?\s+` + regexp.QuoteMeta(chapter) + `\b`)
-	return pattern.MatchString(text)
+	target, ok := chapterOrdinal(chapter)
+	if !ok {
+		return false
+	}
+	for _, match := range sourceChapterReferencePattern.FindAllStringSubmatch(text, -1) {
+		start, validStart := chapterOrdinal(match[1])
+		if !validStart {
+			continue
+		}
+		if target == start {
+			return true
+		}
+		if len(match) < 4 || match[3] == "" {
+			continue
+		}
+		end, validEnd := chapterOrdinal(match[3])
+		if !validEnd {
+			continue
+		}
+		switch strings.ToLower(match[2]) {
+		case "and":
+			if target == end {
+				return true
+			}
+		default:
+			if end >= start && target >= start && target <= end {
+				return true
+			}
+			if end < start && target <= start && target >= end {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func chapterOrdinal(value string) (int, bool) {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value == "" {
+		return 0, false
+	}
+	if number, err := strconv.Atoi(value); err == nil {
+		return number, number > 0
+	}
+	values := map[byte]int{'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+	total := 0
+	for index := 0; index < len(value); index++ {
+		current, ok := values[value[index]]
+		if !ok {
+			return 0, false
+		}
+		if index+1 < len(value) {
+			next, valid := values[value[index+1]]
+			if !valid {
+				return 0, false
+			}
+			if next > current {
+				total -= current
+				continue
+			}
+		}
+		total += current
+	}
+	return total, total > 0
 }
 
 func hasCompletedDiscussionPeer(turns []AgentContribution) bool {
@@ -2506,6 +2644,10 @@ func discussionMessages(req DiscussionRequest, agent AgentDefinition, synthesis 
 		outputFormat = "Markdown"
 	}
 	systemPrompt := fmt.Sprintf("You are the IDIOS Shelf discussion persona %q. Role: %s. Instructions: %s\nRequired format: %s. You are in an evidence-led live round-table, not writing a standalone answer. HARD RULES: (1) Discuss only the supplied page text, saved annotations, and earlier turns. Never infer unseen chapters or pretend you have web access. (2) Distinguish direct textual evidence, interpretation, and speculation. If evidence is missing, explicitly say it is missing. (3) Never invent quotations, page numbers, or [source:ID] markers; use only exact source IDs supplied in context. (4) When earlier speaker turns are present, respond to one specific claim by a named participant; name them, fairly restate the claim, then agree/disagree/refine it and give a reason. If this is the opening turn and no peer claim exists yet, establish one provisional, source-grounded interpretation for the others to test. Never invent a conversation. (5) Do not repeat prior turns or give a generic summary; add one useful new step. (6) Do not ask the reader anything unless you are the final chair at the end of the final round and the answer could change the conclusion. (7) Provide concise public reasoning, never private hidden chain-of-thought. For compact local models, use 2–3 short sentences and at most 55 words (final chair: 75 words). No headings, numbered lists, introductions, or generic book summaries. Reader notes are interpretations, not authoritative evidence. Never claim to have saved a note or highlight unless IDIOS confirms it.", agent.Name, role, instruction, outputFormat)
+	systemPrompt += "\n\nIDENTITY AND ORIGINALITY: You are only " + agent.Name + ". Never present another agent's name, role, or response as your own. Treat every peer contribution as a claim to inspect, not as evidence. Agreement is not a reason to paraphrase: add a distinct role-specific implication, qualification, or correction; if you have no independent addition, say so plainly."
+	if focus := discussionRoleFocus(agent.ID); focus != "" {
+		systemPrompt += "\n\nROLE-SPECIFIC DELIVERABLE: " + focus
+	}
 	if skillInstructions := compactDiscussionSkillInstructions(agent); skillInstructions != "" {
 		systemPrompt += "\n\nCompact attached-skill guidance (only apply what matters now):\n" + skillInstructions
 	}

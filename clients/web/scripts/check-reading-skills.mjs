@@ -8,9 +8,13 @@ const skillsRoot = path.join(webRoot, 'src', 'features', 'reading-skills', 'skil
 const registryPath = path.join(webRoot, 'src', 'features', 'reading-skills', 'model', 'readingSkills.ts');
 const assistantPath = path.join(webRoot, 'src', 'features', 'shelf', 'components', 'ShelfStudyAssistant.tsx');
 const readerPagePath = path.join(webRoot, 'src', 'features', 'shelf', 'ShelfPDFReaderPage.tsx');
+const companionSkillPath = path.join(webRoot, 'src', 'features', 'shelf', 'model', 'reading-companion.skill.md');
+const studyStoragePath = path.join(webRoot, 'src', 'features', 'shelf', 'model', 'study-storage.ts');
 const registry = await readFile(registryPath, 'utf8');
 const assistantSource = await readFile(assistantPath, 'utf8');
 const readerPageSource = await readFile(readerPagePath, 'utf8');
+const companionSkillSource = await readFile(companionSkillPath, 'utf8');
+const studyStorageSource = await readFile(studyStoragePath, 'utf8');
 const errors = [];
 const warnings = [];
 const seenNames = new Set();
@@ -63,6 +67,15 @@ if (!registry.includes('skill.alwaysOn || skill.defaultEnabled')) errors.push('r
 if (!assistantSource.includes('activeSkillInstructions')) errors.push('Tutor/Mimi: selected skill instructions are no longer injected');
 if (!assistantSource.includes('coreReliabilitySkill.replace')) errors.push('Tutor/Mimi: isolated repair calls must receive the core reliability contract');
 if (!readerPageSource.includes('CORE_RELIABILITY_CONTRACT')) errors.push('Translate: mandatory core reliability contract is not imported/injected');
+for (const required of [
+  'Page-level argument reading and negation fidelity',
+  'Never silently drop or reverse negations',
+  'treat earlier agent messages as fallible claims',
+]) {
+  if (!companionSkillSource.includes(required)) errors.push(`MIMI: shared reading companion contract is missing "${required}"`);
+}
+if (!assistantSource.includes('## Your role: MIMI — the primary Shelf reading companion')) errors.push('MIMI: chat mode must retain the primary MIMI identity');
+if (!studyStorageSource.includes('idios.shelf.page-insight.v6.')) errors.push('MIMI: page insight cache must invalidate notes from the previous prompt contract');
 
 const evalPath = path.join(webRoot, '..', '..', 'tests', 'fixtures', 'reading-skill-evaluations.json');
 try {

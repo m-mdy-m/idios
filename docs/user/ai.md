@@ -39,7 +39,7 @@ Read the exact labels and warnings shown in your current Settings page before ch
 
 ## 5. Use AI in Shelf
 
-Shelf includes contextual translation, Tutor/Mimi assistance, selected reading skills, and optional in-reader discussions. The context may include the book title, summary, subject tags, current page, saved highlights, and notes. The selected passage remains the primary source for passage-specific operations.
+Shelf uses MIMI as its primary reading companion for page-margin notes and conversational tutoring. It also includes contextual translation, selected reading skills, and optional evidence-led agent discussions. The context may include the book title, summary, subject tags, current page, saved highlights, and notes. The selected passage remains the primary source for passage-specific operations.
 
 A generated response is only a suggestion. For notes and highlights, use the explicit save action and wait for the saved or failed result from IDIOS. Never treat model text alone as proof that a database write happened.
 

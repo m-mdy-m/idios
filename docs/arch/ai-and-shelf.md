@@ -31,6 +31,19 @@ Provider model discovery and model inference are separate operations. `Manager.R
 
 Offline-only blocks remote discovery and inference at the server boundary. Local-first allows explicit discovery of remote model metadata but blocks remote inference unless the cloud fallback policy is enabled. The UI must mirror these rules, but the server is authoritative.
 
+
+## Evidence-led agent discussions
+
+Book discussions use a sequential round-table. Each selected agent receives the original supplied passages plus the completed peer turns that precede it; parallel generation is disabled because it would prevent meaningful peer review.
+
+- Built-in agents receive a mandatory role-specific deliverable in addition to their editable profile instructions. They must not impersonate peers, treat a peer statement as source evidence, or paraphrase agreement without adding a new qualification or reason.
+- Source passages remain authoritative. Agent outputs are claims to check, not facts to inherit. Exact `[source:ID]` markers are validated against the request's supplied source IDs.
+- The final speaking turn belongs to Mira · Chair. Mira compares the actual positions, weighs the supplied text rather than counting votes, preserves explicit negations and qualifications, and reports unresolved disagreement instead of forcing consensus.
+- A continuation carries up to 40 completed turns, with a 5,000-byte per-turn and 48,000-byte aggregate UTF-8 budget. Oversized carry-over is bounded from the newest turn backward; truncation preserves source markers and adds a warning. Failed and waiting turns are not treated as peer evidence.
+- Older turns are represented by bounded excerpts in a later model prompt. Those excerpts retain source markers; the original contribution remains visible in the task result. The source passage is reattached in full on every generation.
+
+The deterministic validator checks response completeness, word budgets, source-marker allowlists, and explicit chapter/section references. Chapter ranges such as `Chapters IV–VIII` are interpreted as inclusive ranges, so an endpoint cited from that range is not incorrectly rejected. These checks do not prove semantic correctness: model outputs still require source-based evaluation, and a failed Chair turn remains an explicit partial result rather than being presented as a successful synthesis.
+
 ## Skills and structured output
 
 Reading skills provide instructions and verification rules. Static checks can validate skill metadata and evaluation fixtures; they do not prove that every model will follow the instructions. Structured-output requests must still be parsed and validated by the caller before being trusted.
