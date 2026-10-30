@@ -234,11 +234,12 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [pageTranslation, setPageTranslation] = useState<ReaderTranslationData | null>(null);
   const [selectionTranslation, setSelectionTranslation] = useState<ReaderTranslationData | null>(null);
   const [wordTranslation, setWordTranslation] = useState<ReaderTranslationData | null>(null);
+  const [wordTranslationKey, setWordTranslationKey] = useState('');
+  const [wordTranslationLoadingKey, setWordTranslationLoadingKey] = useState('');
   const [translationPageKey, setTranslationPageKey] = useState('');
   const [translationRevision, setTranslationRevision] = useState(0);
   const [pageTranslationBusy, setPageTranslationBusy] = useState(false);
   const [selectionTranslationBusy, setSelectionTranslationBusy] = useState(false);
-  const [wordTranslationBusy, setWordTranslationBusy] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const wordTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const pageTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
@@ -604,20 +605,21 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     if (!word || !translationOpen || !currentPageText.trim()) return;
     const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(word)}`;
     const cached = wordTranslationCache.current.get(key);
-    if (cached) { setWordTranslation(cached); return; }
+    if (cached) { setWordTranslation(cached); setWordTranslationKey(key); return; }
     if (wordTranslationInFlight.current.has(key)) return;
     wordTranslationInFlight.current.add(key);
-    setWordTranslationBusy(true);
+    setWordTranslationLoadingKey(key);
     setTranslationError('');
     try {
       const translated = await requestTranslation(word, 'word');
       wordTranslationCache.current.set(key, translated);
       setWordTranslation(translated);
+      setWordTranslationKey(key);
     } catch (cause) {
       setTranslationError(cause instanceof Error ? cause.message : 'The word could not be explained in context.');
     } finally {
       wordTranslationInFlight.current.delete(key);
-      setWordTranslationBusy(false);
+      setWordTranslationLoadingKey((current) => current === key ? '' : current);
     }
   }, [bookID, currentPageText, hoveredTextForAI, pageNumber, requestTranslation, translationOpen, translationTargetLanguage]);
 
@@ -660,7 +662,6 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
-    setWordTranslation(null);
     if (!translationOpen || !pageTranslation || !hoveredTextForAI.trim()) return;
     const normalizedWord = normalizeTranslationMatch(hoveredTextForAI);
     const supplied = pageTranslation.terms.some((term) => normalizeTranslationMatch(term.source) === normalizedWord);
@@ -961,13 +962,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         onTabChange={setTranslationTab}
         pageData={pageTranslation}
         selectionData={selectionTranslation}
-        wordData={wordTranslation}
+        wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
         activeText={selectedTextForAI || hoveredTextForAI}
         selectedText={selectedTextForAI}
         hoveredWord={hoveredTextForAI}
         pageBusy={pageTranslationBusy}
         selectionBusy={selectionTranslationBusy}
-        wordBusy={wordTranslationBusy}
+        wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(hoveredTextForAI)}`}
         error={translationError}
         onClose={() => setTranslationOpen(false)}
         onTranslatePage={refreshPageTranslation}
