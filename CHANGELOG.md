@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.1.2] - 2026-10-31
+
+### Added
+
+- Add an in-reader AI translation and language-learning companion for PDF pages, selected passages, and individual words, with dedicated vocabulary, grammar, and IELTS tabs.
+- Add translation parsing checks that keep source-aligned segments and accept vocabulary, grammar, and academic expressions only when they are grounded in the supplied book text.
+
+### Changed
+
+- Use nearby pages, book metadata, saved notes, highlights, and a glossary from previously translated pages as context for more consistent terminology.
+- Keep the reader open while the translation companion is shown beside the PDF; on narrow screens it opens as a dismissible overlay.
+
+### Fixed
+
+- Keep the sidebar expand control available while navigation is collapsed, so the same control can collapse and restore the sidebar without opening Settings.
+- Render Search as a centered icon in the collapsed sidebar instead of squeezing its text label into the narrow navigation rail.
+
 All notable changes to IDIOS are recorded here. This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/).
 
 ## [3.1.1] - 2026-10-31
