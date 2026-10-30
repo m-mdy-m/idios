@@ -70,7 +70,7 @@ idios_verify_target() {
   unformatted="$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
   if [[ -n "$unformatted" ]]; then
     echo "Go files need gofmt:" >&2
-    printf '%s\\n' "$unformatted" >&2
+    printf '%s\n' "$unformatted" >&2
     exit 1
   fi
   go test ./...
