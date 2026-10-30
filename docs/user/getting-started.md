@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.
 irm https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.ps1 | iex
 ```
 
-The installer checks the downloaded archive against its SHA-256 checksum before replacing the executable.
+The installer checks the downloaded archive against its SHA-256 checksum before replacing the executable. It also installs a native launcher: a desktop/menu shortcut on Linux and Windows, and `IDIOS.app` on macOS.
 
 ## 2. Open IDIOS
 
@@ -30,7 +30,7 @@ Open a terminal and run:
 idios web
 ```
 
-The local service starts if it is not already running. Your browser opens at `http://127.0.0.1:43170` by default.
+The local service starts and your browser opens at `http://127.0.0.1:43170` by default. You can also double-click the IDIOS desktop shortcut (or `IDIOS.app` on macOS) to do the same without a terminal.
 
 To print the address without opening a browser:
 

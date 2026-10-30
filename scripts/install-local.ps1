@@ -11,10 +11,24 @@ if (-not $InstallDir) {
 }
 $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 $CliPath = Join-Path $InstallDir 'idios.exe'
+$Root = Split-Path -Parent $PSScriptRoot
+$LauncherSource = Join-Path $Root 'packaging/windows/launch-idios.vbs'
+$IconSource = Join-Path $Root 'clients/web/public/favicon.ico'
+$LauncherPath = Join-Path $InstallDir 'launch-idios.vbs'
+$IconPath = Join-Path $InstallDir 'idios.ico'
 $PathMarker = Join-Path $InstallDir '.idios-path-added'
 if ($Uninstall) {
     foreach ($process in (Get-CimInstance Win32_Process | Where-Object { ($_.Name -in @('idios.exe', 'idios-tui.exe')) -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) })) { throw "Close $($process.Name) before uninstalling IDIOS." }
-    Remove-Item -LiteralPath $CliPath, (Join-Path $InstallDir 'idios-tui.exe'), (Join-Path $InstallDir 'idios-tui-demo.exe') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $CliPath, $LauncherPath, $IconPath, (Join-Path $InstallDir 'idios-tui.exe'), (Join-Path $InstallDir 'idios-tui-demo.exe') -Force -ErrorAction SilentlyContinue
+    $Shell = New-Object -ComObject WScript.Shell
+    $DesktopLink = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'IDIOS.lnk'
+    $StartMenuLink = Join-Path ([Environment]::GetFolderPath('Programs')) 'IDIOS/IDIOS.lnk'
+    foreach ($Link in @($DesktopLink, $StartMenuLink)) {
+        if (Test-Path -LiteralPath $Link) {
+            $Shortcut = $Shell.CreateShortcut($Link)
+            if ($Shortcut.Arguments -like '*launch-idios.vbs*') { Remove-Item -LiteralPath $Link -Force }
+        }
+    }
     if (Test-Path -LiteralPath $PathMarker) {
         $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $Entries = @($UserPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $InstallDir.TrimEnd('\') })
@@ -38,10 +52,27 @@ Copy-Item -LiteralPath $SourceCli -Destination $Stage -Force
 $HadOld = Test-Path -LiteralPath $CliPath
 try { if ($HadOld) { Move-Item -LiteralPath $CliPath -Destination $Backup -Force }; Move-Item -LiteralPath $Stage -Destination $CliPath -Force }
 catch { Remove-Item -LiteralPath $CliPath -Force -ErrorAction SilentlyContinue; if ($HadOld -and (Test-Path -LiteralPath $Backup)) { Move-Item -LiteralPath $Backup -Destination $CliPath -Force -ErrorAction SilentlyContinue }; throw }
+if (-not (Test-Path -LiteralPath $LauncherSource)) { throw "Desktop launcher source is missing: $LauncherSource" }
+if (-not (Test-Path -LiteralPath $IconSource)) { throw "IDIOS icon source is missing: $IconSource" }
+Copy-Item -LiteralPath $LauncherSource -Destination $LauncherPath -Force
+Copy-Item -LiteralPath $IconSource -Destination $IconPath -Force
 Remove-Item -LiteralPath $Backup, (Join-Path $InstallDir 'idios-tui.exe'), (Join-Path $InstallDir 'idios-tui-demo.exe') -Force -ErrorAction SilentlyContinue
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $Entries = @($UserPath -split ';' | Where-Object { $_ })
 if (-not ($Entries | Where-Object { $_.TrimEnd('\') -ieq $InstallDir.TrimEnd('\') })) { $Entries += $InstallDir; [Environment]::SetEnvironmentVariable('Path', ($Entries -join ';'), 'User'); New-Item -ItemType File -Force -Path $PathMarker | Out-Null }
 if (-not (($env:PATH -split ';') | Where-Object { $_.TrimEnd('\') -ieq $InstallDir.TrimEnd('\') })) { $env:PATH = "$InstallDir;$env:PATH" }
+$Shell = New-Object -ComObject WScript.Shell
+$Desktop = [Environment]::GetFolderPath('DesktopDirectory')
+$StartMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'IDIOS'
+New-Item -ItemType Directory -Force -Path $StartMenu | Out-Null
+foreach ($LinkPath in @((Join-Path $Desktop 'IDIOS.lnk'), (Join-Path $StartMenu 'IDIOS.lnk'))) {
+    $Shortcut = $Shell.CreateShortcut($LinkPath)
+    $Shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
+    $Shortcut.Arguments = '//B "' + $LauncherPath + '"'
+    $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.IconLocation = $IconPath + ',0'
+    $Shortcut.Description = 'Start IDIOS and open the local workspace'
+    $Shortcut.Save()
+}
 Write-Host "Installed IDIOS local build to $InstallDir" -ForegroundColor Green
-Write-Host 'Open a new terminal if PATH does not refresh, then run: idios serve --open'
+Write-Host 'Desktop and Start Menu shortcuts created.'

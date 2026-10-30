@@ -22,7 +22,11 @@ try {
     $Unpacked = Join-Path $TempDir 'unpacked'
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $Unpacked -Force
     $Cli = Join-Path $Unpacked 'idios.exe'
+    $Launcher = Join-Path $Unpacked 'launch-idios.vbs'
+    $Icon = Join-Path $Unpacked 'idios.ico'
     if (-not (Test-Path -LiteralPath $Cli)) { throw 'Release archive is missing idios.exe. Nothing was installed.' }
+    if (-not (Test-Path -LiteralPath $Launcher)) { throw 'Release archive is missing launch-idios.vbs. Nothing was installed.' }
+    if (-not (Test-Path -LiteralPath $Icon)) { throw 'Release archive is missing idios.ico. Nothing was installed.' }
     if (Test-Path -LiteralPath $InstallDir) {
         $running = Get-CimInstance Win32_Process | Where-Object { ($_.Name -in @('idios.exe', 'idios-tui.exe')) -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) }
         if ($running) { throw 'Close IDIOS before running the installer, then run this script again.' }
@@ -41,11 +45,26 @@ try {
         if ($HadOld -and (Test-Path -LiteralPath $Backup)) { Move-Item -LiteralPath $Backup -Destination $CliPath -Force -ErrorAction SilentlyContinue }
         throw
     }
+    Copy-Item -LiteralPath $Launcher -Destination (Join-Path $InstallDir 'launch-idios.vbs') -Force
+    Copy-Item -LiteralPath $Icon -Destination (Join-Path $InstallDir 'idios.ico') -Force
     Remove-Item -LiteralPath $Backup, (Join-Path $InstallDir 'idios-tui.exe'), (Join-Path $InstallDir 'idios-tui-demo.exe') -Force -ErrorAction SilentlyContinue
     $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $PathEntries = @($UserPath -split ';' | Where-Object { $_ })
     if (-not ($PathEntries | Where-Object { $_.TrimEnd('\') -ieq $InstallDir.TrimEnd('\') })) { $PathEntries += $InstallDir; [Environment]::SetEnvironmentVariable('Path', ($PathEntries -join ';'), 'User') }
     if (-not (($env:PATH -split ';') | Where-Object { $_.TrimEnd('\') -ieq $InstallDir.TrimEnd('\') })) { $env:PATH = "$InstallDir;$env:PATH" }
+    $Shell = New-Object -ComObject WScript.Shell
+    $Desktop = [Environment]::GetFolderPath('DesktopDirectory')
+    $StartMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'IDIOS'
+    New-Item -ItemType Directory -Force -Path $StartMenu | Out-Null
+    foreach ($LinkPath in @((Join-Path $Desktop 'IDIOS.lnk'), (Join-Path $StartMenu 'IDIOS.lnk'))) {
+        $Shortcut = $Shell.CreateShortcut($LinkPath)
+        $Shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
+        $Shortcut.Arguments = '//B "' + (Join-Path $InstallDir 'launch-idios.vbs') + '"'
+        $Shortcut.WorkingDirectory = $InstallDir
+        $Shortcut.IconLocation = (Join-Path $InstallDir 'idios.ico') + ',0'
+        $Shortcut.Description = 'Start IDIOS and open the local workspace'
+        $Shortcut.Save()
+    }
     Write-Host "Installed IDIOS $($Release.tag_name -replace '^v', '') to $InstallDir" -ForegroundColor Green
-    Write-Host 'Run: idios serve --open'
+    Write-Host 'Desktop and Start Menu shortcuts created. Double-click IDIOS to start the local server and open the workspace.'
 } finally { Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue }

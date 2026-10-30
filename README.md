@@ -24,7 +24,7 @@ IDIOS brings your projects, repositories, issues, reading library, notes, plans,
   irm https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.ps1 | iex
   ```
 
-The installer downloads the latest release, checks its SHA-256 checksum, and installs the single `idios` executable. You can also download an installer manually from [GitHub Releases](https://github.com/m-mdy-m/idios/releases).
+The installer downloads the latest release, checks its SHA-256 checksum, and installs the single `idios` executable. It also creates a native launcher: a desktop/menu shortcut on Linux and Windows, and an `IDIOS.app` launcher on macOS. You can also download an installer manually from [GitHub Releases](https://github.com/m-mdy-m/idios/releases).
 
 ### Open the workspace
 
@@ -32,7 +32,7 @@ The installer downloads the latest release, checks its SHA-256 checksum, and ins
 idios web
 ```
 
-IDIOS starts its local service when needed and opens the browser. The default address is `http://127.0.0.1:43170`.
+IDIOS starts its local service when needed and opens the browser. The default address is `http://127.0.0.1:43170`. You can also double-click the installed IDIOS launcher instead of opening a terminal.
 
 To run the service without opening a browser:
 
