@@ -1,4 +1,8 @@
-import { BookOpen, GraduationCap, Languages, Lightbulb, LoaderCircle, RefreshCw, Sparkles, X } from 'lucide-react';
+import { useState } from 'react';
+import {
+  BookOpen, ChevronDown, GraduationCap, Languages, Lightbulb,
+  LoaderCircle, Settings2, Sparkles, X,
+} from 'lucide-react';
 import type { ReaderGrammarNote, ReaderIELTSTip, ReaderTranslationData, ReaderTranslationTerm } from '../model/reader-translation';
 import { normalizeTranslationMatch } from '../model/reader-translation';
 import './ShelfTranslationPanel.css';
@@ -15,14 +19,12 @@ const languages = [
   { value: 'tr', label: 'Türkçe' },
 ];
 
-function highlightPhrase(value: string, phrase: string) {
-  const needle = normalizeTranslationMatch(phrase);
-  if (!needle) return value;
-  const originalNeedle = phrase.trim();
-  const originalIndex = value.toLocaleLowerCase().indexOf(originalNeedle.toLocaleLowerCase());
-  if (originalIndex < 0) return value;
-  return <>{value.slice(0, originalIndex)}<mark>{value.slice(originalIndex, originalIndex + originalNeedle.length)}</mark>{value.slice(originalIndex + originalNeedle.length)}</>;
-}
+const modes: Array<{ value: ShelfTranslationTab; label: string; description: string }> = [
+  { value: 'translate', label: 'Translate', description: 'Full page translation' },
+  { value: 'vocabulary', label: 'Word', description: 'Meaning in this book and sentence' },
+  { value: 'grammar', label: 'Grammar', description: 'Grammar patterns from this page' },
+  { value: 'ielts', label: 'IELTS', description: 'Academic language and useful expressions' },
+];
 
 function termMatches(term: ReaderTranslationTerm, word: string): boolean {
   const needle = normalizeTranslationMatch(word);
@@ -48,10 +50,11 @@ function IELTSCard({ tip }: { tip: ReaderIELTSTip }) {
 
 export function ShelfTranslationPanel({
   pageNumber, targetLanguage, onTargetLanguageChange, tab, onTabChange,
-  pageData, selectionData, wordData, activeText, selectedText, hoveredWord,
-  pageBusy, selectionBusy, wordBusy, error,
-  onClose, onTranslatePage, onTranslateSelection, onExplainWord, onSelectTerm,
-  translationModel, modelOptions, modelsLoading, modelError, lastUsedModel, onModelChange, progress,
+  pageData, selectionData, wordData, selectedText, hoveredWord,
+  pageBusy, analysisBusy, selectionBusy, wordBusy, error,
+  onClose, onTranslateSelection, onExplainWord, onSelectTerm, onAnalyzePage,
+  translationModel, modelOptions, modelsLoading, modelError, lastUsedModel, onModelChange,
+  timeoutSeconds, onTimeoutChange, progress,
 }: {
   pageNumber: number;
   targetLanguage: string;
@@ -61,148 +64,157 @@ export function ShelfTranslationPanel({
   pageData: ReaderTranslationData | null;
   selectionData: ReaderTranslationData | null;
   wordData: ReaderTranslationData | null;
-  activeText: string;
   selectedText: string;
   hoveredWord: string;
   pageBusy: boolean;
+  analysisBusy: boolean;
   selectionBusy: boolean;
   wordBusy: boolean;
   error: string;
   onClose: () => void;
-  onTranslatePage: () => void;
   onTranslateSelection: () => void;
   onExplainWord: () => void;
   onSelectTerm: (term: string) => void;
+  onAnalyzePage: (kind: 'grammar' | 'ielts') => void;
   translationModel: string;
   modelOptions: Array<{ value: string; label: string; availability: 'available' | 'unknown'; local: boolean }>;
   modelsLoading: boolean;
   modelError: string;
   lastUsedModel: string;
   onModelChange: (model: string) => void;
+  timeoutSeconds: number;
+  onTimeoutChange: (seconds: number) => void;
   progress: { done: number; total: number };
 }) {
-  const activeNeedle = normalizeTranslationMatch(activeText);
-  const activeSegment = pageData?.segments.find((segment) => {
-    const source = normalizeTranslationMatch(segment.source);
-    return Boolean(activeNeedle && (source.includes(activeNeedle) || activeNeedle.includes(source)));
-  });
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const activeMode = modes.find((mode) => mode.value === tab) ?? modes[0];
   const pageTerm = pageData?.terms.find((term) => termMatches(term, hoveredWord));
-  const wordTerm = wordData?.terms[0];
-  const currentTerm = pageTerm || wordTerm;
+  const currentTerm = pageTerm || wordData?.terms[0];
   const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(selectedText.trim());
-  const selectedCovered = !selectedText.trim() || selectedWord || Boolean(pageData?.segments.some((segment) =>
-    normalizeTranslationMatch(segment.source) === normalizeTranslationMatch(selectedText),
-  ));
 
-  return <aside className="shelf-translation-panel" aria-label="AI translation and language learning">
+  return <aside className="shelf-translation-panel" aria-label="Reading translation companion">
     <header className="shelf-translation-panel__header">
-      <div className="shelf-translation-panel__identity">
-        <span><Languages size={16} /></span>
-        <div><strong>Reading companion</strong><small>Translate · understand · learn</small></div>
+      <div className="shelf-translation-panel__brand">
+        <span className="shelf-translation-panel__brand-icon"><Languages size={16} /></span>
+        <div><strong>Reading companion</strong><small>Page {pageNumber}</small></div>
       </div>
-      <button type="button" className="shelf-translation-panel__close" onClick={onClose} aria-label="Close translation panel" title="Close panel"><X size={16} /></button>
+      <div className="shelf-translation-panel__actions">
+        <div className="shelf-translation-panel__menu-anchor">
+          <button
+            type="button"
+            className="shelf-translation-panel__mode-trigger"
+            aria-haspopup="menu"
+            aria-expanded={modeMenuOpen}
+            onClick={() => { setModeMenuOpen((open) => !open); setSettingsOpen(false); }}
+          >
+            {tab === 'translate' ? <Languages size={14} /> : tab === 'vocabulary' ? <BookOpen size={14} /> : tab === 'grammar' ? <Lightbulb size={14} /> : <GraduationCap size={14} />}
+            <span>{activeMode.label}</span><ChevronDown size={13} />
+          </button>
+          {modeMenuOpen && <div className="shelf-translation-panel__mode-menu" role="menu" aria-label="Reading tool">
+            {modes.map((mode) => <button
+              key={mode.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={tab === mode.value}
+              className={tab === mode.value ? 'is-active' : ''}
+              onClick={() => { onTabChange(mode.value); setModeMenuOpen(false); }}
+            >
+              <span className="shelf-translation-panel__mode-menu-label">{mode.label}</span>
+              <small>{mode.description}</small>
+            </button>)}
+          </div>}
+        </div>
+        <button
+          type="button"
+          className={`shelf-translation-panel__icon-button${settingsOpen ? ' is-active' : ''}`}
+          aria-label="Translation settings"
+          title="Translation settings"
+          aria-expanded={settingsOpen}
+          onClick={() => { setSettingsOpen((open) => !open); setModeMenuOpen(false); }}
+        ><Settings2 size={15} /></button>
+        <button type="button" className="shelf-translation-panel__icon-button" onClick={onClose} aria-label="Close translation panel" title="Close panel"><X size={16} /></button>
+      </div>
+      {settingsOpen && <section className="shelf-translation-panel__settings" aria-label="Translation settings">
+        <label>Translate into
+          <select value={targetLanguage} onChange={(event) => onTargetLanguageChange(event.target.value)}>
+            {languages.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
+          </select>
+        </label>
+        <label>AI model
+          <select value={translationModel} onChange={(event) => onModelChange(event.target.value)} disabled={modelsLoading || modelOptions.length === 0}>
+            {!translationModel && <option value="">Select a model…</option>}
+            {modelOptions.map((model) => <option key={model.value} value={model.value}>{model.label}{model.availability === 'unknown' ? ' · unchecked' : ''}</option>)}
+          </select>
+        </label>
+        <label>Request timeout
+          <select value={String(timeoutSeconds)} onChange={(event) => onTimeoutChange(Number(event.target.value))}>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+            <option value="600">10 minutes</option>
+          </select>
+        </label>
+        <div className="shelf-translation-panel__settings-meta">
+          <span>{modelsLoading ? 'Loading model catalogue…' : lastUsedModel || modelOptions.find((model) => model.value === translationModel)?.label || modelError || 'No model selected'}</span>
+          <a href="/settings/ai">Manage AI</a>
+        </div>
+        {modelError && !modelsLoading && <p className="shelf-translation-panel__settings-error">{modelError}</p>}
+      </section>}
     </header>
-
-    <section className="shelf-translation-panel__model-card" aria-label="AI translation model">
-      <label className="shelf-translation-panel__model-label" htmlFor="shelf-reader-model">AI MODEL</label>
-      <div className="shelf-translation-panel__model-select">
-        <select id="shelf-reader-model" value={translationModel} onChange={(event) => onModelChange(event.target.value)} disabled={modelsLoading || modelOptions.length === 0}>
-          {!translationModel && <option value="">Select a model…</option>}
-          {modelOptions.map((model) => <option key={model.value} value={model.value}>{model.label}{model.availability === 'unknown' ? ' · not checked' : ''}</option>)}
-        </select>
-        {modelsLoading ? <LoaderCircle size={14} className="is-spinning" /> : <span className="shelf-translation-panel__model-dot" />}
-      </div>
-      <div className="shelf-translation-panel__model-meta">
-        <span>{translationModel ? (lastUsedModel || modelOptions.find((model) => model.value === translationModel)?.label || translationModel) : modelError || 'Choose a model to begin'}</span>
-        <a href="/settings/ai">Manage models</a>
-      </div>
-      {modelError && !modelsLoading && <p className="shelf-translation-panel__model-error">{modelError}</p>}
-    </section>
-
-    <div className="shelf-translation-panel__controls">
-      <label>Translate into
-        <select value={targetLanguage} onChange={(event) => onTargetLanguageChange(event.target.value)}>
-          {languages.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
-        </select>
-      </label>
-      <button type="button" onClick={onTranslatePage} disabled={pageBusy || !translationModel} aria-label="Translate this page again" title="Translate this page again">
-        {pageBusy ? <LoaderCircle size={14} className="is-spinning" /> : <RefreshCw size={14} />}
-      </button>
-    </div>
-
-    <nav className="shelf-translation-panel__tabs" aria-label="Learning tools">
-      <button type="button" className={tab === 'translate' ? 'is-active' : ''} onClick={() => onTabChange('translate')}><Languages size={13} /> Translate</button>
-      <button type="button" className={tab === 'vocabulary' ? 'is-active' : ''} onClick={() => onTabChange('vocabulary')}><BookOpen size={13} /> Words</button>
-      <button type="button" className={tab === 'grammar' ? 'is-active' : ''} onClick={() => onTabChange('grammar')}><Lightbulb size={13} /> Grammar</button>
-      <button type="button" className={tab === 'ielts' ? 'is-active' : ''} onClick={() => onTabChange('ielts')}><GraduationCap size={13} /> IELTS</button>
-    </nav>
 
     <div className="shelf-translation-panel__content">
       {error && <div className="shelf-translation-panel__error" role="alert">
         <p>{error}</p>
-        {tab === 'translate' && <button type="button" onClick={onTranslatePage} disabled={!translationModel || pageBusy}>
-          <RefreshCw size={12} /> {pageData ? 'Resume translation' : 'Retry translation'}
-        </button>}
+        {tab === 'translate' && <span>Completed parts are kept in this reader session. Change the model or timeout in settings, then retry.</span>}
       </div>}
+
       {tab === 'translate' && <>
-        <div className="shelf-translation-panel__section-title"><span>PAGE {pageNumber} · FULL TRANSLATION</span>{pageData && <span>{pageData.segments.length} aligned parts</span>}</div>
-        {selectionData && selectedText.trim() && <section className="shelf-translation-panel__selection-result">
-          <small>SELECTED PASSAGE</small>
-          <blockquote>{selectedText}</blockquote>
-          <p>{selectionData.translation}</p>
-        </section>}
-        {selectedText.trim() && !selectedCovered && !selectionData && <button type="button" className="shelf-translation-panel__action" onClick={onTranslateSelection} disabled={selectionBusy}>
-          {selectionBusy ? <LoaderCircle size={14} className="is-spinning" /> : <Sparkles size={14} />} Translate selected passage
-        </button>}
         {pageBusy && <div className="shelf-translation-panel__progress" role="status" aria-live="polite">
-          <div><LoaderCircle size={16} className="is-spinning" /><strong>{progress.total > 1 ? `Translating part ${Math.max(1, progress.done + 1)} of ${progress.total}` : 'Translating this page'}</strong><span>{progress.total > 1 ? 'Completed parts are cached; retries continue from the interrupted part.' : 'Using the selected model and nearby book context.'}</span></div>
-          <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '8%' }} /></div>
-          <small>{progress.total ? `${progress.done}/${progress.total} parts complete` : 'Preparing passage…'} · {lastUsedModel || 'Connecting to model'}</small>
+          <span className="shelf-translation-panel__progress-spinner"><LoaderCircle size={14} className="is-spinning" /></span>
+          <div><strong>{progress.total > 1 ? `Translating part ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : 'Translating this page'}</strong><small>{progress.total ? `${progress.done} of ${progress.total} parts complete` : 'Preparing page text…'}</small></div>
+          <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '5%' }} /></div>
         </div>}
-        {!pageBusy && !pageData && <div className="shelf-translation-panel__empty"><Languages size={22} /><strong>{translationModel ? 'Ready to translate' : 'Choose your translation model'}</strong><p>{translationModel ? 'Translate this page in short parts. Completed parts are kept so a retry does not start from zero.' : 'Select a model above, or open AI Settings to configure and refresh your model catalogue.'}</p><button type="button" onClick={onTranslatePage} disabled={!translationModel}>Translate page</button></div>}
-        {hoveredWord && currentTerm && <article className="shelf-translation-panel__inline-word">
-          <small>{currentTerm.source} · {currentTerm.partOfSpeech || 'IN THIS CONTEXT'}</small>
-          <strong>{currentTerm.translation}</strong>
-          <p>{currentTerm.meaning}</p>
+        {selectionData && selectedText.trim() && <article className="shelf-translation-panel__selection-result">
+          <small>SELECTED PASSAGE</small><p>{selectionData.translation}</p>
         </article>}
-        {hoveredWord && !currentTerm && wordData?.translation && <article className="shelf-translation-panel__inline-word">
-          <small>{hoveredWord} · CONTEXTUAL EXPLANATION</small>
-          <p>{wordData.translation}</p>
-        </article>}
-        {pageData && <div className="shelf-translation-panel__segments" aria-live="polite">
-          {(pageData.segments.length ? pageData.segments : [{ source: '', translation: pageData.translation }]).map((segment, index) => {
-            const active = Boolean(activeSegment && activeSegment === segment);
-            return <article key={index} className={active ? 'is-active' : ''}>
-              {segment.source && <small>{segment.source}</small>}
-              <p>{active && hoveredWord && currentTerm ? highlightPhrase(segment.translation, currentTerm.translation) : segment.translation}</p>
-            </article>;
-          })}
+        {selectedText.trim() && !selectedWord && !selectionData && <button type="button" className="shelf-translation-panel__selection-action" onClick={onTranslateSelection} disabled={selectionBusy}>
+          {selectionBusy ? <LoaderCircle size={13} className="is-spinning" /> : <Sparkles size={13} />} Translate selected passage
+        </button>}
+        {pageData?.translation ? <article className="shelf-translation-panel__translation-document" aria-live="polite">
+          <p>{pageData.translation}</p>
+        </article> : !pageBusy && <div className="shelf-translation-panel__empty">
+          <Languages size={21} />
+          <strong>{translationModel ? 'No translation available' : 'Choose an AI model'}</strong>
+          <p>{translationModel ? 'This page may not contain extractable text. Select a passage in the PDF to translate it.' : 'Open the settings icon to choose a model and target language.'}</p>
         </div>}
-        {pageData?.translatorNote && <p className="shelf-translation-panel__note"><strong>Translator's note</strong>{pageData.translatorNote}</p>}
+        {pageData?.translatorNote && <p className="shelf-translation-panel__note"><strong>Translator’s note</strong>{pageData.translatorNote}</p>}
       </>}
 
       {tab === 'vocabulary' && <>
-        <div className="shelf-translation-panel__section-title"><span>CONTEXTUAL VOCABULARY</span><span>PAGE {pageNumber}</span></div>
-        {hoveredWord && <div className="shelf-translation-panel__hovered"><small>UNDER YOUR POINTER</small><strong>{hoveredWord}</strong></div>}
+        {hoveredWord && <div className="shelf-translation-panel__word-heading"><small>IN THIS SENTENCE</small><strong>{hoveredWord}</strong></div>}
+        {selectedText.trim() && !selectedWord && <div className="shelf-translation-panel__selection-hint"><span>Selected passage</span><button type="button" onClick={onTranslateSelection} disabled={selectionBusy}>{selectionBusy ? 'Translating…' : 'Translate passage'}</button></div>}
         {currentTerm ? <article className="shelf-translation-panel__word-card">
           <div><strong>{currentTerm.source}</strong><span>{currentTerm.translation}</span></div>
           {currentTerm.partOfSpeech && <small>{currentTerm.partOfSpeech}</small>}
           <p>{currentTerm.meaning}</p>
           {currentTerm.example && <blockquote>{currentTerm.example}</blockquote>}
-        </article> : wordData?.translation ? <article className="shelf-translation-panel__word-card"><strong>{hoveredWord}</strong><p>{wordData.translation}</p></article> : wordBusy ? <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={18} className="is-spinning" /><span>Looking up this word in the book's context…</span></div> : hoveredWord ? <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>{hoveredWord}</strong><p>No contextual note is available yet.</p><button type="button" onClick={onExplainWord}>Explain this word</button></div> : <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>Explore words as you read</strong><p>Move over a word in the PDF to see its contextual meaning, translation, and a natural example here.</p></div>}
-        {(pageData?.terms.length ?? 0) > 0 && <div className="shelf-translation-panel__term-list"><small>WORDS FROM THIS PAGE</small>{pageData!.terms.map((term, index) => <button key={index} type="button" onClick={() => { onTabChange('vocabulary'); onSelectTerm(term.source); }}><span>{term.source}</span><strong>{term.translation}</strong></button>)}</div>}
+        </article> : wordData?.translation ? <article className="shelf-translation-panel__word-card"><p>{wordData.translation}</p></article> : wordBusy ? <div className="shelf-translation-panel__empty"><LoaderCircle size={18} className="is-spinning" /><span>Looking up the word in this book…</span></div> : <div className="shelf-translation-panel__empty"><BookOpen size={21} /><strong>Explore a word</strong><p>Move over a word in the PDF or select one. Its meaning and usage will appear here.</p>{hoveredWord && <button type="button" onClick={onExplainWord}>Explain word</button>}</div>}
+        {(pageData?.terms.length ?? 0) > 0 && <div className="shelf-translation-panel__term-list"><small>WORDS FROM THIS PAGE</small>{pageData!.terms.map((term, index) => <button key={index} type="button" onClick={() => onSelectTerm(term.source)}><span>{term.source}</span><strong>{term.translation}</strong></button>)}</div>}
       </>}
 
       {tab === 'grammar' && <>
-        <div className="shelf-translation-panel__section-title"><span>GRAMMAR IN CONTEXT</span><span>PAGE {pageNumber}</span></div>
-        {pageBusy && !pageData ? <div className="shelf-translation-panel__loading"><LoaderCircle size={18} className="is-spinning" /><span>Reading the page for useful grammar patterns…</span></div> : (pageData?.grammar.length ?? 0) > 0 ? pageData!.grammar.map((note, index) => <GrammarCard key={index} note={note} />) : <div className="shelf-translation-panel__empty"><Lightbulb size={22} /><strong>No grammar notes yet</strong><p>Translate the page first. The companion will point out useful structures without turning the reading into a lesson.</p><button type="button" onClick={onTranslatePage} disabled={pageBusy || !translationModel}>Analyse this page</button></div>}
+        {(pageData?.grammar.length ?? 0) > 0 ? pageData!.grammar.map((note, index) => <GrammarCard key={index} note={note} />) : <div className="shelf-translation-panel__empty">
+          <Lightbulb size={21} /><strong>Grammar in context</strong><p>Request a focused analysis of this page. It runs separately from translation and does not slow down the translated text.</p>
+          <button type="button" onClick={() => onAnalyzePage('grammar')} disabled={analysisBusy || pageBusy || !pageData?.translation}>{analysisBusy ? <LoaderCircle size={13} className="is-spinning" /> : null} Analyse grammar</button>
+        </div>}
       </>}
 
       {tab === 'ielts' && <>
-        <div className="shelf-translation-panel__section-title"><span>IELTS & ACADEMIC ENGLISH</span><span>PAGE {pageNumber}</span></div>
-        {pageBusy && !pageData ? <div className="shelf-translation-panel__loading"><LoaderCircle size={18} className="is-spinning" /><span>Finding useful academic language…</span></div> : (pageData?.ielts.length ?? 0) > 0 ? pageData!.ielts.map((tip, index) => <IELTSCard key={index} tip={tip} />) : <div className="shelf-translation-panel__empty"><GraduationCap size={22} /><strong>Build academic English from this book</strong><p>Translate the page to identify useful academic expressions, collocations, and natural examples. No band score is guessed.</p><button type="button" onClick={onTranslatePage} disabled={pageBusy}>Analyse this page</button></div>}
+        {(pageData?.ielts.length ?? 0) > 0 ? pageData!.ielts.map((tip, index) => <IELTSCard key={index} tip={tip} />) : <div className="shelf-translation-panel__empty">
+          <GraduationCap size={21} /><strong>IELTS & academic English</strong><p>Find useful academic expressions and collocations in the source page. This analysis is separate from translation.</p>
+          <button type="button" onClick={() => onAnalyzePage('ielts')} disabled={analysisBusy || pageBusy || !pageData?.translation}>{analysisBusy ? <LoaderCircle size={13} className="is-spinning" /> : null} Analyse IELTS language</button>
+        </div>}
       </>}
     </div>
-    <footer className="shelf-translation-panel__footer"><span>AI-assisted · grounded in this book</span><span>Page {pageNumber}</span></footer>
   </aside>;
 }
