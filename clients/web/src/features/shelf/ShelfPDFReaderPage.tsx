@@ -83,7 +83,7 @@ export function ShelfPDFReaderPage() {
       const configured = config.task_models?.translation || config.default_model || '';
       const initial = stored || configured;
       const validInitial = options.some((option) => option.value === initial);
-      const selected = validInitial ? initial : (initial || options.length === 1 ? initial || options[0]?.value || '' : '');
+      const selected = validInitial ? initial : (!initial && options.length === 1 ? options[0].value : '');
       setTranslationModelRef(selected);
       translationModelRefRef.current = selected;
       if (selected && selected !== stored) {
@@ -563,6 +563,12 @@ export function ShelfPDFReaderPage() {
       onToggleFocus={() => { if (focused) void exitFocus(); else enterFocus(); }}
       onOpenFocusTool={(nextTool, initialText) => { setTool(nextTool); setToolResult(''); setSearchURL(''); setToolError(''); setToolText(initialText?.trim() || ''); }}
       onTranslateText={translateReaderText}
+      translationModel={translationModelRef}
+      translationModelOptions={translationModelOptions}
+      translationModelsLoading={translationModelsLoading}
+      translationModelError={translationModelError}
+      lastUsedTranslationModel={lastUsedTranslationModel}
+      onTranslationModelChange={changeTranslationModel}
     />
   </main>;
 }
