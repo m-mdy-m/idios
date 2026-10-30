@@ -16,6 +16,8 @@ case "$target" in
   linux-amd64|linux-arm64)
     mkdir -p release
     cp dist/idios README.md LICENSE release/
+    cp packaging/linux/idios.desktop release/
+    cp clients/web/public/brand/idios-mark.svg release/idios.svg
     tar -czf "idios-${GITHUB_REF_NAME}-${target}.tar.gz" -C release .
     export VERSION="$version"
     export TARGET_GOARCH="${target#linux-}"
@@ -34,8 +36,8 @@ case "$target" in
   darwin-amd64|darwin-arm64)
     mkdir -p release
     cp dist/idios README.md LICENSE release/
-    tar -czf "idios-${GITHUB_REF_NAME}-${target}.tar.gz" -C release .
     bash scripts/package-macos.sh "$version" "$GITHUB_REF_NAME" "$target"
+    tar -czf "idios-${GITHUB_REF_NAME}-${target}.tar.gz" -C release .
     mv "idios-${GITHUB_REF_NAME}-${target}.tar.gz" "idios-${GITHUB_REF_NAME}-${target}.pkg" "idios-${GITHUB_REF_NAME}-${target}.dmg" dist/release/
     ;;
   windows-amd64|windows-arm64)

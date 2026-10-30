@@ -8,7 +8,8 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $ReleaseDir = Join-Path $Root 'release'
 $OutputDir = Join-Path $Root 'dist/release'
 New-Item -ItemType Directory -Force -Path $ReleaseDir, $OutputDir | Out-Null
-Copy-Item -LiteralPath (Join-Path $Root 'dist/idios.exe'), (Join-Path $Root 'README.md'), (Join-Path $Root 'LICENSE') -Destination $ReleaseDir -Force
+Copy-Item -LiteralPath (Join-Path $Root 'dist/idios.exe'), (Join-Path $Root 'README.md'), (Join-Path $Root 'LICENSE'), (Join-Path $Root 'packaging/windows/launch-idios.vbs') -Destination $ReleaseDir -Force
+Copy-Item -LiteralPath (Join-Path $Root 'clients/web/public/favicon.ico') -Destination (Join-Path $ReleaseDir 'idios.ico') -Force
 $Archive = Join-Path $OutputDir "idios-$Tag-$Target.zip"
 Compress-Archive -Path (Join-Path $ReleaseDir '*') -DestinationPath $Archive -Force
 

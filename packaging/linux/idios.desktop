@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IDIOS
+GenericName=Local Workspace
+Comment=Start the IDIOS local server and open the workspace
+Exec=idios serve --open
+Icon=idios
+Terminal=false
+StartupNotify=false
+Categories=Development;Utility;
+Keywords=Workspace;Projects;Planning;Reading;

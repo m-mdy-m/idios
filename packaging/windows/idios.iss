@@ -50,6 +50,8 @@ Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription:
 Source: "..\..\dist\idios.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "launch-idios.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\clients\web\public\favicon.ico"; DestDir: "{app}"; DestName: "idios.ico"; Flags: ignoreversion
 
 [Registry]
 ; Track whether this setup added the path, so uninstall does not remove a pre-existing user choice.
@@ -58,6 +60,8 @@ Root: HKCU; Subkey: "Software\IDIOS"; ValueType: dword; ValueName: "PathAddedByI
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Flags: preservestringtype; Check: NeedsAddPath(ExpandConstant('{app}'))
 
 [Icons]
+Name: "{userdesktop}\IDIOS"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-idios.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\idios.ico"
+Name: "{userprograms}\IDIOS\IDIOS"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-idios.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\idios.ico"; Tasks: startmenu
 Name: "{userprograms}\IDIOS\IDIOS CLI Help"; Filename: "{app}\idios.exe"; Parameters: "help"; Tasks: startmenu
 
 [Code]

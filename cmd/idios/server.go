@@ -98,7 +98,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		handled, openErr := openRunningServer(baseURL, stdout, server.Probe, server.OpenBrowser)
 		if handled {
 			if openErr != nil {
-				fmt.Fprintf(stderr, "open browser: %v\\n", openErr)
+				fmt.Fprintf(stderr, "open browser: %v\n", openErr)
 				return 1
 			}
 			return 0
@@ -146,7 +146,7 @@ func openRunningServer(
 	if err := open(baseURL); err != nil {
 		return true, err
 	}
-	fmt.Fprintf(stdout, "IDIOS server is already running at %s; opened the workspace.\\n", baseURL)
+	fmt.Fprintf(stdout, "IDIOS server is already running at %s; opened the workspace.\n", baseURL)
 	return true, nil
 }
 
