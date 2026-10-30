@@ -125,12 +125,21 @@ export function ShelfTranslationPanel({
         </button>}
         {pageBusy && !pageData && <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={19} className="is-spinning" /><strong>Translating this page…</strong><span>Using nearby pages and book terminology for context.</span></div>}
         {!pageBusy && !pageData && <div className="shelf-translation-panel__empty"><Languages size={22} /><strong>Translation is not ready</strong><p>Start a page translation to read the full passage beside the PDF.</p><button type="button" onClick={onTranslatePage}>Translate page</button></div>}
+        {hoveredWord && currentTerm && <article className="shelf-translation-panel__inline-word">
+          <small>{currentTerm.source} · {currentTerm.partOfSpeech || 'IN THIS CONTEXT'}</small>
+          <strong>{currentTerm.translation}</strong>
+          <p>{currentTerm.meaning}</p>
+        </article>}
+        {hoveredWord && !currentTerm && wordData?.translation && <article className="shelf-translation-panel__inline-word">
+          <small>{hoveredWord} · CONTEXTUAL EXPLANATION</small>
+          <p>{wordData.translation}</p>
+        </article>}
         {pageData && <div className="shelf-translation-panel__segments" aria-live="polite">
           {(pageData.segments.length ? pageData.segments : [{ source: '', translation: pageData.translation }]).map((segment, index) => {
             const active = Boolean(activeSegment && activeSegment === segment);
             return <article key={index} className={active ? 'is-active' : ''}>
               {segment.source && <small>{segment.source}</small>}
-              <p>{active && hoveredWord && pageTerm ? highlightPhrase(segment.translation, pageTerm.translation) : segment.translation}</p>
+              <p>{active && hoveredWord && currentTerm ? highlightPhrase(segment.translation, currentTerm.translation) : segment.translation}</p>
             </article>;
           })}
         </div>}
@@ -145,7 +154,7 @@ export function ShelfTranslationPanel({
           {currentTerm.partOfSpeech && <small>{currentTerm.partOfSpeech}</small>}
           <p>{currentTerm.meaning}</p>
           {currentTerm.example && <blockquote>{currentTerm.example}</blockquote>}
-        </article> : wordBusy ? <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={18} className="is-spinning" /><span>Looking up this word in the book's context…</span></div> : hoveredWord ? <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>{hoveredWord}</strong><p>No contextual note is available yet.</p><button type="button" onClick={onExplainWord}>Explain this word</button></div> : <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>Explore words as you read</strong><p>Move over a word in the PDF to see its contextual meaning, translation, and a natural example here.</p></div>}
+        </article> : wordData?.translation ? <article className="shelf-translation-panel__word-card"><strong>{hoveredWord}</strong><p>{wordData.translation}</p></article> : wordBusy ? <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={18} className="is-spinning" /><span>Looking up this word in the book's context…</span></div> : hoveredWord ? <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>{hoveredWord}</strong><p>No contextual note is available yet.</p><button type="button" onClick={onExplainWord}>Explain this word</button></div> : <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>Explore words as you read</strong><p>Move over a word in the PDF to see its contextual meaning, translation, and a natural example here.</p></div>}
         {(pageData?.terms.length ?? 0) > 0 && <div className="shelf-translation-panel__term-list"><small>WORDS FROM THIS PAGE</small>{pageData!.terms.map((term, index) => <button key={index} type="button" onClick={() => onTabChange('vocabulary')}><span>{term.source}</span><strong>{term.translation}</strong></button>)}</div>}
       </>}
 
