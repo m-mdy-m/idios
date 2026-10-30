@@ -2,6 +2,37 @@
 
 All notable changes to IDIOS are recorded here. This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/).
 
+## [3.0.1] — 2026-10-30
+
+IDIOS 3.0.1 is a maintenance release focused on shared pipeline integration,
+CI reliability, and repository security checks. It removes the project-local
+pipeline wrapper and makes the shared task runner a first-class reusable
+workflow capability.
+
+### Changed
+
+- Run the root `pipeline.toml` task graph directly through the shared
+  `m-mdy-m/pipeline` GitHub provider adapter. The reusable workflow owns
+  checkout and Python setup; IDIOS no longer needs a wrapper script or a
+  private copy of the pipeline runner.
+- Configure the mixed Go and Node.js toolchains through reusable CI inputs,
+  including the pinned pnpm version used by the Web workspace.
+- Configure Markdown linting around the repository's actual documentation:
+  keep structural checks, avoid a hard line-length rule for prose and tables,
+  and exclude skill prompt files that intentionally use their own format.
+- Keep CodeQL and Gitleaks as active security checks while preserving the
+  shared reusable workflow boundary.
+
+### Fixed
+
+- Removed the broken `scripts/run-pipeline.py` entry point, which invoked a
+  non-existent `scripts/pipeline.py` path in the shared repository.
+- Corrected Markdown validation failures from repository templates, links,
+  headings, fenced blocks, and changelog references.
+- Replaced a secret-looking test fixture literal with a runtime-generated
+  non-secret value so Gitleaks can scan the repository without a broad
+  allowlist or disabling the check.
+
 ## [3.0.0] — 2026-10-30
 
 IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo executable, leaving CLI and Web as the supported interaction surfaces. It also rebuilds the Web architecture, learning workflows, AI provider discovery, documentation, and shared automation.
@@ -18,7 +49,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - An extensible AI provider-adapter registry, generic model metadata, standard structured-output request formats, local Ollama setup, reading-agent profiles, and bundled reading skills.
 - More focused in-reader discussions with searchable and categorized participants, compact discussion personas, and additional grounded-reading skills.
 - Reading analytics and Focus sessions with saved session history, reading progress, and Activity integration.
-- Pipeline task configuration and a local runner bootstrap that uses the shared [`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) project from the shared project’s `main` branch.
+- Pipeline task configuration for the shared [`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) task runner and reusable CI workflows.
 
 ### Changed
 
@@ -63,5 +94,6 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
-[3.0.0]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.0
+[3.0.1]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.1
+[3.0.0]: https://github.com/m-mdy-m/idios/compare/v3.0.0...v3.0.1
 [2.0.0]: https://github.com/m-mdy-m/idios/compare/v2.0.0...v3.0.0
