@@ -1,5 +1,7 @@
 <!-- Keep it short. Delete any section that does not apply. -->
 
+# Pull Request
+
 ## Summary
 
 <!-- What changed and why, in 1-3 sentences. Lead with the user-visible outcome. -->
@@ -32,7 +34,7 @@ Closes #
 - [ ] Tried the main flow by hand (CLI / Web)
 
 ```text
-$ make check
+make check
 ```
 
 ## Compatibility checklist
