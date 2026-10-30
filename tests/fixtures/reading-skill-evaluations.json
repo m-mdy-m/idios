@@ -479,5 +479,23 @@
       "Claims every compliant processor uses five stages",
       "Invents implementation details"
     ]
+  },
+  {
+    "id": "philosophy-explicit-negation-and-range",
+    "skill": "philosophy",
+    "prompt": "Explain what this page is about using only the supplied passage. Pay special attention to the author's wording about Chapters IV–VIII.",
+    "context": "Page 21 of A Theory of Justice, Revised Edition: The author says he avoids extensive methodological discussions and primarily develops a substantive theory of justice. He explicitly writes: 'By not including most of Chapters IV–VIII in the more basic parts of the book, I do not mean to suggest that these chapters are peripheral, or merely applications.' He says an important test of a theory is how well it brings order and system to considered judgments across many questions, and that conclusions reached on those topics modify the proposed view in turn. The passage later acknowledges critics whose objections influenced ideas including primary goods and self-respect. Exact citation available: [source:page-21].",
+    "pass_criteria": [
+      "Preserve the explicit negation: Chapters IV–VIII are not peripheral or merely applications",
+      "Explain that the chapters test whether the theory organizes considered judgments and that the resulting conclusions can modify the theory",
+      "Distinguish the main argument about theory-testing from the later acknowledgements of critics",
+      "Cite the supplied [source:page-21] marker and avoid claims about unseen chapter contents"
+    ],
+    "critical_failures": [
+      "Call Chapters IV–VIII merely applications or foundational applications",
+      "Treat the explicitly rejected interpretation as equally supported",
+      "Invent the contents of Chapters IV–VIII",
+      "Repeat peer consensus without checking the passage"
+    ]
   }
 ]

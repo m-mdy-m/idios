@@ -8,9 +8,9 @@ export const threadKey = (bookID: string) => `idios.shelf.study-thread.v2.${book
 export const archivedThreadsKey = (bookID: string) => `idios.shelf.study-threads.v1.${bookID}`;
 export const historyKey = (bookID: string) => `idios.shelf.read-history.v1.${bookID}`;
 export const overviewKey = (bookID: string) => `idios.shelf.reading-overview.v1.${bookID}`;
-// v4 stores multiple verified on-page marks with reader-friendly marginal notes.
-// v5 invalidates essay-shaped cached notes so Mimi regenerates conversational notes and exact margin marks.
-export const pageInsightKey = (bookID: string, page: number) => `idios.shelf.page-insight.v5.${bookID}.${page}`;
+// v4 stores multiple verified on-page marks; v5 invalidates essay-shaped cached notes.
+// v6 refreshes notes under the stricter page-argument, explicit-negation, and source-scope contract.
+export const pageInsightKey = (bookID: string, page: number) => `idios.shelf.page-insight.v6.${bookID}.${page}`;
 export const mascotPositionKey = (bookID: string) => `idios.shelf.mimi-position.v1.${bookID}`;
 export const mascotBubbleKey = (bookID: string) => `idios.shelf.mimi-bubble-open.v1.${bookID}`;
 

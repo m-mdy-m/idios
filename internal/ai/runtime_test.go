@@ -473,8 +473,10 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 		call := calls.Add(1)
 		content := "Reader found one central claim supported by the passage. [source:page-1]"
 		if call == 2 {
-			content = "Tutor builds on Reader's claim: the example shows how the principle works. [source:page-1]"
-		} else if call > 2 {
+			content = "Tutor explains one implication of Reader's claim without changing its scope. [source:page-1]"
+		} else if call == 3 {
+			content = "Mira checks the actual positions against the supplied page and preserves the remaining qualification. [source:page-1]"
+		} else if call > 3 {
 			content = "Unexpected extra call."
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -500,22 +502,22 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 	}
 	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
 		BookID: "book-1", BookTitle: "Example", Question: "What is the key claim?",
-		AgentIDs: []string{"reader", "tutor"}, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		AgentIDs: []string{"reader", "tutor", "discussion-chair"}, Parallel: false, Rounds: 1, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "The passage presents a principle and a short example."}},
 	}, "")
 	if err != nil {
 		t.Fatalf("sequential discussion failed: %v", err)
 	}
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("provider calls = %d, want two sequential agent calls and no synthesis", got)
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("provider calls = %d, want three sequential turns including Chair and no separate synthesis", got)
 	}
-	if len(result.Contributions) != 2 || result.Synthesis != "" {
+	if len(result.Contributions) != 3 || result.Synthesis != "" {
 		t.Fatalf("unexpected workflow result: %#v", result)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(captured) != 2 {
-		t.Fatalf("captured requests = %d, want 2", len(captured))
+	if len(captured) != 3 {
+		t.Fatalf("captured requests = %d, want 3", len(captured))
 	}
 	if captured[1].MaxTokens > 220 || captured[1].MaxTokens <= 0 {
 		t.Fatalf("discussion max_tokens = %d, want 1..220", captured[1].MaxTokens)
@@ -526,6 +528,15 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 	}
 	if !strings.Contains(secondPrompt, "Reader found one central claim") {
 		t.Fatalf("second agent did not receive the first agent's turn: %s", secondPrompt)
+	}
+	chairPrompt := ""
+	for _, message := range captured[2].Messages {
+		chairPrompt += message.Content + "\n"
+	}
+	for _, expected := range []string{"Reader found one central claim", "Tutor explains one implication", "final Chair"} {
+		if !strings.Contains(chairPrompt, expected) {
+			t.Errorf("Chair prompt does not preserve earlier turn %q: %s", expected, chairPrompt)
+		}
 	}
 }
 
@@ -1668,5 +1679,144 @@ func TestRefreshProviderModelsContactsOnlySelectedProviderAndPreservesOtherCache
 	}
 	if !foundFirst || !foundSecond {
 		t.Fatalf("targeted refresh must return the selected result and preserve other cached models; models = %#v", models)
+	}
+}
+
+
+func TestDiscussionChapterRangesAreValidatedAsInclusiveRanges(t *testing.T) {
+	passages := []ContextPassage{{
+		ID: "page-21", Page: 21,
+		Text: "By not including most of Chapters IV–VIII in the more basic parts of the book, I do not mean to suggest that these chapters are peripheral, or merely applications.",
+	}}
+	allowed := map[string]bool{"page-21": true}
+	for _, answer := range []string{
+		"The author explicitly rejects treating Chapters IV–VIII as peripheral or merely applications. [source:page-21]",
+		"Chapter VIII is included in the range the author explicitly discusses. [source:page-21]",
+		"Chapter VI falls within the stated range, though this page does not describe its full contents. [source:page-21]",
+	} {
+		if problem := validateDiscussionOutput(answer, allowed, passages, false); problem != "" {
+			t.Errorf("valid source-backed chapter reference rejected (%q): %s", answer, problem)
+		}
+	}
+	for _, answer := range []string{
+		"Chapter IX is described as peripheral. [source:page-21]",
+		"Chapters IV–IX are discussed in this passage. [source:page-21]",
+	} {
+		if problem := validateDiscussionOutput(answer, allowed, passages, false); problem == "" {
+			t.Errorf("unsupported chapter reference accepted: %q", answer)
+		}
+	}
+}
+
+func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
+	content := strings.Repeat("A careful textual observation with a qualification. ", 18) + "[source:page-21]"
+	got := compactDiscussionExcerpt(content, 500)
+	if len([]rune(got)) > 500 {
+		t.Fatalf("excerpt contains %d runes, want at most 500", len([]rune(got)))
+	}
+	if !strings.Contains(got, "[source:page-21]") {
+		t.Fatalf("bounded excerpt dropped its source marker: %q", got)
+	}
+	if !strings.Contains(got, "…") {
+		t.Fatalf("expected a visible truncation marker: %q", got)
+	}
+}
+
+func TestDiscussionRoleFocusIsDistinctAndInjected(t *testing.T) {
+	readerFocus := discussionRoleFocus("reader")
+	tutorFocus := discussionRoleFocus("tutor")
+	chairFocus := discussionRoleFocus("discussion-chair")
+	if readerFocus == "" || tutorFocus == "" || chairFocus == "" {
+		t.Fatal("built-in discussion roles must have a role-specific deliverable")
+	}
+	if readerFocus == tutorFocus || tutorFocus == chairFocus || readerFocus == chairFocus {
+		t.Fatal("Reader, Tutor, and Chair must not share the same role contract")
+	}
+
+	var tutor AgentDefinition
+	for _, item := range builtinAgents() {
+		if item.ID == "tutor" {
+			tutor = item
+			break
+		}
+	}
+	messages := discussionMessages(DiscussionRequest{
+		BookTitle: "Example",
+		Question: "What is this page about?",
+		Context: []ContextPassage{{ID: "page-21", Page: 21, Text: "The author explicitly rejects a reading."}},
+	}, tutor, false, nil)
+	if len(messages) != 2 {
+		t.Fatalf("discussion prompt has %d messages, want system and source messages", len(messages))
+	}
+	for _, required := range []string{"IDENTITY AND ORIGINALITY", "ROLE-SPECIFIC DELIVERABLE", tutorFocus, "distinct role-specific implication"} {
+		if !strings.Contains(messages[0].Content, required) {
+			t.Errorf("Tutor system prompt does not contain %q", required)
+		}
+	}
+}
+
+func TestDiscussionReviewDoesNotEchoPriorChairConclusion(t *testing.T) {
+	var tutor AgentDefinition
+	for _, item := range builtinAgents() {
+		if item.ID == "tutor" {
+			tutor = item
+			break
+		}
+	}
+	req := DiscussionRequest{
+		BookTitle: "Example", Question: "Continue the page discussion",
+		Context: []ContextPassage{{ID: "page-21", Page: 21, Text: "The author rejects the claim that the chapters are merely applications."}},
+	}
+	messages := discussionMessages(req, tutor, false, nil)
+	previous := []AgentContribution{{
+		AgentID: "discussion-chair", AgentName: "Mira · Chair", Status: "completed",
+		Content: "The page explicitly rejects the reading that these chapters are merely applications. [source:page-21]",
+	}}
+	messages = discussionReviewMessages(messages, tutor, 2, previous, false)
+	var prompt strings.Builder
+	for _, message := range messages {
+		prompt.WriteString(message.Content)
+		prompt.WriteByte('\n')
+	}
+	if !strings.Contains(prompt.String(), "CHAIR-REVIEW RULE") || !strings.Contains(prompt.String(), "not wording to echo") {
+		t.Fatalf("later Tutor did not receive the anti-echo Chair review contract: %s", prompt.String())
+	}
+}
+
+func TestDiscussionRequestAcceptsFortyPriorTurnsWithinByteBudget(t *testing.T) {
+	previous := make([]AgentContribution, 40)
+	for i := range previous {
+		previous[i] = AgentContribution{
+			AgentID: fmt.Sprintf("agent-%d", i), AgentName: fmt.Sprintf("Agent %d", i),
+			Status: "completed", Content: strings.Repeat("x", 1200),
+		}
+	}
+	req := DiscussionRequest{BookTitle: "Example", Question: "Continue the discussion", PreviousContributions: previous}
+	if err := validateDiscussionRequest(req); err != nil {
+		t.Fatalf("valid 40-turn history within 48,000 bytes rejected: %v", err)
+	}
+	req.PreviousContributions[0].Content += "x"
+	if err := validateDiscussionRequest(req); err == nil {
+		t.Fatal("history above the 48,000-byte aggregate limit should be rejected")
+	}
+	req.PreviousContributions = append(req.PreviousContributions, AgentContribution{AgentID: "extra", Content: "one more", Status: "completed"})
+	if err := validateDiscussionRequest(req); err == nil {
+		t.Fatal("41 prior turns should exceed the bounded history limit")
+	}
+}
+
+func TestSkipSynthesisRequiresChairForMultiAgentDiscussion(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.runDiscussion(context.Background(), DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "What is the page's central claim?",
+		AgentIDs: []string{"reader", "tutor"}, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "page-1", Page: 1, Text: "A short source passage."}},
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "Mira · Chair is required") {
+		t.Fatalf("multi-agent discussion without Chair error = %v, want clear Chair requirement", err)
 	}
 }

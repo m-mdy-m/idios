@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.2.0] - 2026-10-31
+
+### Added
+
+- Added mandatory role-specific deliverables for built-in Shelf discussion agents, with explicit identity, originality, source-verification, and non-echo requirements.
+- Added regression coverage for chapter-range source validation, bounded discussion-history carry-over, citation preservation, and distinct agent role prompts.
+
+### Changed
+
+- Preserve up to 40 completed discussion turns across continuations, using shared UTF-8 byte limits between the Web client and Go runtime instead of dropping history after eight turns.
+- Keep source markers when discussion history must be compacted, and disclose omitted or shortened carry-over to subsequent agents.
+- Require an available Mira · Chair for Shelf round-table starts and continuations; final synthesis must compare evidence rather than count repeated agreement.
+- Strengthen Mimi's page-reading contract to preserve explicit negations, qualifications, and the distinction between a page's main argument and secondary acknowledgements.
+
+### Fixed
+
+- Correctly recognize inclusive chapter ranges such as `Chapters IV–VIII` when validating chapter references, preventing valid references to range endpoints from being rejected.
+- Prevent failed agent turns from being passed forward as if they were completed peer arguments.
+
 ## [3.1.2] - 2026-10-31
 
 ### Added
