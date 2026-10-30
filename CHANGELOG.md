@@ -63,6 +63,5 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
-[Unreleased]: https://github.com/m-mdy-m/idios/compare/v3.0.0...HEAD
 [3.0.0]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.0
 [2.0.0]: https://github.com/m-mdy-m/idios/compare/v2.0.0...v3.0.0
