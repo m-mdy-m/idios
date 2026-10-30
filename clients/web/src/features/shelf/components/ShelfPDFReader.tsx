@@ -570,6 +570,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       pageText: currentPageText,
       pageNumber,
       targetLanguage: translationTargetLanguage,
+      modelRef: translationModel,
       kind,
       documentContext,
       priorGlossary,
@@ -586,7 +587,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const cached = translationChunkCache.current.get(cacheKey);
       if (cached) {
         results.push(cached);
-        if (kind === 'page') setPartialPageTranslation(mergeReaderTranslations(results));
+        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeReaderTranslations(results));
         for (const term of cached.terms) {
           const key = normalizeTranslationMatch(term.source);
           if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
@@ -606,7 +607,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
       translationChunkCache.current.set(cacheKey, parsed);
       results.push(parsed);
-      if (kind === 'page') setPartialPageTranslation(mergeReaderTranslations(results));
+      if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeReaderTranslations(results));
       for (const term of parsed.terms) {
         const key = normalizeTranslationMatch(term.source);
         if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
