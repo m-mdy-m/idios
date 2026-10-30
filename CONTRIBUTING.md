@@ -36,10 +36,12 @@ Business rules belong in Go domain/application services. SQL belongs in `interna
 make ci
 ```
 
-Or use the shared pipeline task runner:
+Or install the shared task runner and execute the repository's task graph:
 
 ```sh
-python scripts/run-pipeline.py run ci
+python -m pip install "git+https://github.com/m-mdy-m/pipeline.git@main"
+pipeline validate
+pipeline run ci
 ```
 
 If a check cannot run, state that it was **NOT RUN** and explain why. Do not claim that a syntax check is a full build.
