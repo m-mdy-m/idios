@@ -54,7 +54,7 @@ try {
     Assert-Condition ($Shortcut.Arguments.Contains($Launcher)) 'desktop shortcut does not point to the installed VBS launcher.'
 
     $ShimSource = Join-Path $Work 'browser-shim.go'
-    @'
+    $ShimCode = @'
 package main
 
 import (
@@ -65,9 +65,10 @@ import (
 func main() {
     path := os.Getenv("IDIOS_BROWSER_TEST_LOG")
     if path == "" { os.Exit(2) }
-    _ = os.WriteFile(path, []byte(strings.Join(os.Args[1:], "\n")+"\n"), 0600)
+    _ = os.WriteFile(path, []byte(strings.Join(os.Args[1:], "\\n")+"\\n"), 0600)
 }
-'@ | Set-Content -LiteralPath $ShimSource -Encoding UTF8
+'@
+    [System.IO.File]::WriteAllText($ShimSource, $ShimCode, [System.Text.UTF8Encoding]::new($false))
     $ShimExe = Join-Path $ShimDir 'rundll32.exe'
     & go build -trimpath -o $ShimExe $ShimSource
     if ($LASTEXITCODE -ne 0) { throw 'Could not build the test-only rundll32 browser shim.' }

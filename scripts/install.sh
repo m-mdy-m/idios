@@ -33,7 +33,7 @@ if ! mv "$INSTALL_DIR/.idios.new" "$INSTALL_DIR/idios"; then [ "$HAD_OLD" -eq 0 
 rm -f "$BACKUP" "$INSTALL_DIR/idios-tui" "$INSTALL_DIR/idios-tui.exe" "$INSTALL_DIR/idios-tui-demo" "$INSTALL_DIR/idios-tui-demo.exe"
 
 if [ "$OS" = linux ]; then
-  DATA_HOME=\${XDG_DATA_HOME:-"$HOME/.local/share"}
+  DATA_HOME=${XDG_DATA_HOME:-"$HOME/.local/share"}
   APPLICATIONS_DIR="$DATA_HOME/applications"
   ICON_DIR="$DATA_HOME/icons/hicolor/scalable/apps"
   mkdir -p "$APPLICATIONS_DIR" "$ICON_DIR"
@@ -67,7 +67,7 @@ elif [ "$OS" = darwin ] && [ -d "$TMP_DIR/unpacked/IDIOS.app" ]; then
   APP_DIR="$HOME/Applications"
   mkdir -p "$APP_DIR"
   APP_TARGET="$APP_DIR/IDIOS.app"
-  APP_BACKUP="$APP_DIR/.IDIOS.app.backup.$"
+  APP_BACKUP="$APP_DIR/.IDIOS.app.backup.$$"
   if [ -d "$APP_TARGET" ]; then mv "$APP_TARGET" "$APP_BACKUP"; fi
   if ! cp -R "$TMP_DIR/unpacked/IDIOS.app" "$APP_TARGET"; then
     [ ! -d "$APP_BACKUP" ] || mv "$APP_BACKUP" "$APP_TARGET"
