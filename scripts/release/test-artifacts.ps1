@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $TargetId = $env:TARGET_ID
-$ArtifactDir = $env:IDIOS_ARTIFACT_DIR
-if (-not $TargetId -or -not $ArtifactDir) { throw 'TARGET_ID and IDIOS_ARTIFACT_DIR are required.' }
+$ArtifactDir = $env:PIPELINE_ARTIFACT_TEST_DIR
+if (-not $TargetId -or -not $ArtifactDir) { throw 'TARGET_ID and PIPELINE_ARTIFACT_TEST_DIR are required.' }
 
 function Assert-Condition([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "FAIL [$TargetId] $Message" }

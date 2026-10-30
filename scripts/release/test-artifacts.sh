@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 TARGET_ID="$TARGET_ID"
-ARTIFACT_DIR="$IDIOS_ARTIFACT_DIR"
+ARTIFACT_DIR="$PIPELINE_ARTIFACT_TEST_DIR"
 [ -n "$TARGET_ID" ] || { echo "TARGET_ID is required" >&2; exit 2; }
-[ -n "$ARTIFACT_DIR" ] || { echo "IDIOS_ARTIFACT_DIR is required" >&2; exit 2; }
+[ -n "$ARTIFACT_DIR" ] || { echo "PIPELINE_ARTIFACT_TEST_DIR is required" >&2; exit 2; }
 WORK_DIR="$(mktemp -d "/tmp/idios-release-test.XXXXXX")"
 PORT=43178
 BASE_URL="http://127.0.0.1:$PORT"
