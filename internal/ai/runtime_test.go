@@ -402,7 +402,7 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 			content = "## Synthesis\nThe passage supports a cautious reading. [source:page-1]\n\n## Material disagreements\nThe agents differ on whether the example is central or illustrative.\n\n## Evidence gaps and uncertainty\nThe passage does not establish the author's wider intent."
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"model":"test-model","choices":[]any{map[string]any{"message":map[string]string{"content":content}}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
 	}))
 	defer server.Close()
 	manager, err := NewManager("")
@@ -1891,12 +1891,23 @@ func TestFinalChairMustNameActualPositions(t *testing.T) {
 }
 
 func TestDiscussionPeerResponseCannotPassByNamingItself(t *testing.T) {
-	previous := []AgentContribution{{
-		AgentID: "reader", AgentName: "Orion · Reader", Status: "completed",
-		Content: "The page supports a narrow interpretation. [source:page-1]",
-	}}
+	previous := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "The page supports a narrow interpretation. [source:page-1]"},
+		{AgentID: "tutor", AgentName: "Sage · Tutor", Status: "completed", Content: "The example clarifies the principle. [source:page-1]"},
+	}
 	answer := "Reader confirms the page supports a narrow interpretation. [source:page-1]"
 	if problem := discussionPeerResponseProblem(answer, previous, "reader", false); problem == "" {
 		t.Fatal("an agent was allowed to satisfy peer attribution by naming its own prior turn")
+	}
+}
+
+func TestFinalChairRequiresTwoDistinctPeersNotTwoTurnsFromOnePeer(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Round: 1, Status: "completed", Content: "Reader identifies the first supported claim. [source:page-1]"},
+		{AgentID: "reader", AgentName: "Orion · Reader", Round: 2, Status: "completed", Content: "Reader refines that claim after reviewing the qualification. [source:page-1]"},
+	}
+	answer := "Mira compares Reader's first claim with Reader's later refinement and preserves the remaining limit. [source:page-1]"
+	if problem := discussionPeerResponseProblem(answer, previous, "discussion-chair", true); problem != "" {
+		t.Fatalf("one distinct peer with two completed turns should require one named position, got: %s", problem)
 	}
 }
