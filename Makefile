@@ -74,7 +74,7 @@ install-user: PREFIX = $(HOME)/.local
 install-user: install ## Install the IDIOS CLI for the current macOS user.
 	@for profile in "$(HOME)/.profile" "$(HOME)/.zprofile"; do \
 	  if [ ! -f "$$profile" ] || ! grep -Fq '$$HOME/.local/bin' "$$profile"; then \
-	    printf '\\n# IDIOS user-local executable\\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
+	    printf '\n# IDIOS user-local executable\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
 	  fi; \
 	done
 	@echo "Installed IDIOS in $(HOME)/.local/bin; reopen your terminal if PATH is not updated."
@@ -93,7 +93,7 @@ install-user: PREFIX = $(HOME)/.local
 install-user: install ## Install for the current Linux user without administrator privileges.
 	@for profile in "$(HOME)/.profile" "$(HOME)/.zprofile"; do \
 	  if [ ! -f "$$profile" ] || ! grep -Fq '$$HOME/.local/bin' "$$profile"; then \
-	    printf '\\n# IDIOS user-local executable\\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
+	    printf '\n# IDIOS user-local executable\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
 	  fi; \
 	done
 	@echo "Installed IDIOS in $(HOME)/.local/bin; reopen your terminal if PATH is not updated."
