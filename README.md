@@ -1,54 +1,106 @@
-# IDIOS
+<p align="center">
+  <img src="clients/web/public/brand/idios-wordmark.svg" alt="IDIOS" width="260">
+</p>
 
-IDIOS helps you keep track of work in one place: repositories, issues, projects, notes, labels, and scheduled reminders. You can use it in a terminal or in a browser.
+<p align="center">A local-first workspace for learning, planning, and development.</p>
 
-IDIOS stores its workspace in a SQLite database on your computer. It does **not** clone Git repositories, push code, or create real GitHub pull requests. An IDIOS pull request is a record of work and its review inside IDIOS.
+IDIOS brings your projects, repositories, issues, reading library, notes, plans, and AI tools into one private workspace. It runs on your computer and gives you two ways to work: a command-line interface and a local web interface.
 
-## Install
+> IDIOS is an application, not an operating-system kernel. “Work OS” describes the workspace it provides.
 
-**Windows (PowerShell):**
+## Start using IDIOS
 
-```powershell
-irm https://github.com/m-mdy-m/idios/releases/latest/download/install.ps1 | iex
-```
+### Install a released version
 
-**Linux or macOS:**
+- **Linux / macOS:**
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.sh | sh
+  ```
+
+- **Windows PowerShell:**
+
+  ```powershell
+  irm https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.ps1 | iex
+  ```
+
+The installer downloads the latest release, checks its SHA-256 checksum, and installs the single `idios` executable. You can also download an installer manually from [GitHub Releases](https://github.com/m-mdy-m/idios/releases).
+
+### Open the workspace
 
 ```sh
-curl -fsSL https://github.com/m-mdy-m/idios/releases/latest/download/install.sh | sh
+idios web
 ```
 
-These commands install the latest published release for your CPU. You do not need Go or Node.js to run a release build. To download an installer or portable archive yourself, visit [Releases](https://github.com/m-mdy-m/idios/releases/latest).
+IDIOS starts its local service when needed and opens the browser. The default address is `http://127.0.0.1:43170`.
 
-## Open IDIOS
+To run the service without opening a browser:
 
 ```sh
-idios       # open the terminal workspace
-idios web   # open the browser workspace
-idios help  # see commands
+idios serve --no-open
 ```
 
-The browser workspace normally opens at `http://127.0.0.1:43170`. It runs on your own computer; the default address is not exposed to your network.
+To check the service:
 
-## What you can do
+```sh
+idios server status
+```
 
-- Organize work in repositories, issues, sub-issues, and projects.
-- Record blockers so an issue can depend on another issue.
-- Track work with IDIOS pull-request and completion records.
-- Save notes with multiple labels and connect them to other items.
-- Schedule reminders and keep reusable concepts and links.
-- Use the terminal UI, browser UI, or CLI commands.
+### Try the CLI
 
-## Your data
+```sh
+idios help
+idios version
+idios repo create --name "Learning Lab"
+idios repo list
+```
 
-The default database is `~/.idios/idios-engine.sqlite3` (`%USERPROFILE%\.idios\idios-engine.sqlite3` on Windows). The file is created when IDIOS first opens the workspace. A new workspace starts empty.
+## What can I do with IDIOS?
 
-## Guides
+| Area | What it is for |
+| --- | --- |
+| Repositories, Issues, Pull Requests | Organize work and record progress. These are IDIOS records, not Git operations. |
+| Projects | Group related Issues across Repositories. |
+| Shelf | Connect a local book folder, read PDFs, and keep reading notes and highlights. |
+| Notes and Quotes | Keep reusable thoughts and excerpts. |
+| Concepts and Graph | Connect ideas and inspect relationships. |
+| Daily Plans | Turn a day into a checklist and track completion. |
+| Jobs and Actions | Schedule supported local actions and run workspace operations. |
+| Activity and Notifications | Review workspace history and reminders. |
+| AI Runtime | Connect local or remote model providers and configure reading agents. |
 
-- [Install and start IDIOS](docs/user/GETTING_STARTED.md)
-- [How the workspace works](docs/user/WORKSPACE_GUIDE.md)
-- [CLI commands](docs/user/CLI_REFERENCE.md)
-- [Settings and data files](docs/user/SETTINGS.md)
-- [Build, run, and test from source](docs/development/README.md)
-- [Contributing changes](CONTRIBUTING.md)
-- [Security](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md)
+## Learn IDIOS
+
+Start with the [documentation index](docs/README.md). New users should read:
+
+1. [Install and open IDIOS](docs/user/getting-started.md)
+2. [Understand the workspace](docs/user/workspace.md)
+3. [Use Shelf and read a PDF](docs/user/shelf.md)
+4. [Connect AI providers](docs/user/ai.md)
+
+## Build from source
+
+Requirements: Go 1.25 or newer, Node.js 22 or newer, pnpm 9, a C compiler for SQLite, and GNU Make. On Windows, use PowerShell and a working CGO C toolchain.
+
+```sh
+git clone https://github.com/m-mdy-m/idios.git
+cd idios
+make build
+```
+
+The executable is written to `dist/`. See the [developer guide](docs/develop/README.md) for the complete setup and test commands.
+
+## Data and privacy
+
+IDIOS stores workspace data in a local SQLite database. The web server binds to the loopback interface by default; it is not exposed to your network unless you deliberately change the server configuration. AI provider connections are configured by you. The [AI guide](docs/user/ai.md) explains provider selection and privacy modes.
+
+## Project status
+
+IDIOS is actively developed. Some modules are more mature than others. Treat an operation as complete only when IDIOS confirms that it was saved; AI-generated text is not proof that a change was persisted.
+
+- [Documentation](docs/README.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE)

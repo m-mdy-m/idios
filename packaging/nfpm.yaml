@@ -4,7 +4,7 @@ platform: linux
 version: ${VERSION}
 version_schema: semver
 maintainer: IDIOS contributors
-description: Terminal tracker for repositories, issues with dependencies, projects, concepts and notes.
+description: Local-first work tracker with CLI and embedded Web workspace.
 vendor: IDIOS
 homepage: https://github.com/m-mdy-m/idios
 license: MPL-2.0
@@ -12,10 +12,6 @@ license: MPL-2.0
 contents:
   - src: dist/idios
     dst: /usr/bin/idios
-    file_info:
-      mode: 0755
-  - src: dist/idios-tui
-    dst: /usr/bin/idios-tui
     file_info:
       mode: 0755
   - src: README.md

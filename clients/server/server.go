@@ -1,34 +1,25 @@
-// Package server exposes the shared IDIOS application through a loopback-only HTTP API.
 package server
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"path"
-	"runtime"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
+	"idios/internal/ai"
 	"idios/internal/application"
 	"idios/internal/config"
 	"idios/internal/desktopnotify"
 	"idios/internal/diagnostics"
 	"idios/internal/domain"
-	"idios/internal/features"
-	"idios/internal/protocol"
 	"idios/internal/reminders"
-	"idios/internal/updater"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 // Options configures the local HTTP adapter. The application service and its store are owned by
@@ -49,6 +40,9 @@ type Server struct {
 	startedAt         time.Time
 	listenAddr        string
 	mu                sync.RWMutex
+	aiMu              sync.Mutex
+	aiRuntime         *ai.Manager
+	aiRuntimeErr      error
 	cfg               config.AppConfig
 	http              *http.Server
 	stopOnce          sync.Once
@@ -162,6 +156,7 @@ func (s *Server) Run(ctx context.Context) error {
 	err = s.http.Serve(listener)
 	close(serverExited)
 	cancelRun()
+	s.closeAIRuntime()
 	if errors.Is(err, http.ErrServerClosed) {
 		diagnostics.Write("INFO", "local HTTP server stopped", s.debugEnabled())
 		return nil
@@ -172,7 +167,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 func (s *Server) runScheduler(ctx context.Context) {
 	// Jobs respect the configured polling interval. Quote reminders are due-time based,
-	// so a small scheduler tick keeps them independent of whether Web or TUI is open.
+	// so a small scheduler tick keeps them independent of whether the Web client is open.
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	nextJobsCheck := time.Now()
@@ -182,7 +177,7 @@ func (s *Server) runScheduler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			// The TUI can edit the shared config file directly while the service runs.
+			// The Web settings screen can edit the shared config file while the service runs.
 			// Reload it on the server tick so both clients see one effective config.
 			s.refreshConfig()
 			s.mu.RLock()
@@ -378,6 +373,62 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/notes", s.getNotes)
 	mux.HandleFunc("POST /api/notes", s.createNote)
 	mux.HandleFunc("DELETE /api/notes/{ref}", s.deleteNote)
+	// Unified AI Runtime API. Shelf's older endpoints remain compatibility adapters below.
+	mux.HandleFunc("GET /api/ai/status", s.getAIRuntimeStatus)
+	mux.HandleFunc("GET /api/ai/config", s.getAIRuntimeConfig)
+	mux.HandleFunc("PUT /api/ai/config", s.putAIRuntimeConfig)
+	mux.HandleFunc("GET /api/ai/adapters", s.listAIAdapters)
+	mux.HandleFunc("GET /api/ai/providers", s.listAIProviders)
+	mux.HandleFunc("POST /api/ai/providers", s.createAIProvider)
+	mux.HandleFunc("PUT /api/ai/providers/{id}", s.updateAIProvider)
+	mux.HandleFunc("DELETE /api/ai/providers/{id}", s.deleteAIProvider)
+	mux.HandleFunc("POST /api/ai/providers/{id}/test", s.testAIProvider)
+	mux.HandleFunc("GET /api/ai/models", s.listAIModels)
+	mux.HandleFunc("POST /api/ai/models/refresh", s.refreshAIModels)
+	mux.HandleFunc("POST /api/ai/models/test", s.testAIModel)
+	mux.HandleFunc("POST /api/ai/chat", s.aiChat)
+	mux.HandleFunc("POST /api/ai/chat/stream", s.aiChatStream)
+	mux.HandleFunc("POST /api/ai/tasks", s.createAITask)
+	mux.HandleFunc("GET /api/ai/tasks", s.listAITasks)
+	mux.HandleFunc("GET /api/ai/tasks/{id}", s.getAITask)
+	mux.HandleFunc("POST /api/ai/tasks/{id}/cancel", s.cancelAITask)
+	mux.HandleFunc("GET /api/ai/agents", s.listAIAgents)
+	mux.HandleFunc("POST /api/ai/agents", s.upsertAIAgent)
+	mux.HandleFunc("PUT /api/ai/agents/{id}", s.upsertAIAgent)
+	mux.HandleFunc("DELETE /api/ai/agents/{id}", s.deleteAIAgent)
+	mux.HandleFunc("POST /api/ai/agents/runs", s.startAIAgentRun)
+	mux.HandleFunc("GET /api/ai/agents/runs/{id}", s.getAIAgentRun)
+	mux.HandleFunc("POST /api/ai/agents/runs/{id}/cancel", s.cancelAIAgentRun)
+	mux.HandleFunc("GET /api/shelf", s.getShelf)
+	mux.HandleFunc("GET /api/shelf/reading-sessions", s.getShelfReadingSessions)
+	mux.HandleFunc("POST /api/shelf/reading-sessions", s.createShelfReadingSession)
+	mux.HandleFunc("POST /api/shelf/ai/models", s.shelfAIModels)
+	mux.HandleFunc("POST /api/shelf/ai/chat", s.shelfAIChat)
+	mux.HandleFunc("POST /api/shelf/scan", s.scanShelf)
+	mux.HandleFunc("PUT /api/shelf/settings", s.updateShelfSettings)
+	mux.HandleFunc("GET /api/shelf/books", s.getShelfBooks)
+	mux.HandleFunc("GET /api/shelf/books/{ref}", s.getShelfBook)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/readme", s.getShelfBookReadme)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/pdf", s.getShelfBookPDF)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/pdf-data", s.getShelfBookPDFData)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/annotations", s.getShelfAnnotations)
+	mux.HandleFunc("POST /api/shelf/books/{ref}/annotations", s.createShelfAnnotation)
+	mux.HandleFunc("PATCH /api/shelf/annotations/{ref}", s.updateShelfAnnotation)
+	mux.HandleFunc("DELETE /api/shelf/annotations/{ref}", s.deleteShelfAnnotation)
+	mux.HandleFunc("PUT /api/shelf/books/{ref}/tags", s.updateShelfBookTags)
+	mux.HandleFunc("PATCH /api/shelf/books/{ref}/progress", s.updateShelfBookProgress)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/notes", s.getShelfBookNotes)
+	mux.HandleFunc("POST /api/shelf/books/{ref}/notes", s.createShelfBookNote)
+	mux.HandleFunc("GET /api/shelf/books/{ref}/asks", s.getShelfAsksForBook)
+	mux.HandleFunc("POST /api/shelf/books/{ref}/asks", s.createShelfAsk)
+	mux.HandleFunc("POST /api/shelf/books/{ref}/repository", s.createShelfBookRepository)
+	mux.HandleFunc("PUT /api/shelf/books/{ref}/repository", s.linkShelfBookRepository)
+	mux.HandleFunc("GET /api/shelf/asks", s.getShelfAsks)
+	mux.HandleFunc("PATCH /api/shelf/asks/{ref}", s.answerShelfAsk)
+	mux.HandleFunc("GET /api/shelf/relations", s.getShelfRelations)
+	mux.HandleFunc("POST /api/shelf/relations", s.createShelfRelation)
+	mux.HandleFunc("DELETE /api/shelf/relations/{ref}", s.deleteShelfRelation)
+	mux.HandleFunc("GET /api/shelf/graph", s.getShelfGraph)
 	mux.HandleFunc("GET /api/quotes", s.getQuotes)
 	mux.HandleFunc("GET /api/quotes/next", s.getNextQuote)
 	mux.HandleFunc("GET /api/jobs", s.getJobs)
@@ -386,6 +437,8 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/notifications", s.getNotifications)
 	mux.HandleFunc("POST /api/notifications/read", s.markNotificationsRead)
 	mux.HandleFunc("GET /api/activity", s.getActivity)
+	mux.HandleFunc("GET /api/activity/days", s.getActivityDays)
+	mux.HandleFunc("POST /api/activity/presence", s.recordActivityPresence)
 	mux.HandleFunc("GET /api/config", s.getConfig)
 	mux.HandleFunc("PUT /api/config", s.updateConfig)
 	mux.HandleFunc("POST /api/server/shutdown", s.shutdown)
@@ -394,85 +447,6 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /{$}", s.serveUI)
 	mux.HandleFunc("GET /{path...}", s.serveUI)
 	return mux
-}
-
-// getLogs returns the shared local diagnostics stream used by the TUI and Web clients.
-func (s *Server) getLogs(w http.ResponseWriter, r *http.Request) {
-	limit := 100
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > 1000 {
-			writeError(w, fmt.Errorf("limit must be between 1 and 1000"))
-			return
-		}
-		limit = parsed
-	}
-	lines := diagnostics.ReadRecent(limit)
-	if len(lines) == 1 && (lines[0] == "The log file is empty." || strings.HasPrefix(lines[0], "No log file yet.")) {
-		lines = []string{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"path":  diagnostics.Path(),
-		"count": len(lines),
-		"lines": lines,
-	})
-}
-
-func (s *Server) clearLogs(w http.ResponseWriter, _ *http.Request) {
-	if err := diagnostics.Clear(); err != nil {
-		writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// getMonitoring is a local operational snapshot, not a remote telemetry endpoint. It exposes
-// process and request counters only to the loopback-bound API and performs a fresh database ping.
-func (s *Server) getMonitoring(w http.ResponseWriter, r *http.Request) {
-	started := time.Now()
-	var databaseError error
-	if s.app == nil {
-		databaseError = errors.New("application is not initialized")
-	} else {
-		databaseError = s.app.Ping(requestContext(r))
-	}
-	databaseLatency := float64(time.Since(started)) / float64(time.Millisecond)
-	databaseStatus := "ok"
-	status := "ok"
-	if databaseError != nil {
-		databaseStatus, status = "error", "degraded"
-	}
-
-	var memory runtime.MemStats
-	runtime.ReadMemStats(&memory)
-	s.mu.RLock()
-	startedAt := s.startedAt
-	requestCount := s.requestCount
-	requestErrors := s.requestErrorCount
-	totalRequestNanos := s.totalRequestNanos
-	lastRequestAt := s.lastRequestAt
-	s.mu.RUnlock()
-	uptime := 0.0
-	if !startedAt.IsZero() {
-		uptime = time.Since(startedAt).Seconds()
-	}
-	averageRequestMS := 0.0
-	if requestCount > 0 {
-		averageRequestMS = float64(totalRequestNanos) / float64(requestCount) / float64(time.Millisecond)
-	}
-	logStats := diagnostics.Stats()
-	databaseDetail := ""
-	if databaseError != nil {
-		databaseDetail = databaseError.Error()
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":      status,
-		"observed_at": time.Now().UTC(),
-		"database":    map[string]any{"status": databaseStatus, "latency_ms": databaseLatency, "error": databaseDetail},
-		"process":     map[string]any{"uptime_seconds": uptime, "goroutines": runtime.NumGoroutine(), "memory_alloc_bytes": memory.Alloc, "heap_in_use_bytes": memory.HeapInuse},
-		"http":        map[string]any{"requests_total": requestCount, "requests_failed": requestErrors, "average_request_ms": averageRequestMS, "last_request_at": lastRequestAt},
-		"logs":        map[string]any{"path": logStats.Path, "size_bytes": logStats.SizeBytes, "modified_at": logStats.ModifiedAt},
-	})
 }
 
 type statusRecorder struct {
@@ -514,6 +488,12 @@ func (s *Server) requestLog(next http.Handler) http.Handler {
 		started := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w}
 		next.ServeHTTP(recorder, r)
+		// A browser is allowed to cancel an in-flight request (for example when a Reader
+		// route unmounts). If the handler did not commit a response, this is not an HTTP 500
+		// and must not pollute the error log with a misleading server failure.
+		if r.Context().Err() != nil && recorder.status == 0 {
+			return
+		}
 		status := recorder.status
 		if status == 0 {
 			status = http.StatusOK
@@ -564,7 +544,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			if !s.validHost(r.Host) {
 				http.Error(w, "invalid local Host header", http.StatusForbidden)
@@ -645,832 +625,6 @@ type updateReleaseResponse struct {
 	Notes   string `json:"notes"`
 }
 
-func (s *Server) currentVersion() string {
-	if version := strings.TrimSpace(s.opts.Version); version != "" {
-		return version
-	}
-	return updater.Version
-}
-
-// checkUpdate uses the same release and semantic-version logic as the TUI updater.
-func (s *Server) checkUpdate(w http.ResponseWriter, r *http.Request) {
-	release, err := updater.Check(requestContext(r), s.currentVersion())
-	if err != nil {
-		writeError(w, fmt.Errorf("check for IDIOS updates: %w", err))
-		return
-	}
-	response := map[string]any{"current_version": s.currentVersion(), "update_available": release != nil}
-	if release != nil {
-		response["release"] = updateReleaseResponse{Version: release.Version, Tag: release.Tag, URL: release.URL, Notes: release.Notes}
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-// getUpdateStatus exposes the local update workflow state so a Web client can observe
-// verification and restart without holding an HTTP request open during downloads.
-func (s *Server) getUpdateStatus(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	state, detail, version := s.updateState, s.updateError, s.updateVersion
-	s.mu.RUnlock()
-	if state == "" {
-		state = "idle"
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": state, "error": detail, "version": version})
-}
-
-// installUpdate starts the same verified release updater as TUI. Work continues in a Go
-// goroutine so the browser gets an immediate acknowledgement instead of timing out while a
-// large release archive is downloaded. The process restarts in web mode after staging.
-func (s *Server) installUpdate(w http.ResponseWriter, _ *http.Request) {
-	s.mu.Lock()
-	if s.updateState == "checking" || s.updateState == "downloading" || s.updateState == "scheduled" {
-		state, version := s.updateState, s.updateVersion
-		s.mu.Unlock()
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "an IDIOS update is already " + state, "status": state, "version": version})
-		return
-	}
-	s.updateState, s.updateError, s.updateVersion = "checking", "", ""
-	s.mu.Unlock()
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "checking"})
-	go s.prepareAndScheduleUpdate()
-}
-
-func (s *Server) setUpdateStatus(state, version, detail string) {
-	s.mu.Lock()
-	s.updateState, s.updateVersion, s.updateError = state, version, detail
-	s.mu.Unlock()
-}
-
-func (s *Server) prepareAndScheduleUpdate() {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
-	defer cancel()
-	fail := func(err error) {
-		detail := "prepare IDIOS update: " + err.Error()
-		s.setUpdateStatus("failed", "", detail)
-		diagnostics.Write("ERROR", detail, s.debugEnabled())
-	}
-	release, err := updater.Check(ctx, s.currentVersion())
-	if err != nil {
-		fail(err)
-		return
-	}
-	if release == nil {
-		fail(errors.New("no newer stable release is available"))
-		return
-	}
-	s.setUpdateStatus("downloading", release.Version, "")
-	executable, err := os.Executable()
-	if err != nil {
-		fail(fmt.Errorf("locate installed IDIOS executable: %w", err))
-		return
-	}
-	prepared, err := updater.Prepare(ctx, *release, executable)
-	if err != nil {
-		fail(err)
-		return
-	}
-	if err := updater.ScheduleWithArgs(prepared, os.Getpid(), []string{"web", "--no-open"}); err != nil {
-		prepared.Cleanup()
-		fail(fmt.Errorf("schedule replacement binaries: %w", err))
-		return
-	}
-	s.setUpdateStatus("scheduled", release.Version, "")
-	diagnostics.Write("INFO", "verified IDIOS update scheduled for version "+release.Version, s.debugEnabled())
-	s.stopOnce.Do(func() {
-		go func() {
-			time.Sleep(120 * time.Millisecond)
-			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancelShutdown()
-			_ = s.http.Shutdown(shutdownCtx)
-		}()
-	})
-}
-
-func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.Ping(requestContext(r)); err != nil {
-		writeError(w, err)
-		return
-	}
-	addr, _ := s.Address()
-	s.mu.RLock()
-	refresh := s.cfg.Server.RefreshIntervalSeconds
-	s.mu.RUnlock()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok", "version": s.opts.Version, "address": "http://" + addr,
-		"database": "ok", "started_at": s.startedAt, "refresh_interval_seconds": refresh,
-	})
-}
-
-func (s *Server) getDashboard(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
-	repositories, err := s.app.ListRepositories(ctx)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	issues, err := s.app.ListIssues(ctx, "", "")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	projects, err := s.app.ListProjects(ctx)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	notes, err := s.app.ListNotes(ctx)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	notifications, err := s.app.ListNotifications(ctx, 100)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	activity, err := s.app.ListActivity(ctx, "", "", 12)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	profile, err := s.app.GetWorkspaceProfile(ctx)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	metrics := map[string]int{
-		"repositories":         len(repositories),
-		"issues":               len(issues),
-		"projects":             len(projects),
-		"notes":                len(notes),
-		"open_issues":          0,
-		"in_progress_issues":   0,
-		"done_issues":          0,
-		"cancelled_issues":     0,
-		"blocked_issues":       0,
-		"unread_notifications": 0,
-	}
-	for _, issue := range issues {
-		switch issue.Status {
-		case domain.IssueOpen:
-			metrics["open_issues"]++
-		case domain.IssueInProgress:
-			metrics["in_progress_issues"]++
-		case domain.IssueDone:
-			metrics["done_issues"]++
-		case domain.IssueCancelled:
-			metrics["cancelled_issues"]++
-		}
-		if issue.Blocked {
-			metrics["blocked_issues"]++
-		}
-	}
-	unread := 0
-	for _, notification := range notifications {
-		if notification.ReadAt == nil {
-			unread++
-		}
-	}
-	metrics["unread_notifications"] = unread
-	writeJSON(w, http.StatusOK, map[string]any{
-		"profile": profile, "repositories": repositories, "issues": issues, "projects": projects,
-		"notes": notes, "notifications": notifications, "activity": activity, "metrics": metrics,
-	})
-}
-
-func (s *Server) getRepositories(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListRepositories(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name          string `json:"name"`
-		Description   string `json:"description"`
-		DefaultBranch string `json:"default_branch"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreateRepositoryWithDefaultBranch(requestContext(r), input.Name, input.Description, input.DefaultBranch)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (s *Server) getRepositoryFiles(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListRepositoryFiles(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) putRepositoryFile(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.SaveRepositoryFile(requestContext(r), r.PathValue("ref"), input.Path, input.Content)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) deleteRepositoryFile(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.DeleteRepositoryFile(requestContext(r), r.PathValue("ref"), r.URL.Query().Get("path")); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
-}
-func (s *Server) getRepositoryTags(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListRepositoryTags(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) createRepositoryTag(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name    string `json:"name"`
-		Message string `json:"message"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreateRepositoryTag(requestContext(r), r.PathValue("ref"), input.Name, input.Message)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-func (s *Server) getRepositoryTag(w http.ResponseWriter, r *http.Request) {
-	tag, err := s.app.GetRepositoryTag(requestContext(r), r.PathValue("ref"), r.PathValue("tag"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	files, err := s.app.GetRepositoryTagFiles(requestContext(r), tag.ID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tag": tag, "files": files})
-}
-func (s *Server) compareRepositoryTag(w http.ResponseWriter, r *http.Request) {
-	tag, err := s.app.GetRepositoryTag(requestContext(r), r.PathValue("ref"), r.PathValue("tag"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	changes, err := s.app.CompareRepositoryTags(requestContext(r), r.PathValue("ref"), r.PathValue("tag"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	history, err := s.app.ListTagHistory(requestContext(r), tag.ID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tag": tag, "previous_tag": tag.PreviousTagName, "changes": changes, "history": history})
-}
-func (s *Server) downloadRepositoryTag(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
-	repoRef, tagRef := r.PathValue("ref"), r.PathValue("tag")
-	tag, err := s.app.GetRepositoryTag(ctx, repoRef, tagRef)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	files, err := s.app.GetRepositoryTagFiles(ctx, tag.ID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	history, err := s.app.ListTagHistory(ctx, tag.ID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	var body bytes.Buffer
-	zw := zip.NewWriter(&body)
-	add := func(name string, data []byte) error {
-		clean := path.Clean(strings.ReplaceAll(name, "\\", "/"))
-		if clean == "." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
-			return fmt.Errorf("unsafe archive path")
-		}
-		w, e := zw.Create(clean)
-		if e != nil {
-			return e
-		}
-		_, e = w.Write(data)
-		return e
-	}
-	for _, file := range files {
-		if err := add(file.Path, []byte(file.Content)); err != nil {
-			_ = zw.Close()
-			writeError(w, err)
-			return
-		}
-	}
-	manifest := map[string]any{"repository": tag.RepositoryName, "tag": tag.Name, "message": tag.Message, "created_at": tag.CreatedAt, "completion_sequence": tag.CompletionSequence, "completion_id": tag.CompletionID, "previous_tag": tag.PreviousTagName, "previous_tag_download": func() string {
-		if tag.PreviousTagName == "" {
-			return ""
-		}
-		return "/api/repositories/" + url.PathEscape(repoRef) + "/tags/" + url.PathEscape(tag.PreviousTagName) + "/archive"
-	}(), "note": "This is an IDIOS simulated repository snapshot, not a Git bundle."}
-	metadata, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		_ = zw.Close()
-		writeError(w, err)
-		return
-	}
-	if err = add(".idios/tag.json", metadata); err != nil {
-		_ = zw.Close()
-		writeError(w, err)
-		return
-	}
-	historyBytes, err := json.MarshalIndent(history, "", "  ")
-	if err != nil {
-		_ = zw.Close()
-		writeError(w, err)
-		return
-	}
-	if err = add(".idios/history.json", historyBytes); err != nil {
-		_ = zw.Close()
-		writeError(w, err)
-		return
-	}
-	if err = zw.Close(); err != nil {
-		writeError(w, err)
-		return
-	}
-	filename := strings.NewReplacer(" ", "-", "\r", "", "\n", "", "\"", "").Replace(tag.RepositoryName) + "-" + tag.Name + ".zip"
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filename, "\"", "")+`"`)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body.Bytes())
-}
-
-func (s *Server) getIssues(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListIssues(requestContext(r), r.URL.Query().Get("repo"), r.URL.Query().Get("status"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) createIssue(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Repository  string `json:"repository"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Parent      string `json:"parent,omitempty"`
-		DueDate     string `json:"due_date,omitempty"`
-		Priority    string `json:"priority,omitempty"`
-		Type        string `json:"type,omitempty"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreateIssueWithTypeAndBranch(requestContext(r), input.Repository, input.Title, input.Description, input.Parent, input.DueDate, input.Priority, "", input.Type)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (s *Server) startIssue(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.StartIssue(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) cancelIssue(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.CancelIssue(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListProjects(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreateProject(requestContext(r), input.Name, input.Description)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-func (s *Server) getProjectRepositories(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListProjectRepositories(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) linkProjectRepository(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Repository   string `json:"repository"`
-		Relationship string `json:"relationship"`
-		Primary      bool   `json:"primary"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	if err := s.app.LinkRepositoryToProject(requestContext(r), r.PathValue("ref"), input.Repository, input.Relationship, input.Primary); err != nil {
-		writeError(w, err)
-		return
-	}
-	items, err := s.app.ListProjectRepositories(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, items)
-}
-func (s *Server) unlinkProjectRepository(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.UnlinkRepositoryFromProject(requestContext(r), r.PathValue("ref"), r.PathValue("repoRef")); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"unlinked": true})
-}
-func (s *Server) setPrimaryProjectRepository(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.SetPrimaryProjectRepository(requestContext(r), r.PathValue("ref"), r.PathValue("repoRef")); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"primary": true})
-}
-
-func (s *Server) getProjectIssues(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListProjectIssues(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) addProjectIssue(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Issue string `json:"issue"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	if err := s.app.AddIssueToProject(requestContext(r), r.PathValue("ref"), input.Issue); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "added"})
-}
-func (s *Server) getGraph(w http.ResponseWriter, r *http.Request) {
-	depth := 1
-	if raw := r.URL.Query().Get("depth"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			depth = parsed
-		}
-	}
-	if depth < 1 {
-		depth = 1
-	}
-	if depth > 5 {
-		depth = 5
-	}
-	graph, err := s.app.Graph(requestContext(r), r.URL.Query().Get("from"), depth)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, graph)
-}
-func (s *Server) getGraphLayout(w http.ResponseWriter, r *http.Request) {
-	layout, err := s.app.GraphLayout(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, layout)
-}
-
-func (s *Server) putGraphLayout(w http.ResponseWriter, r *http.Request) {
-	var layout domain.GraphLayout
-	if !decodeJSON(w, r, &layout) {
-		return
-	}
-	saved, err := s.app.SaveGraphLayout(requestContext(r), layout)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, saved)
-}
-
-func (s *Server) resetGraphLayout(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Mode string `json:"mode"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	layout, err := s.app.ResetGraphLayout(requestContext(r), input.Mode)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, layout)
-}
-
-func (s *Server) getPlans(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListPlans(requestContext(r), r.URL.Query().Get("from"), r.URL.Query().Get("to"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Title            string   `json:"title"`
-		Description      string   `json:"description"`
-		PlanDate         string   `json:"plan_date"`
-		LinkedEntityType string   `json:"linked_entity_type"`
-		LinkedEntityID   string   `json:"linked_entity_id"`
-		Tasks            []string `json:"tasks"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreatePlan(requestContext(r), domain.Plan{Title: input.Title, Description: input.Description, PlanDate: input.PlanDate, LinkedEntityType: input.LinkedEntityType, LinkedEntityID: input.LinkedEntityID}, input.Tasks)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Title            string `json:"title"`
-		Description      string `json:"description"`
-		PlanDate         string `json:"plan_date"`
-		LinkedEntityType string `json:"linked_entity_type"`
-		LinkedEntityID   string `json:"linked_entity_id"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.UpdatePlan(requestContext(r), domain.Plan{ID: r.PathValue("ref"), Title: input.Title, Description: input.Description, PlanDate: input.PlanDate, LinkedEntityType: input.LinkedEntityType, LinkedEntityID: input.LinkedEntityID})
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-func (s *Server) deletePlan(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.DeletePlan(requestContext(r), r.PathValue("ref")); err != nil {
-		writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) addPlanTask(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Title string `json:"title"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.AddPlanTask(requestContext(r), r.PathValue("ref"), input.Title)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (s *Server) setPlanTaskDone(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Done bool `json:"done"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.SetPlanTaskDone(requestContext(r), r.PathValue("ref"), r.PathValue("taskRef"), input.Done)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListNotes(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) createNote(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Title   string   `json:"title"`
-		Content string   `json:"content"`
-		Labels  []string `json:"labels,omitempty"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	item, err := s.app.CreateNoteWithLabels(requestContext(r), input.Title, input.Content, input.Labels)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.DeleteNote(requestContext(r), r.PathValue("ref")); err != nil {
-		writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-func (s *Server) getNotifications(w http.ResponseWriter, r *http.Request) {
-	limit := 50
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			limit = parsed
-		}
-	}
-	if limit < 1 {
-		limit = 1
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	items, err := s.app.ListNotifications(requestContext(r), limit)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) markNotificationsRead(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.MarkNotificationsRead(requestContext(r)); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "read"})
-}
-func (s *Server) getActivity(w http.ResponseWriter, r *http.Request) {
-	limit := 30
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			limit = parsed
-		}
-	}
-	if limit < 1 {
-		limit = 1
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	items, err := s.app.ListActivity(requestContext(r), r.URL.Query().Get("type"), r.URL.Query().Get("id"), limit)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	cfg := s.cfg
-	s.mu.RUnlock()
-	writeJSON(w, http.StatusOK, map[string]any{"config": cfg, "config_path": s.opts.ConfigPath, "config_dir": config.ConfigDir(), "db_path": s.opts.DBPath})
-}
-func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Config config.AppConfig `json:"config"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	if input.Config.Version == 0 {
-		input.Config.Version = 1
-	}
-	if input.Config.Server.Port < 1 || input.Config.Server.Port > 65535 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "server.port must be between 1 and 65535"})
-		return
-	}
-	if input.Config.Server.Host != "127.0.0.1" && input.Config.Server.Host != "localhost" && input.Config.Server.Host != "::1" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "server.host must be a loopback address"})
-		return
-	}
-	if input.Config.Server.RefreshIntervalSeconds < 10 || input.Config.Server.RefreshIntervalSeconds > 3600 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "server.refresh_interval_seconds must be between 10 and 3600"})
-		return
-	}
-	if input.Config.Notifications.PollIntervalMinutes < 1 || input.Config.Notifications.PollIntervalMinutes > 1440 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notifications.poll_interval_minutes must be between 1 and 1440"})
-		return
-	}
-	for name, value := range map[string]string{"morning_time": input.Config.Notifications.PlanReminders.MorningTime, "midday_time": input.Config.Notifications.PlanReminders.MiddayTime, "evening_time": input.Config.Notifications.PlanReminders.EveningTime} {
-		parsed, err := time.Parse("15:04", value)
-		if err != nil || parsed.Format("15:04") != value {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notifications.plan_reminders." + name + " must use 24-hour HH:MM"})
-			return
-		}
-	}
-	planTimes := []string{input.Config.Notifications.PlanReminders.MorningTime, input.Config.Notifications.PlanReminders.MiddayTime, input.Config.Notifications.PlanReminders.EveningTime}
-	parsedPlanTimes := make([]time.Time, 0, len(planTimes))
-	for _, value := range planTimes {
-		parsed, _ := time.Parse("15:04", value) // Format validation above has already succeeded.
-		parsedPlanTimes = append(parsedPlanTimes, parsed)
-	}
-	if !parsedPlanTimes[0].Before(parsedPlanTimes[1]) || !parsedPlanTimes[1].Before(parsedPlanTimes[2]) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notifications.plan_reminders times must be ordered morning < midday < evening"})
-		return
-	}
-	minReminder, maxReminder := reminders.NormalizeRange(input.Config.Notifications.QuoteReminders)
-	if input.Config.Notifications.QuoteReminders.Enabled && (input.Config.Notifications.QuoteReminders.MinIntervalMinutes < 1 || input.Config.Notifications.QuoteReminders.MaxIntervalMinutes < input.Config.Notifications.QuoteReminders.MinIntervalMinutes) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notifications.quote_reminders interval range must be positive and max must be greater than or equal to min"})
-		return
-	}
-	input.Config.Notifications.QuoteReminders.MinIntervalMinutes = minReminder
-	input.Config.Notifications.QuoteReminders.MaxIntervalMinutes = maxReminder
-	if input.Config.Notifications.QuoteReminders.Enabled && strings.TrimSpace(input.Config.Notifications.QuoteReminders.NextAt) == "" {
-		reminders.EnsureSchedule(&input.Config, time.Now())
-	}
-	if message := validateWebThemeConfig(input.Config.Web); message != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
-		return
-	}
-	s.mu.Lock()
-	previous := s.cfg
-	previousReminder := previous.Notifications.QuoteReminders
-	nextReminder := &input.Config.Notifications.QuoteReminders
-	if nextReminder.Enabled && previousReminder.Enabled && nextReminder.MinIntervalMinutes == previousReminder.MinIntervalMinutes && nextReminder.MaxIntervalMinutes == previousReminder.MaxIntervalMinutes {
-		nextReminder.NextAt = previousReminder.NextAt
-		nextReminder.LastQuoteID = previousReminder.LastQuoteID
-	}
-	if err := config.SaveAppConfig(input.Config); err != nil {
-		s.mu.Unlock()
-		writeError(w, err)
-		return
-	}
-	resolved, err := config.LoadAppConfig()
-	if err != nil {
-		s.mu.Unlock()
-		writeError(w, err)
-		return
-	}
-	s.cfg = resolved
-	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":           "saved",
-		"config_path":      s.opts.ConfigPath,
-		"restart_required": resolved.Server.Port != previous.Server.Port || resolved.Server.Host != previous.Server.Host,
-	})
-}
-
 // validateWebThemeConfig keeps the base theme and saved custom palettes aligned.
 // Built-in palettes are CSS presets; custom palettes are fully validated before config is persisted.
 func validateWebThemeConfig(web config.WebConfig) string {
@@ -1536,227 +690,6 @@ func validHexColor(value string) bool {
 		}
 	}
 	return true
-}
-
-func (s *Server) getProtocolCatalog(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"protocol_version": protocol.Version, "commands": protocol.Catalog()})
-}
-
-// getFeatureCatalog exposes the shared user-facing feature inventory to the Web and TUI clients.
-// Routes and navigation labels are metadata only; command behavior stays in Application/Protocol.
-func (s *Server) getFeatureCatalog(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"catalog_version": 1, "features": features.Catalog()})
-}
-
-func (s *Server) getProtocolOptions(w http.ResponseWriter, r *http.Request) {
-	items, err := protocol.Options(requestContext(r), s.app, r.URL.Query().Get("source"), r.URL.Query().Get("entity_type"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) executeProtocolCommand(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Command string         `json:"command"`
-		Input   map[string]any `json:"input"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	if input.Input == nil {
-		input.Input = map[string]any{}
-	}
-	result, err := protocol.Execute(requestContext(r), s.app, input.Command, input.Input)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"protocol_version": protocol.Version, "command": input.Command, "result": result})
-}
-
-func (s *Server) getRepository(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetRepository(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getRepositoryBranches(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListBranches(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getRepositorySettings(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.GetRepositorySettings(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetProject(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getIssue(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetIssue(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getIssueDependencies(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListDependencies(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getPullRequests(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListPullRequests(requestContext(r), r.URL.Query().Get("repo"), r.URL.Query().Get("status"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getPullRequestIssues(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListPullRequestIssues(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) getPullRequest(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetPullRequest(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getConcepts(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListConcepts(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getConcept(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetConcept(requestContext(r), r.PathValue("ref"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getBranches(w http.ResponseWriter, r *http.Request) {
-	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
-	if repo == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo query parameter is required"})
-		return
-	}
-	items, err := s.app.ListBranches(requestContext(r), repo)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getCompletions(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListCompletions(requestContext(r), r.URL.Query().Get("repo"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getLabels(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListLabels(requestContext(r), r.URL.Query().Get("scope"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getIssueLabels(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListIssueLabels(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getMilestones(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListMilestones(requestContext(r), r.URL.Query().Get("scope"), r.URL.Query().Get("owner"))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getIssueMilestones(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListIssueMilestones(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getQuotes(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListQuotes(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getNextQuote(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.NextQuote(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getJobs(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListScheduledJobs(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
-	item, err := s.app.GetWorkspaceProfile(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-func (s *Server) getPins(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.ListWorkspacePins(requestContext(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {

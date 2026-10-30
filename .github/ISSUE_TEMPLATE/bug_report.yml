@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the CLI, TUI or Engine does not work as documented.
+description: Something in the CLI, Web UI or Engine does not work as documented.
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
@@ -25,7 +25,6 @@ body:
       label: Where does it happen?
       options:
         - CLI (`idios ...`)
-        - TUI (`idios-tui`)
         - Both
         - Storage / migration
         - Not sure

@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"idios/clients/tui/render"
+	"idios/clients/cli/render"
 	"idios/internal/application"
 	appconfig "idios/internal/config"
 	"idios/internal/logger"
 )
 
 // Version is set to the source version by default and overridden by release builds via -ldflags.
-var Version = "2.0.0"
+var Version = "2.1.0"
 
 // config holds the global flags, which may appear anywhere in the argument list.
 type config struct {
@@ -36,8 +36,6 @@ func (c config) logger(w io.Writer) *logger.Logger {
 }
 
 type AppFactory func(dbPath string) (*application.Service, io.Closer, error)
-
-var errTUIWanted = errors.New("use the separate `idios-tui` executable for the TUI")
 
 // globals strips the global flags out of args wherever they appear.
 func globals(args []string) (config, []string, error) {
@@ -106,9 +104,6 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, factory A
 			"pull_request_reference": "Repository!number",
 		}, cfg.json)
 		return 0
-	case "tui":
-		report(stderr, cfg.json, args, errTUIWanted, log)
-		return 2
 	}
 	if factory == nil {
 		report(stderr, cfg.json, args, errors.New("Engine application factory is not configured"), log)

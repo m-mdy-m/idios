@@ -1,0 +1,13 @@
+/* Knowledge graph: clean point-only nodes with contextual hover cards. */
+.graph-node-label, .graph-node-reference { display: none !important; }
+.graph-node { cursor: grab; }
+.graph-node:active { cursor: grabbing; }
+.graph-node__shape { transition: r 120ms ease, fill-opacity 120ms ease, stroke-width 120ms ease; }
+.graph-node--selected .graph-node__shape { filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 35%, transparent)); }
+.graph-hover-card { filter: drop-shadow(0 7px 20px rgb(0 0 0 / 22%)); }
+.graph-hover-card__background { fill: var(--surface-raised, var(--surface)); stroke: var(--border); stroke-width: 1; }
+.graph-hover-card__title { fill: var(--text); font-size: 11px; font-weight: 700; }
+.graph-hover-card__meta { fill: var(--muted); font-size: 9px; }
+.graph-hover-card__description { fill: var(--text-soft); font-size: 9px; }
+.graph-hover-card__hint { fill: var(--muted-2); font-size: 8px; }
+

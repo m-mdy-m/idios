@@ -1,17 +1,17 @@
 # Contributing to IDIOS
 
-Thanks for considering a contribution. This guide explains the usual path from an idea to a reviewed change.
+Thank you for considering a contribution. This guide explains the first steps. The detailed source layout and test process are in the [developer guide](docs/develop/README.md).
 
-## Before you start
+## Before changing code
 
-- Check [open issues](https://github.com/m-mdy-m/idios/issues) to see whether the problem is already being discussed.
-- For a behavior change, describe the problem and the expected result before doing a large rewrite.
-- For security issues, follow [SECURITY.md](SECURITY.md) rather than posting details publicly.
-- Read the short [architecture guide](docs/development/ARCHITECTURE.md) if you are not sure where a change belongs.
+- Search the existing [issues](https://github.com/m-mdy-m/idios/issues) for the same problem.
+- Keep one change focused on one behavior or feature.
+- For security problems, follow [SECURITY.md](SECURITY.md) and do not publish exploit details in a public issue.
+- Read the [architecture overview](docs/arch/overview.md) and [service boundaries](docs/arch/service-boundaries.md) to find the correct owner.
 
-## Set up the project
+## Set up the source
 
-You need Go 1.25 or newer and a C compiler for SQLite. Node.js 22+ and pnpm 9 are needed to build or lint the browser interface. GNU Make is used by the shortcut commands in the Makefile.
+Requirements: Go 1.25+, a C compiler, Node.js 22+, pnpm 9, GNU Make, Python 3.12+, and Git.
 
 ```sh
 git clone https://github.com/m-mdy-m/idios.git
@@ -21,49 +21,31 @@ make build
 
 ## Make a change
 
-1. Create a branch for one focused change.
-2. Make the smallest change that solves the problem.
-3. Add or update tests for changed behavior.
-4. Update documentation when a user-visible command, setting, or workflow changes.
-5. Do not commit personal SQLite databases, generated binaries, secrets, or machine-specific configuration.
+1. Create a branch for the change.
+2. Identify the feature or domain that owns the behavior.
+3. Change the smallest number of modules that can own the new behavior cleanly.
+4. Add or update tests for the normal path, errors, and important edge cases.
+5. Update user or developer docs and `CHANGELOG.md` when behavior changes.
+6. Do not commit databases, credentials, generated binaries, or machine-specific settings.
 
-Keep application rules in `internal/application/`. UI code should call the application rather than reimplementing the rule. For storage changes, add a numbered migration instead of asking users to delete their database. See [Adding a feature](docs/development/EXTENDING.md) and [Storage and migrations](docs/development/STORAGE.md).
+Business rules belong in Go domain/application services. SQL belongs in `internal/storage/sqlite/`. The Web client calls the local API and must not create a second source of truth. See [Adding a feature](docs/develop/adding-a-feature.md), [Web development](docs/develop/web.md), and [Storage](docs/develop/storage.md).
 
 ## Run checks
-
-Before opening a pull request, run the checks relevant to your change. The full project check is:
 
 ```sh
 make ci
 ```
 
-Useful individual checks include:
+Or use the shared pipeline task runner:
 
 ```sh
-make fmt-check
-make test
-make vet
-make test-race
-make web-lint
-make build
-make smoke
+python scripts/run-pipeline.py run ci
 ```
 
-On Windows, all Go checks (`make fmt-check`, `make test`, `make vet`, `make test-race`) and `make build` (which runs `scripts/build.ps1`) work from the normal Windows console. `make smoke` runs the POSIX smoke script through Git Bash; install [Git for Windows](https://git-scm.com/download/win) and the Makefile will call `C:/Program Files/Git/bin/bash.exe` automatically. You can also run Go tests directly with `go test ./...` and `go vet ./...`.
-
-If a check cannot run on your machine, mention that in the pull request rather than saying it passed.
+If a check cannot run, state that it was **NOT RUN** and explain why. Do not claim that a syntax check is a full build.
 
 ## Open a pull request
 
-Use a clear title and explain:
+Explain what changed, why it changed, how it was tested, and whether the change affects stored data, commands, routes, privacy, or release artifacts. A Pull Request record inside IDIOS is not a GitHub Pull Request; contributions to this repository use normal GitHub pull requests.
 
-- what changed and why;
-- how you tested it;
-- any data migration or compatibility impact;
-- any known limitation or follow-up work.
-
-Keep the pull request focused and be open to review feedback. An IDIOS pull-request record is an in-app work item; contributions to this repository are submitted as normal GitHub pull requests.
-
-## Community standards
-
-Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). For bugs and feature ideas, use [GitHub Issues](https://github.com/m-mdy-m/idios/issues).
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).

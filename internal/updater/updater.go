@@ -33,7 +33,7 @@ const (
 )
 
 // Version is overridden in release builds with -ldflags for every executable.
-var Version = "2.0.0"
+var Version = "2.1.0"
 
 type Release struct {
 	Version      string
@@ -93,12 +93,12 @@ func Check(ctx context.Context, currentVersion string) (*Release, error) {
 		switch a.Name {
 		case assetName:
 			assetURL = a.BrowserDownloadURL
-		case "SHA256SUMS.txt":
+		case "SHA256SUMS":
 			checksumsURL = a.BrowserDownloadURL
 		}
 	}
 	if assetURL == "" || checksumsURL == "" {
-		return nil, fmt.Errorf("release %s is missing the platform bundle or SHA256SUMS.txt", payload.TagName)
+		return nil, fmt.Errorf("release %s is missing the platform bundle or SHA256SUMS", payload.TagName)
 	}
 
 	release := &Release{
@@ -311,18 +311,13 @@ func numericIdentifier(s string) (uint64, error) {
 
 type Prepared struct {
 	StagedCLI string
-	StagedTUI string
 	DestCLI   string
-	DestTUI   string
 	Launcher  string
 }
 
 func (p Prepared) Cleanup() {
 	if p.StagedCLI != "" {
 		_ = os.Remove(p.StagedCLI)
-	}
-	if p.StagedTUI != "" {
-		_ = os.Remove(p.StagedTUI)
 	}
 }
 
@@ -353,8 +348,8 @@ func Prepare(ctx context.Context, release Release, executablePath string) (Prepa
 	if err != nil {
 		return prepared, err
 	}
-	if len(binaries["idios"]) == 0 || len(binaries["idios-tui"]) == 0 {
-		return prepared, errors.New("release bundle does not contain both idios and idios-tui")
+	if len(binaries["idios"]) == 0 {
+		return prepared, errors.New("release bundle does not contain the idios executable")
 	}
 
 	executablePath, err = filepath.Abs(executablePath)
@@ -368,17 +363,11 @@ func Prepare(ctx context.Context, release Release, executablePath string) (Prepa
 	}
 	prepared = Prepared{
 		DestCLI:  filepath.Join(dir, "idios"+ext),
-		DestTUI:  filepath.Join(dir, "idios-tui"+ext),
 		Launcher: filepath.Join(dir, "idios"+ext),
 	}
 	prepared.StagedCLI, err = writeStaged(dir, ".idios-upgrade-cli-*", binaries["idios"])
 	if err != nil {
 		return Prepared{}, fmt.Errorf("stage the new idios executable: %w", err)
-	}
-	prepared.StagedTUI, err = writeStaged(dir, ".idios-upgrade-tui-*", binaries["idios-tui"])
-	if err != nil {
-		prepared.Cleanup()
-		return Prepared{}, fmt.Errorf("stage the new idios-tui executable: %w", err)
 	}
 	return prepared, nil
 }
@@ -421,7 +410,7 @@ func checksumFor(contents, assetName string) (string, error) {
 			return hash, nil
 		}
 	}
-	return "", fmt.Errorf("SHA256SUMS.txt does not contain %s", assetName)
+	return "", fmt.Errorf("SHA256SUMS does not contain %s", assetName)
 }
 
 func extractExecutables(archiveBytes []byte, assetName string) (map[string][]byte, error) {
@@ -429,7 +418,7 @@ func extractExecutables(archiveBytes []byte, assetName string) (map[string][]byt
 	readEntry := func(name string, r io.Reader, size int64) error {
 		clean := filepath.ToSlash(filepath.Clean(name))
 		clean = strings.TrimPrefix(clean, "./")
-		if clean != "idios" && clean != "idios.exe" && clean != "idios-tui" && clean != "idios-tui.exe" {
+		if clean != "idios" && clean != "idios.exe" {
 			return nil
 		}
 		base := strings.TrimSuffix(clean, ".exe")
@@ -535,22 +524,19 @@ func writeStaged(dir, pattern string, contents []byte) (string, error) {
 	return name, nil
 }
 
-// Schedule starts a small helper that waits for the current TUI/CLI process to exit, then
-// replaces both binaries and launches the new idios command. No binary is removed before both
-// replacement files have been downloaded, checksum-verified, extracted, and staged successfully.
+// Schedule waits for the current process to exit, replaces the single CLI binary atomically,
+// and restarts it. The old executable is kept as a rollback copy until restart succeeds.
 func Schedule(prepared Prepared, parentPID int) error {
 	return ScheduleWithArgs(prepared, parentPID, nil)
 }
 
-// ScheduleWithArgs stages the same verified two-binary update as Schedule, then starts the
-// replacement CLI with explicitly supplied arguments after the current process exits. Args are
-// quoted for the platform helper; callers must still use fixed, application-owned arguments.
+// ScheduleWithArgs restarts the new CLI with explicitly supplied application-owned arguments.
 func ScheduleWithArgs(prepared Prepared, parentPID int, args []string) error {
 	if parentPID <= 0 {
 		prepared.Cleanup()
 		return errors.New("invalid parent process id")
 	}
-	if prepared.StagedCLI == "" || prepared.StagedTUI == "" || prepared.DestCLI == "" || prepared.DestTUI == "" {
+	if prepared.StagedCLI == "" || prepared.DestCLI == "" {
 		prepared.Cleanup()
 		return errors.New("incomplete staged update")
 	}
@@ -611,9 +597,7 @@ func ScheduleWithArgs(prepared Prepared, parentPID int, args []string) error {
 	return nil
 }
 
-func unixHelper(p Prepared, pid int) string {
-	return unixHelperWithArgs(p, pid, nil)
-}
+func unixHelper(p Prepared, pid int) string { return unixHelperWithArgs(p, pid, nil) }
 
 func unixHelperWithArgs(p Prepared, pid int, args []string) string {
 	launch := `"$DEST_CLI"`
@@ -623,35 +607,27 @@ func unixHelperWithArgs(p Prepared, pid int, args []string) string {
 	return "#!/bin/sh\n" +
 		"PARENT_PID=" + shellQuote(fmt.Sprint(pid)) + "\n" +
 		"STAGED_CLI=" + shellQuote(p.StagedCLI) + "\n" +
-		"STAGED_TUI=" + shellQuote(p.StagedTUI) + "\n" +
 		"DEST_CLI=" + shellQuote(p.DestCLI) + "\n" +
-		"DEST_TUI=" + shellQuote(p.DestTUI) + "\n" +
 		"BACKUP_CLI=\"${DEST_CLI}.idios-backup-${PARENT_PID}\"\n" +
-		"BACKUP_TUI=\"${DEST_TUI}.idios-backup-${PARENT_PID}\"\n" +
 		"while kill -0 \"$PARENT_PID\" 2>/dev/null; do sleep 0.2; done\n" +
-		"had_cli=0; had_tui=0; installed_cli=0; installed_tui=0\n" +
+		"had_cli=0\n" +
 		"if [ -e \"$DEST_CLI\" ]; then mv \"$DEST_CLI\" \"$BACKUP_CLI\" || exit 1; had_cli=1; fi\n" +
-		"if [ -e \"$DEST_TUI\" ]; then if ! mv \"$DEST_TUI\" \"$BACKUP_TUI\"; then [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; exit 1; fi; had_tui=1; fi\n" +
-		"if mv \"$STAGED_CLI\" \"$DEST_CLI\"; then installed_cli=1; else [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; [ \"$had_tui\" -eq 0 ] || mv \"$BACKUP_TUI\" \"$DEST_TUI\"; exit 1; fi\n" +
-		"if mv \"$STAGED_TUI\" \"$DEST_TUI\"; then installed_tui=1; else rm -f \"$DEST_CLI\"; [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; [ \"$had_tui\" -eq 0 ] || mv \"$BACKUP_TUI\" \"$DEST_TUI\"; exit 1; fi\n" +
-		"chmod 755 \"$DEST_CLI\" \"$DEST_TUI\"\n" +
+		"if ! mv \"$STAGED_CLI\" \"$DEST_CLI\"; then [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"; exit 1; fi\n" +
+		"chmod 755 \"$DEST_CLI\"\n" +
 		launch + "\n" +
 		"launch_status=$?\n" +
 		"if [ \"$launch_status\" -eq 126 ] || [ \"$launch_status\" -eq 127 ]; then\n" +
-		"  rm -f \"$DEST_CLI\" \"$DEST_TUI\"\n" +
+		"  rm -f \"$DEST_CLI\"\n" +
 		"  [ \"$had_cli\" -eq 0 ] || mv \"$BACKUP_CLI\" \"$DEST_CLI\"\n" +
-		"  [ \"$had_tui\" -eq 0 ] || mv \"$BACKUP_TUI\" \"$DEST_TUI\"\n" +
 		"  exit \"$launch_status\"\n" +
 		"fi\n" +
-		"rm -f \"$BACKUP_CLI\" \"$BACKUP_TUI\" \"$0\"\n" +
+		"rm -f \"$BACKUP_CLI\" \"$0\"\n" +
 		"exit \"$launch_status\"\n"
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 
-func windowsHelper(p Prepared, pid int) string {
-	return windowsHelperWithArgs(p, pid, nil)
-}
+func windowsHelper(p Prepared, pid int) string { return windowsHelperWithArgs(p, pid, nil) }
 
 func windowsHelperWithArgs(p Prepared, pid int, args []string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
@@ -666,29 +642,17 @@ func windowsHelperWithArgs(p Prepared, pid int, args []string) string {
 	return "$ErrorActionPreference = 'Stop'\n" +
 		"$parentPid = " + fmt.Sprint(pid) + "\n" +
 		"$stagedCli = " + q(p.StagedCLI) + "\n" +
-		"$stagedTui = " + q(p.StagedTUI) + "\n" +
 		"$destCli = " + q(p.DestCLI) + "\n" +
-		"$destTui = " + q(p.DestTUI) + "\n" +
 		"$backupCli = \"$destCli.idios-backup-$parentPid\"\n" +
-		"$backupTui = \"$destTui.idios-backup-$parentPid\"\n" +
 		"while (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 200 }\n" +
-		"$hadCli = Test-Path -LiteralPath $destCli; $hadTui = Test-Path -LiteralPath $destTui\n" +
-		"$installedCli = $false; $installedTui = $false\n" +
+		"$hadCli = Test-Path -LiteralPath $destCli\n$installedCli = $false\n" +
 		"try {\n" +
 		"  if ($hadCli) { Move-Item -LiteralPath $destCli -Destination $backupCli -Force }\n" +
-		"  if ($hadTui) { Move-Item -LiteralPath $destTui -Destination $backupTui -Force }\n" +
 		"  Move-Item -LiteralPath $stagedCli -Destination $destCli -Force\n" +
-		"  $installedCli = $true\n" +
-		"  Move-Item -LiteralPath $stagedTui -Destination $destTui -Force\n" +
-		"  $installedTui = $true\n" +
-		startProcess +
+		"  $installedCli = $true\n" + startProcess +
 		"  if (Test-Path -LiteralPath $backupCli) { Remove-Item -LiteralPath $backupCli -Force -ErrorAction SilentlyContinue }\n" +
-		"  if (Test-Path -LiteralPath $backupTui) { Remove-Item -LiteralPath $backupTui -Force -ErrorAction SilentlyContinue }\n" +
 		"} catch {\n" +
 		"  if ($installedCli -and (Test-Path -LiteralPath $destCli)) { Remove-Item -LiteralPath $destCli -Force -ErrorAction SilentlyContinue }\n" +
-		"  if ($installedTui -and (Test-Path -LiteralPath $destTui)) { Remove-Item -LiteralPath $destTui -Force -ErrorAction SilentlyContinue }\n" +
 		"  if ($hadCli -and (Test-Path -LiteralPath $backupCli)) { Move-Item -LiteralPath $backupCli -Destination $destCli -Force -ErrorAction SilentlyContinue }\n" +
-		"  if ($hadTui -and (Test-Path -LiteralPath $backupTui)) { Move-Item -LiteralPath $backupTui -Destination $destTui -Force -ErrorAction SilentlyContinue }\n" +
-		"  Write-Error $_; exit 1\n" +
-		"}\n"
+		"  Write-Error $_; exit 1\n}\n"
 }

@@ -101,7 +101,7 @@ func PrepareScheduledJob(job ScheduledJob, now time.Time) (ScheduledJob, error) 
 }
 
 // NextScheduledOccurrence returns the first scheduled time strictly after after. Interval jobs
-// keep their original cadence when the TUI was closed for a while; missed intervals are skipped
+// keep their original cadence while the local server was not running; missed intervals are skipped
 // instead of causing a burst of stale notifications. Calendar schedules retain local wall time.
 func NextScheduledOccurrence(job ScheduledJob, after time.Time) (time.Time, error) {
 	if after.IsZero() {

@@ -34,6 +34,6 @@ jobs:
           languages: go
           queries: security-and-quality
       - name: Build
-        run: go build ./cmd/idios ./cmd/idios-tui
+        run: go build ./cmd/idios
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3

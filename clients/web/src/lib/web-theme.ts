@@ -35,7 +35,7 @@ function applyCustomTheme(theme?: CustomWebTheme) {
 
 /** Apply user-defined CSS tokens and return the base mode for the root data-theme attribute. */
 export function applyWebTheme(config: AppConfig): string {
-  const selected = config.web.theme || 'system';
+  const selected = config.web.theme || 'dark';
   const customTheme = config.web.custom_themes?.[selected];
   applyCustomTheme(customTheme);
   if (customTheme) return customTheme.base;

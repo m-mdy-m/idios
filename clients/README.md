@@ -1,10 +1,7 @@
-# Client applications
+# Client adapters
 
-The client code turns IDIOS operations into commands and user interfaces. The shared workflow rules and database access live under `internal/`.
+- `cli/` — terminal commands and text/JSON output.
+- `server/` — the local HTTP API and embedded Web asset handler.
+- `web/` — the React + TypeScript interface, built to static assets and embedded in the Go executable.
 
-- `cli/` — command parsing and text/JSON output.
-- `tui/` — full-screen terminal interface.
-- `server/` — browser server and HTTP API adapter.
-- `web/` — React + TypeScript browser interface.
-
-The usual call path is `clients -> internal/application -> internal/ports -> internal/storage/sqlite`. Keep database access and workflow decisions out of client code so the interfaces behave consistently.
+The Go `internal/application` layer owns use cases and business workflows. The CLI and HTTP server call that layer. The browser uses the HTTP API and never accesses SQLite directly. IDIOS has no full-screen terminal UI; terminal use is through the CLI.

@@ -1,4 +1,4 @@
-// Package diagnostics provides the shared local log stream used by the TUI and Web clients.
+// Package diagnostics provides the shared local log stream used by the Web client and Go service.
 package diagnostics
 
 import (
@@ -48,7 +48,7 @@ func Stats() FileStats {
 }
 
 // Clear truncates the shared log while preserving its private permissions and directory.
-// It also migrates a legacy TUI log first so a clear action cannot leave old history behind.
+// It also migrates an older per-client log first so a clear action cannot leave old history behind.
 func Clear() error {
 	logMu.Lock()
 	defer logMu.Unlock()
@@ -99,7 +99,7 @@ func Write(level, message string, debugEnabled bool) {
 	_, _ = fmt.Fprintf(file, "%s %-5s %s\n", time.Now().Format(time.RFC3339), level, message)
 }
 
-// ReadRecent returns the newest log lines, retaining the legacy TUI log if no shared log
+// ReadRecent returns the newest log lines, retaining the older per-client log if no shared log
 // has been created yet. Missing or unreadable logs become useful empty-state messages.
 func ReadRecent(limit int) []string {
 	logMu.Lock()

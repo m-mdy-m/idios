@@ -1,5 +1,5 @@
 // Package protocol defines IDIOS's versioned, client-neutral workspace action contract.
-// The Web client, TUI command palette, and future adapters consume the same catalog and
+// The Web client and CLI consume the same catalog and
 // dispatch mutations through Application so workflow rules are never reimplemented in UI code.
 package protocol
 

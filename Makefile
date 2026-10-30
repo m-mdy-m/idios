@@ -7,32 +7,24 @@ PNPM ?= pnpm
 WEB_DIR = clients/web
 FMT_DIRS = cmd internal clients
 
-# cmd.exe cannot run "VAR=1 prog", so Windows exports the variables with set first.
 ifeq ($(OS),Windows_NT)
 RUN_GO = cmd /c set CGO_ENABLED=$(CGO_ENABLED)&& set GOOS=$(GOOS)&&
-else
-RUN_GO = env CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS)
-endif
-
-
-ifeq ($(OS),Windows_NT)
 PREFIX ?= $(if $(LOCALAPPDATA),$(LOCALAPPDATA)/Programs/IDIOS,$(USERPROFILE)/AppData/Local/Programs/IDIOS)
 GOOS ?= windows
 EXE_EXT ?= .exe
-VERSION ?= $(if $(GITHUB_REF_NAME),$(patsubst v%,%,$(GITHUB_REF_NAME)),$(if $(IDIOS_VERSION),$(IDIOS_VERSION),2.0.0))
+VERSION ?= $(if $(GITHUB_REF_NAME),$(patsubst v%,%,$(GITHUB_REF_NAME)),$(if $(IDIOS_VERSION),$(IDIOS_VERSION),2.1.0))
 else
+RUN_GO = env CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS)
 PREFIX ?= /usr/local
 GOOS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 EXE_EXT ?= $(if $(filter windows,$(GOOS)),.exe,)
-VERSION ?= $(shell tag=$$(git describe --tags --abbrev=0 2>/dev/null); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else printf '2.0.0'; fi)
+VERSION ?= $(shell tag=$$(git describe --tags --abbrev=0 2>/dev/null); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else printf '2.1.0'; fi)
 endif
-CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
-TUI_LDFLAGS = -s -w -X idios/internal/updater.Version=$(VERSION)
-CLI_BIN = $(BIN_DIR)/idios$(EXE_EXT)
-TUI_BIN = $(BIN_DIR)/idios-tui$(EXE_EXT)
-DEMO_BIN = $(BIN_DIR)/idios-tui-demo$(EXE_EXT)
 
-.PHONY: all build web-install web-build web-lint install install-user uninstall tui tui-demo test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
+CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
+CLI_BIN = $(BIN_DIR)/idios$(EXE_EXT)
+
+.PHONY: all build run-built web-install web-build web-lint install install-user uninstall test test-race test-cover vet fmt fmt-check check ci smoke pipeline-validate pipeline-list pipeline-check psx-check psx-fix tidy clean help
 
 all: ci
 
@@ -48,51 +40,47 @@ web-lint: web-install ## Type/lint-check the web UI source.
 
 ## Build
 ifeq ($(OS),Windows_NT)
-build: ## Build the bundled Web UI, CLI, clean TUI, and demo TUI using PowerShell on Windows.
+build: ## Build the bundled Web UI and single IDIOS executable using PowerShell on Windows.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Version "$(VERSION)"
+
+run-built: build ## Stop a stale local server, rebuild the embedded UI, and run the exact new Windows binary.
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/restart-built.ps1 -Version "$(VERSION)"
 else
-build: web-build ## Build the bundled Web UI, CLI, clean TUI, and demo TUI into $(BIN_DIR)/.
+build: web-build ## Build the bundled Web UI and single IDIOS executable into $(BIN_DIR)/.
 	mkdir -p $(BIN_DIR)
 	$(RUN_GO) $(GO) build -tags=embed_web -trimpath -ldflags='$(CLI_LDFLAGS)' -o $(CLI_BIN) ./cmd/idios
-	$(RUN_GO) $(GO) build -trimpath -ldflags='$(TUI_LDFLAGS)' -o $(TUI_BIN) ./cmd/idios-tui
-	$(RUN_GO) $(GO) build -trimpath -ldflags='$(TUI_LDFLAGS)' -o $(DEMO_BIN) ./cmd/idios-tui-demo
-endif
 
+run-built: build ## Rebuild and run the local Web workspace.
+	./$(CLI_BIN) serve --open
+endif
 
 ## Installation
 ifeq ($(OS),Windows_NT)
-install: build ## Install idios and idios-tui for the current Windows user (PREFIX can be overridden).
+install: build ## Install IDIOS for the current Windows user (PREFIX can be overridden).
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1 -SourceDir "$(BIN_DIR)" -InstallDir "$(PREFIX)"
 
 install-user: install ## Install for the current user without administrator privileges on Windows.
 
-uninstall: ## Remove IDIOS executables installed by make on Windows.
+uninstall: ## Remove IDIOS installed by make on Windows.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1 -InstallDir "$(PREFIX)" -Uninstall
 else
-install: build ## Install idios and idios-tui into $(DESTDIR)$(PREFIX)/bin (may require sudo).
+install: build ## Install the idios executable into $(DESTDIR)$(PREFIX)/bin (may require sudo).
 	install -d "$(DESTDIR)$(PREFIX)/bin"
 	install -m 0755 "$(CLI_BIN)" "$(DESTDIR)$(PREFIX)/bin/idios"
-	install -m 0755 "$(TUI_BIN)" "$(DESTDIR)$(PREFIX)/bin/idios-tui"
+	rm -f "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
 
 install-user: PREFIX = $(HOME)/.local
 install-user: install ## Install for the current user without administrator privileges.
 	@for profile in "$(HOME)/.profile" "$(HOME)/.zprofile"; do \
 	  if [ ! -f "$$profile" ] || ! grep -Fq '$$HOME/.local/bin' "$$profile"; then \
-	    printf '\n# IDIOS user-local binaries\nexport PATH="$$HOME/.local/bin:$$PATH"\n' >> "$$profile"; \
+	    printf '\n# IDIOS user-local executable\nexport PATH="$$HOME/.local/bin:$$PATH"\n' >> "$$profile"; \
 	  fi; \
 	done
 	@echo "Installed IDIOS in $(HOME)/.local/bin; reopen your terminal if PATH is not updated."
 
-uninstall: ## Remove the installed IDIOS executables from $(DESTDIR)$(PREFIX)/bin.
-	rm -f "$(DESTDIR)$(PREFIX)/bin/idios" "$(DESTDIR)$(PREFIX)/bin/idios-tui"
+uninstall: ## Remove the installed IDIOS executable from $(DESTDIR)$(PREFIX)/bin.
+	rm -f "$(DESTDIR)$(PREFIX)/bin/idios" "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
 endif
-
-## Interactive UI
-tui: ## Run the full-screen, clean TUI against the standard Engine database.
-	$(RUN_GO) $(GO) run ./cmd/idios-tui
-
-tui-demo: ## Run the demo TUI against its isolated, automatically seeded database.
-	$(RUN_GO) $(GO) run ./cmd/idios-tui-demo
 
 ## Quality
 fmt: ## Format Go source files in-place.
@@ -123,18 +111,23 @@ check: fmt-check test vet web-lint ## Run Go and web-source quality checks.
 
 ci: check test-race build smoke ## Run the full local CI gate (PSX is a separate optional target).
 
-# Windows runs the POSIX smoke script through Git Bash (the script handles MSYS paths via cygpath).
 ifeq ($(OS),Windows_NT)
 GIT_BASH ?= C:/Program Files/Git/bin/bash.exe
+smoke: build ## Smoke-test the CLI, embedded Web serving and SQLite workflow (Git Bash on Windows).
+	set IDIOS_BIN=$(CLI_BIN)&& "$(GIT_BASH)" ./scripts/smoke-platform.sh
+else
+smoke: build ## Smoke-test the CLI, embedded Web serving and SQLite workflow.
+	IDIOS_BIN=$(CLI_BIN) sh ./scripts/smoke-platform.sh
 endif
 
-ifeq ($(OS),Windows_NT)
-smoke: build ## Smoke-test all executables, clean/demo database isolation, and a cross-Repository SQLite workflow (run inside Git Bash on Windows).
-	set IDIOS_BIN=$(CLI_BIN)&& set IDIOS_TUI_BIN=$(TUI_BIN)&& set IDIOS_TUI_DEMO_BIN=$(DEMO_BIN)&& "$(GIT_BASH)" ./scripts/smoke-platform.sh
-else
-smoke: build ## Smoke-test all executables, clean/demo database isolation, and a cross-Repository SQLite workflow.
-	IDIOS_BIN=$(CLI_BIN) IDIOS_TUI_BIN=$(TUI_BIN) IDIOS_TUI_DEMO_BIN=$(DEMO_BIN) sh ./scripts/smoke-platform.sh
-endif
+pipeline-validate: ## Validate the task graph in the pinned shared pipeline.
+	python scripts/run-pipeline.py validate
+
+pipeline-list: ## List tasks provided by the pinned shared pipeline.
+	python scripts/run-pipeline.py list
+
+pipeline-check: ## Run the full task graph from pipeline.toml.
+	python scripts/run-pipeline.py run ci
 
 psx-check: ## Check repository structure and documentation with PSX v3.
 	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found. Install github.com/m-mdy-m/psx/cmd/psx or skip this optional check." >&2; exit 2; }

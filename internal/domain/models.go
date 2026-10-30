@@ -215,6 +215,12 @@ type ActivityEvent struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// ActivityDayCount is the all-history calendar aggregate, independent from the paged event feed.
+type ActivityDayCount struct {
+	Date       string `json:"date"`
+	EventCount int    `json:"event_count"`
+}
+
 type GraphNode struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
@@ -249,13 +255,13 @@ type GraphViewport struct {
 	Scale float64 `json:"scale"`
 }
 
-// GraphLayout is persisted in the local Engine database so node arrangement, graph mode,
-// and viewport survive browser refreshes and Engine restarts. Coordinates are kept per mode
-// so arranging the organic graph does not overwrite the flowchart arrangement.
+// GraphLayout is persisted in the local Engine database so node positions, custom shapes,
+// and viewport survive browser refreshes and Engine restarts.
 type GraphLayout struct {
 	Mode      string                              `json:"mode"`
 	Positions map[string]map[string]GraphPosition `json:"positions"`
 	Views     map[string]GraphViewport            `json:"views"`
+	Shapes    map[string]string                   `json:"shapes"`
 }
 
 func DefaultGraphLayout() GraphLayout {
@@ -263,6 +269,7 @@ func DefaultGraphLayout() GraphLayout {
 		Mode:      "organic",
 		Positions: map[string]map[string]GraphPosition{"organic": {}, "flowchart": {}},
 		Views:     map[string]GraphViewport{"organic": {X: 0, Y: 0, Scale: 1}, "flowchart": {X: 0, Y: 0, Scale: 1}},
+		Shapes:    map[string]string{},
 	}
 }
 

@@ -39,31 +39,7 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	ext := strings.ToLower(filepath.Ext(name))
-	contentType := mime.TypeByExtension(ext)
-	if contentType == "" {
-		switch ext {
-		case ".js", ".mjs":
-			contentType = "text/javascript; charset=utf-8"
-		case ".css":
-			contentType = "text/css; charset=utf-8"
-		case ".html":
-			contentType = "text/html; charset=utf-8"
-		case ".svg":
-			contentType = "image/svg+xml"
-		case ".json":
-			contentType = "application/json; charset=utf-8"
-		case ".woff2":
-			contentType = "font/woff2"
-		case ".woff":
-			contentType = "font/woff"
-		case ".ttf":
-			contentType = "font/ttf"
-		case ".wasm":
-			contentType = "application/wasm"
-		default:
-			contentType = "application/octet-stream"
-		}
-	}
+	contentType := staticContentType(ext)
 	w.Header().Set("Content-Type", contentType)
 	if name == "index.html" {
 		w.Header().Set("Cache-Control", "no-cache")
@@ -72,4 +48,34 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// staticContentType prefers a fixed table over mime.TypeByExtension. On Windows the standard
+// library reads the registry, where .js/.mjs are sometimes registered as text/plain; browsers
+// refuse to run module scripts and the PDF.js worker with that type, so the Reader would fail.
+func staticContentType(ext string) string {
+	switch ext {
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".woff2":
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
+	case ".ttf":
+		return "font/ttf"
+	case ".wasm":
+		return "application/wasm"
+	}
+	if contentType := mime.TypeByExtension(ext); contentType != "" {
+		return contentType
+	}
+	return "application/octet-stream"
 }

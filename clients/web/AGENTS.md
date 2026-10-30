@@ -1,18 +1,33 @@
 # IDIOS web implementation guide
 
-This folder is the boundary for front-end presentation work. Follow the architecture in the root
-`AGENTS.md` for Go and domain changes; do not modify Go, CLI, TUI, storage, or release packaging
-from a web-only task unless the task explicitly crosses that boundary.
+This folder owns the Web presentation layer. The repository's root `AGENTS.md` documents the Go
+application and domain boundaries. Web-only work must not change domain semantics or persistence.
 
 ## Architecture
 
 - React + TypeScript + Vite + Tailwind CSS v4.
-- Pages live in `src/pages/`; common layout in `src/components/layout/`; reusable UI primitives in
-  `src/components/ui/`; API calls in `src/lib/api.ts`; shared state in `src/store/`.
-- Type the wire contract in `src/types/idios.ts` and keep UI-only types separate from Go domain rules.
-- The browser is a presentation adapter. Every domain mutation must call the Go API, which uses the
-  existing `internal/application.Service` and SQLite store.
-- Do not add a Node.js server. The release UI is a static build embedded by the Go `clients/web` package.
+- `src/features/<feature>/` owns a route-level feature; each feature exposes its public API from
+  `index.ts`. Cross-feature code must import that public entry point rather than deep-importing
+  another feature's internal files.
+- `src/design-system/` owns small, composable visual primitives and their CSS Modules.
+- `src/app/layout/` owns the application shell and navigation; `src/lib/api.ts` owns the
+  HTTP client; `src/types/idios.ts` owns the wire contract; `src/store/` may cache UI state but is
+  not a second source of truth.
+- Feature-only styles live beside the feature. Shared base styles and legacy feature styles are
+  split into named files under `src/styles/`; do not add new page styles to a single global file.
+- Every domain mutation calls the Go API and uses the existing `internal/application.Service`.
+  No Node.js server is introduced; the production static bundle is embedded in the `idios` binary.
+
+## Change isolation
+
+- A feature may depend on `design-system`, `lib`, `types`, and documented public feature APIs.
+- Shared primitives must not import feature code.
+- Put stateful workflows in feature hooks/models, not monolithic page components.
+- Add regression tests for a changed workflow and maintain existing loading, empty, error, keyboard,
+  focus-visible, responsive, offline, and reduced-motion behavior.
+- Keep new components small and single-purpose. Do not create one-file wrappers with no contract or
+  behavior just to wrap a raw HTML tag; use `Box`, `Stack`, `Inline`, `Text`, `Tile`, and focused
+  domain components where their abstraction removes duplication or defines a reusable contract.
 
 ## Commands
 
@@ -20,7 +35,7 @@ Run from the repository root: `make web-install`, `make web-build`, and `make we
 
 ## Design
 
-Use IDIOS's dark-first graphite/blue visual identity, clear hierarchy, restrained motion, responsive
-layouts, visible focus, and helpful loading/empty/error states. Keep keyboard interaction and touch
-controls usable. Respect `prefers-reduced-motion`. Do not introduce external images or CDNs into the
-runtime UI; installed assets must work offline.
+Dark is the default. Use the low-gloss ceramic/tile palette, compact squared edges, restrained
+borders and motion, clear hierarchy, visible focus, responsive layouts, and accessible loading,
+empty, and error states. Respect `prefers-reduced-motion`. Do not introduce runtime images or CDNs;
+installed assets must work offline.

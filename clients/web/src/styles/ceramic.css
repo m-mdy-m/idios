@@ -1,0 +1,63 @@
+/* IDIOS ceramic material system: graphite tiles, cool metal and quiet blue light. */
+:root {
+  color-scheme: dark;
+  --bg: #090C11;
+  --bg-elevated: #0D1117;
+  --surface: #121821;
+  --surface-raised: #19222D;
+  --surface-hover: #222D3A;
+  --surface-subtle: #0D131B;
+  --text: #E9EEF6;
+  --text-soft: #C2CCD9;
+  --muted: #8996A7;
+  --muted-2: #657285;
+  --border: #273241;
+  --border-strong: #3B4A5E;
+  --accent: #B9D0EF;
+  --accent-strong: #83A9D8;
+  --accent-soft: rgb(132 174 226 / 14%);
+  --green: #73C99A;
+  --amber: #D9B66F;
+  --red: #E78383;
+  --violet: #B8A4E8;
+  --radius-sm: 3px;
+  --radius: 4px;
+  --radius-lg: 6px;
+  --shadow: 0 18px 54px rgb(0 0 0 / 34%);
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #E9EDF2;
+  --bg-elevated: #F3F5F8;
+  --surface: #F7F9FC;
+  --surface-raised: #E9EEF4;
+  --surface-hover: #DDE5EE;
+  --surface-subtle: #EEF2F7;
+  --text: #17202B;
+  --text-soft: #3E4A59;
+  --muted: #617083;
+  --muted-2: #7D8998;
+  --border: #CBD4DE;
+  --border-strong: #AAB8C8;
+  --accent: #3F6FAD;
+  --accent-strong: #315B91;
+  --accent-soft: rgb(63 111 173 / 11%);
+  --green: #247B54;
+  --amber: #946B20;
+  --red: #B84A4A;
+  --violet: #7256A8;
+  --shadow: 0 12px 34px rgb(20 35 55 / 9%);
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { font-family: 'Geist Variable', Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
+:where(button, a, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.page-stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; }
+.page-heading h1, .page-heading .title, h1 { letter-spacing: -.045em; }
+.page-description { max-width: 70ch; }
+.panel, .tile { box-shadow: none; }
+.table-wrap, .data-table-wrap { border: 1px solid var(--border); border-radius: 4px; overflow: auto; }
+.notice { border-radius: 3px; box-shadow: none; }
+code, pre, kbd, .mono { font-family: 'JetBrains Mono Variable', ui-monospace, monospace; }
+@media (max-width: 640px) { .page-heading { flex-direction: column; align-items: stretch; gap: 12px; } }

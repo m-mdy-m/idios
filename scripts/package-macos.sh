@@ -16,7 +16,6 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 mkdir -p "$WORK_DIR/root/bin" "$WORK_DIR/root/share/doc/idios" "$WORK_DIR/dmg"
 install -m 0755 dist/idios "$WORK_DIR/root/bin/idios"
-install -m 0755 dist/idios-tui "$WORK_DIR/root/bin/idios-tui"
 install -m 0644 README.md "$WORK_DIR/root/share/doc/idios/README.md"
 install -m 0644 LICENSE "$WORK_DIR/root/share/doc/idios/LICENSE"
 

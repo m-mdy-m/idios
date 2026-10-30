@@ -145,6 +145,12 @@ func (s *Store) resolveEntityID(ctx context.Context, typ, ref string) (string, e
 			return "", err
 		}
 		return str(row, "id"), nil
+	case "shelf_book":
+		row, err := s.p().must(ctx, fmt.Sprintf("Shelf book %q", ref), `SELECT id FROM shelf_books WHERE id=?`, ref)
+		if err != nil {
+			return "", err
+		}
+		return str(row, "id"), nil
 	default:
 		return "", fmt.Errorf("%w: unknown graph entity type %q", domain.ErrInvalid, typ)
 	}

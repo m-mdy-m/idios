@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"idios/internal/ports"
 	"strings"
 	"time"
 
@@ -10,11 +11,13 @@ import (
 	"idios/internal/validation"
 )
 
+type PlanService struct{ store ports.PlanStore }
+
 func validatePlanDate(value string) error {
 	return invalidInput(validation.ISODate("plan date", value, true))
 }
 
-func (s *Service) ListPlans(ctx context.Context, from, to string) ([]domain.Plan, error) {
+func (s *PlanService) ListPlans(ctx context.Context, from, to string) ([]domain.Plan, error) {
 	if strings.TrimSpace(from) != "" {
 		if err := invalidInput(validation.ISODate("start date", from, true)); err != nil {
 			return nil, err
@@ -70,7 +73,7 @@ func validatePlan(plan domain.Plan, taskTitles []string) ([]string, error) {
 	return clean, nil
 }
 
-func (s *Service) CreatePlan(ctx context.Context, plan domain.Plan, tasks []string) (domain.Plan, error) {
+func (s *PlanService) CreatePlan(ctx context.Context, plan domain.Plan, tasks []string) (domain.Plan, error) {
 	clean, err := validatePlan(plan, tasks)
 	if err != nil {
 		return domain.Plan{}, err
@@ -84,7 +87,7 @@ func (s *Service) CreatePlan(ctx context.Context, plan domain.Plan, tasks []stri
 	return s.store.CreatePlan(ctx, plan, clean)
 }
 
-func (s *Service) UpdatePlan(ctx context.Context, plan domain.Plan) (domain.Plan, error) {
+func (s *PlanService) UpdatePlan(ctx context.Context, plan domain.Plan) (domain.Plan, error) {
 	if err := invalidInput(validation.Text("plan reference", plan.ID, true, 256)); err != nil {
 		return domain.Plan{}, err
 	}
@@ -97,13 +100,13 @@ func (s *Service) UpdatePlan(ctx context.Context, plan domain.Plan) (domain.Plan
 	return s.store.UpdatePlan(ctx, plan)
 }
 
-func (s *Service) DeletePlan(ctx context.Context, id string) error {
+func (s *PlanService) DeletePlan(ctx context.Context, id string) error {
 	if err := invalidInput(validation.Text("plan reference", id, true, 256)); err != nil {
 		return err
 	}
 	return s.store.DeletePlan(ctx, strings.TrimSpace(id))
 }
-func (s *Service) AddPlanTask(ctx context.Context, planID, title string) (domain.PlanTask, error) {
+func (s *PlanService) AddPlanTask(ctx context.Context, planID, title string) (domain.PlanTask, error) {
 	if err := invalidInput(validation.Text("plan reference", planID, true, 256)); err != nil {
 		return domain.PlanTask{}, err
 	}
@@ -112,7 +115,7 @@ func (s *Service) AddPlanTask(ctx context.Context, planID, title string) (domain
 	}
 	return s.store.AddPlanTask(ctx, strings.TrimSpace(planID), strings.TrimSpace(title))
 }
-func (s *Service) SetPlanTaskDone(ctx context.Context, planID, taskID string, done bool) (domain.PlanTask, error) {
+func (s *PlanService) SetPlanTaskDone(ctx context.Context, planID, taskID string, done bool) (domain.PlanTask, error) {
 	for _, item := range []struct{ name, value string }{{"plan reference", planID}, {"task reference", taskID}} {
 		if err := invalidInput(validation.Text(item.name, item.value, true, 256)); err != nil {
 			return domain.PlanTask{}, err
@@ -124,7 +127,7 @@ func (s *Service) SetPlanTaskDone(ctx context.Context, planID, taskID string, do
 // CreatePlanReminder writes no duplicate notifications: SQLite atomically reserves one delivery
 // per local date and reminder period. A nil result means there were no plans or this period had
 // already been delivered for the date.
-func (s *Service) CreatePlanReminder(ctx context.Context, date, period string, now time.Time) (*domain.Notification, error) {
+func (s *PlanService) CreatePlanReminder(ctx context.Context, date, period string, now time.Time) (*domain.Notification, error) {
 	if err := validatePlanDate(date); err != nil {
 		return nil, err
 	}

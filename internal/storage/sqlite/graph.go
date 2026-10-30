@@ -64,6 +64,27 @@ func (s *Store) ListGraph(ctx context.Context) (domain.Graph, error) {
 		})
 	}
 
+	// Shelf books are first-class knowledge nodes. The filesystem scan is initiated by the
+	// Shelf use case; graph projection reads only the indexed metadata stored in SQLite.
+	shelfBooks, err := s.ListShelfBooks(ctx)
+	if err != nil {
+		return g, err
+	}
+	for _, book := range shelfBooks {
+		g.Nodes = append(g.Nodes, domain.GraphNode{ID: graphID("shelf_book", book.ID), Type: "shelf_book", Label: book.Title, Description: book.Summary, Status: book.ReadingStatus, Reference: "shelf:" + book.ID})
+		if book.RepositoryID != "" {
+			// Repositories are already projected above; add only the Shelf-to-Repository edge.
+			g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("shelf_book", book.ID), Target: graphID("repository", book.RepositoryID), Type: "has_companion_repository", Label: "companion repository"})
+		}
+	}
+	shelfRelations, err := s.ListShelfBookRelations(ctx, "")
+	if err != nil {
+		return g, err
+	}
+	for _, relation := range shelfRelations {
+		g.Edges = append(g.Edges, domain.GraphEdge{Source: graphID("shelf_book", relation.SourceBookID), Target: graphID("shelf_book", relation.TargetBookID), Type: relation.RelationType, Label: relation.RelationType})
+	}
+
 	concepts, err := s.ListConcepts(ctx)
 	if err != nil {
 		return g, err

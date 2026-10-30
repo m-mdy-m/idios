@@ -51,6 +51,85 @@ export interface ProjectRepository {
   updated_at: string
 }
 
+export interface ShelfBook {
+  id: string
+  title: string
+  summary?: string
+  directory_name: string
+  readme_file?: string
+  pdf_file?: string
+  available: boolean
+  reading_status: 'unread' | 'reading' | 'finished' | string
+  current_page: number
+  total_pages: number
+  repository_id?: string
+  repository_name?: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ShelfReadingSession {
+  id: string
+  book_id: string
+  book_title: string
+  started_at: string
+  ended_at: string
+  duration_seconds: number
+  start_page: number
+  end_page: number
+  created_at: string
+}
+
+export interface ShelfState {
+  root_path: string
+  configured: boolean
+  books: ShelfBook[]
+}
+
+export interface ShelfAnnotationRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ShelfAnnotation {
+  id: string
+  book_id: string
+  page: number
+  quote: string
+  note?: string
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple' | string
+  rectangles: ShelfAnnotationRect[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ShelfBookRelation {
+  id: string
+  source_book_id: string
+  source_book_title: string
+  target_book_id: string
+  target_book_title: string
+  relation_type: 'related_to' | 'prerequisite_for' | 'contrasts_with' | 'implements' | 'references' | 'uses' | string
+  created_at: string
+}
+
+export interface ShelfAsk {
+  id: string
+  book_id: string
+  book_title: string
+  question: string
+  context?: string
+  reason?: string
+  answer?: string
+  status: 'open' | 'answered' | string
+  created_at: string
+  updated_at: string
+  answered_at?: string
+}
+
 export interface NoteLabel {
   id: string
   name: string
@@ -122,6 +201,11 @@ export interface ActivityEvent {
   created_at: string
 }
 
+export interface ActivityDayCount {
+  date: string
+  event_count: number
+}
+
 export interface GraphNode {
   id: string
   type: string
@@ -138,7 +222,8 @@ export interface GraphEdge {
   label?: string
 }
 
-export type GraphLayoutMode = 'organic' | 'flowchart'
+export type GraphLayoutMode = 'organic'
+export type GraphNodeShape = 'circle' | 'square' | 'rounded' | 'diamond' | 'hexagon' | 'ellipse' | 'pill' | 'document'
 
 export interface GraphPoint { x: number; y: number }
 export interface GraphViewport { x: number; y: number; scale: number }
@@ -146,6 +231,7 @@ export interface GraphLayout {
   mode: GraphLayoutMode
   positions: Record<GraphLayoutMode, Record<string, GraphPoint>>
   views: Record<GraphLayoutMode, GraphViewport>
+  shapes: Record<string, GraphNodeShape>
 }
 
 export interface KnowledgeGraph {
@@ -294,13 +380,8 @@ export interface FeatureDefinition {
   description: string
   web_path?: string
   icon: string
-  tui_page?: string
-  tui_action?: string
   web_navigation?: boolean
   web_bottom_navigation?: boolean
-  tui_top_navigation?: boolean
-  tui_side_navigation?: boolean
-  tui_cycle_navigation?: boolean
   metric?: string
   web_group_order?: number
   web_order?: number
@@ -318,3 +399,4 @@ export interface MonitoringSnapshot {
   http: { requests_total: number; requests_failed: number; average_request_ms: number; last_request_at?: string }
   logs: { path: string; size_bytes: number; modified_at?: string }
 }
+

@@ -8,7 +8,7 @@ import (
 )
 
 func TestCreatePlanRequiresAtLeastOneTask(t *testing.T) {
-	service := &Service{}
+	service := &PlanService{}
 	_, err := service.CreatePlan(context.Background(), domain.Plan{
 		Title:    "Plan without tasks",
 		PlanDate: "2026-10-23",

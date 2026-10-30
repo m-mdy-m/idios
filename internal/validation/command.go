@@ -1,6 +1,6 @@
 // Package validation contains the shared, deterministic validation flow used before
 // protocol commands reach application use-cases. It deliberately depends on no IDIOS
-// layer so that CLI, TUI, HTTP and future adapters can share the same rules.
+// layer so that CLI, HTTP and future adapters can share the same rules.
 package validation
 
 import (

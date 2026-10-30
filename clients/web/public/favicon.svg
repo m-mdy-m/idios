@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+<title id="title">IDIOS mark</title>
+<defs>
+ <linearGradient id="metal" x1="18" y1="14" x2="111" y2="116" gradientUnits="userSpaceOnUse"><stop stop-color="#F0F5FC"/><stop offset=".52" stop-color="#B9CBE1"/><stop offset="1" stop-color="#71849C"/></linearGradient>
+ <linearGradient id="edge" x1="24" y1="19" x2="100" y2="110" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFFFF" stop-opacity=".9"/><stop offset="1" stop-color="#8FA6C2" stop-opacity=".62"/></linearGradient>
+</defs>
+<path d="M64 9 111 36v56l-47 27L17 92V36L64 9Zm0 13.8L29 43v42l35 20.2L99 85V43L64 22.8Z" fill="url(#metal)" fill-rule="evenodd"/>
+<path d="M64 30.5 88 44.4v26.8L64 85.1 40.2 71.3V57.5l11.8-6.8v13.7L64 71.7l12.2-7V51.2L64 44.1 52 51.1l-11.8-6.8L64 30.5Z" fill="url(#edge)"/>
+<path d="M64 44.1v27.6" fill="none" stroke="#0A1018" stroke-width="7.4" stroke-linecap="square"/>
+</svg>

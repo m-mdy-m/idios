@@ -25,6 +25,7 @@ func TestGraphLayoutPersistsAcrossStoreRestartAndKeepsModesSeparate(t *testing.T
 			"organic":   {X: 10, Y: -12, Scale: 1.1},
 			"flowchart": {X: -40, Y: 25, Scale: 1.4},
 		},
+		Shapes: map[string]string{"repository:one": "diamond", "issue:one": "circle"},
 	}
 	if err := store.SaveGraphLayout(ctx, layout); err != nil {
 		t.Fatal(err)
@@ -54,6 +55,9 @@ func TestGraphLayoutPersistsAcrossStoreRestartAndKeepsModesSeparate(t *testing.T
 	if view := got.Views["flowchart"]; view != (domain.GraphViewport{X: -40, Y: 25, Scale: 1.4}) {
 		t.Fatalf("flowchart viewport = %+v", view)
 	}
+	if got.Shapes["repository:one"] != "diamond" || got.Shapes["issue:one"] != "circle" {
+		t.Fatalf("custom node shapes = %#v", got.Shapes)
+	}
 }
 
 func TestGraphLayoutDefaultsWithoutSavedRow(t *testing.T) {
@@ -66,7 +70,7 @@ func TestGraphLayoutDefaultsWithoutSavedRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Mode != "organic" || got.Positions["organic"] == nil || got.Positions["flowchart"] == nil {
+	if got.Mode != "organic" || got.Positions["organic"] == nil || got.Positions["flowchart"] == nil || got.Shapes == nil {
 		t.Fatalf("unexpected graph layout defaults: %+v", got)
 	}
 }

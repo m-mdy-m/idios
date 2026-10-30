@@ -36,7 +36,7 @@ OutputBaseFilename=idios-{#AppTag}-{#AppArch}-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\idios-tui.exe
+UninstallDisplayIcon={app}\idios.exe
 CloseApplications=no
 RestartApplications=no
 
@@ -48,7 +48,6 @@ Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription:
 
 [Files]
 Source: "..\..\dist\idios.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\dist\idios-tui.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}\docs"; Flags: ignoreversion
 
@@ -60,7 +59,6 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 
 [Icons]
 Name: "{userprograms}\IDIOS\IDIOS CLI Help"; Filename: "{app}\idios.exe"; Parameters: "help"; Tasks: startmenu
-Name: "{userprograms}\IDIOS\IDIOS Terminal Workspace"; Filename: "{app}\idios-tui.exe"; Tasks: startmenu
 
 [Code]
 function NeedsAddPath(Param: string): Boolean;

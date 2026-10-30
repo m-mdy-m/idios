@@ -1,0 +1,1667 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func TestFreshRuntimeDefaultsToLocalFirst(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if got := manager.RuntimeConfig().Mode; got != ModeLocalFirst {
+		t.Fatalf("fresh runtime mode = %q, want %q for local-first Ollama setup", got, ModeLocalFirst)
+	}
+}
+
+func TestDiscussionAgentOrderGroupsSpecialistModelsAndKeepsChairLast(t *testing.T) {
+	ids := []string{"discussion-chair", "evidence-auditor", "reader", "translator", "steelman", "tutor", "scope-keeper"}
+	sort.SliceStable(ids, func(i, j int) bool { return discussionAgentPriority(ids[i]) < discussionAgentPriority(ids[j]) })
+	want := []string{"reader", "tutor", "steelman", "scope-keeper", "translator", "evidence-auditor", "discussion-chair"}
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("discussion order = %#v, want %#v", ids, want)
+	}
+}
+
+func TestEmptyModelCollectionsAreNonNil(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	if models := manager.Models(); models == nil {
+		t.Fatal("Models() returned nil; the API would encode the collection as JSON null")
+	}
+	if status := manager.Status(); status.Models == nil {
+		t.Fatal("Status().Models returned nil; clients require an empty JSON array")
+	}
+	models, err := manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("refresh with no configured providers failed: %v", err)
+	}
+	if models == nil {
+		t.Fatal("RefreshModels() returned nil; the API would encode the collection as JSON null")
+	}
+	if cached := manager.Models(); cached == nil {
+		t.Fatal("cached Models() returned nil after refresh")
+	}
+}
+
+func TestOpenAICompatibleLocalWithoutAPIKey(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"local-model","name":"Local model"}]}`))
+		case "/v1/chat/completions":
+			_, _ = w.Write([]byte(`{"model":"local-model","choices":[{"message":{"content":"hello from local"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	provider, err := newProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL + "/v1", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := provider.ListModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "local-model" {
+		t.Fatalf("unexpected model list: %#v", models)
+	}
+	response, err := provider.Generate(context.Background(), GenerateRequest{Model: "local-model", Messages: []Message{{Role: "user", Content: "hello"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Content != "hello from local" {
+		t.Fatalf("content = %q", response.Content)
+	}
+	if gotAuth != "" {
+		t.Fatalf("unexpected auth header for keyless local provider: %q", gotAuth)
+	}
+}
+
+func TestOpenAIModelCatalogueToleratesVendorSpecificMetadata(t *testing.T) {
+	payload := []byte(`{
+		"object":"list",
+		"data":[
+			{"id":"cc/claude-sonnet-4-5","object":"model","owned_by":"anthropic","capabilities":["text_generation","vision"],"reasoning":{"enabled":true},"supported_parameters":{"reasoning_effort":true},"context_length":"200000"},
+			{"id":"cx/deepseek-chat","capabilities":{"reasoning":true,"vision":false},"context_window":65536}
+		]
+	}`)
+	models, err := parseOpenAIModelCatalogue(payload, "nine-router")
+	if err != nil {
+		t.Fatalf("parseOpenAIModelCatalogue returned error: %v", err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("discovered %d models, want 2: %#v", len(models), models)
+	}
+	if models[0].ID != "cc/claude-sonnet-4-5" || models[0].ProviderID != "nine-router" {
+		t.Fatalf("unexpected first model identity: %#v", models[0])
+	}
+	if !models[0].Capabilities["vision"] || models[0].ContextSize != 200000 {
+		t.Fatalf("vendor-specific metadata was not normalized: %#v", models[0])
+	}
+	if len(models[0].SupportedParameters) != 1 || models[0].SupportedParameters[0] != "reasoning_effort" {
+		t.Fatalf("supported parameters were not normalized: %#v", models[0].SupportedParameters)
+	}
+	if models[0].Reasoning != nil {
+		t.Fatalf("non-boolean reasoning field must remain unknown, got %v", *models[0].Reasoning)
+	}
+	if models[1].Capabilities["reasoning"] != true || models[1].Capabilities["vision"] != false || models[1].ContextSize != 65536 {
+		t.Fatalf("standard metadata was not preserved: %#v", models[1])
+	}
+}
+
+func TestOpenAIModelCatalogueAcceptsModelsAliasAndEmptyData(t *testing.T) {
+	models, err := parseOpenAIModelCatalogue([]byte(`{"models":[{"id":"local-model"}]}`), "compatible")
+	if err != nil || len(models) != 1 || models[0].ID != "local-model" {
+		t.Fatalf("models alias parse = %#v, %v", models, err)
+	}
+	models, err = parseOpenAIModelCatalogue([]byte(`{"object":"list","data":[]}`), "compatible")
+	if err != nil || models == nil || len(models) != 0 {
+		t.Fatalf("empty data catalogue = %#v, %v; want a non-nil empty slice", models, err)
+	}
+}
+
+func TestOpenAIModelCatalogueExplainsUnexpectedShape(t *testing.T) {
+	_, err := parseOpenAIModelCatalogue([]byte(`{"status":"ok","items":[]}`), "compatible")
+	if err == nil {
+		t.Fatal("expected an actionable error when the provider returns no data/models array")
+	}
+	if !strings.Contains(err.Error(), "GET /v1/models") {
+		t.Fatalf("error should include endpoint troubleshooting guidance, got: %v", err)
+	}
+}
+
+func TestRuntimeBoundsDirectGenerationConcurrency(t *testing.T) {
+	var active atomic.Int32
+	var peak atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := active.Add(1)
+		for observed := peak.Load(); current > observed && !peak.CompareAndSwap(observed, current); observed = peak.Load() {
+		}
+		time.Sleep(35 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"test-model","choices":[{"message":{"content":"ok"}}]}`))
+		active.Add(-1)
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL + "/v1", DefaultModel: "test-model", Enabled: true, MaxConcurrent: 4}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "local/test-model"
+	config.MaxConcurrent = 1
+	config.MaxQueued = 4
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+
+	const requestCount = 4
+	var wait sync.WaitGroup
+	errorsOut := make(chan error, requestCount)
+	for i := 0; i < requestCount; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, generateErr := manager.Generate(context.Background(), GenerateRequest{Messages: []Message{{Role: "user", Content: "hello"}}})
+			errorsOut <- generateErr
+		}()
+	}
+	wait.Wait()
+	close(errorsOut)
+	for generateErr := range errorsOut {
+		if generateErr != nil {
+			t.Fatalf("generation unexpectedly failed: %v", generateErr)
+		}
+	}
+	if got := peak.Load(); got != 1 {
+		t.Fatalf("peak simultaneous provider requests = %d, want 1", got)
+	}
+}
+
+func TestOfflineOnlyNeverCallsCloudProvider(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: "test-secret", DefaultModel: "test/model", Enabled: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeOfflineOnly
+	config.DefaultModel = "cloud/test/model"
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.Generate(context.Background(), GenerateRequest{Messages: []Message{{Role: "user", Content: "do not go online"}}})
+	if err == nil {
+		t.Fatal("expected Offline-only policy to reject cloud-only configuration")
+	}
+	var runtimeErr *Error
+	if !errors.As(err, &runtimeErr) || runtimeErr.Code != "offline_policy_blocked" {
+		t.Fatalf("error = %#v, want offline_policy_blocked", err)
+	}
+}
+
+func TestProviderSecretsAreNotReturnedAndPersistPrivate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config", "ai-runtime.json")
+	manager, err := NewManager(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: "super-secret-key", DefaultModel: "test/model", Enabled: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := json.Marshal(manager.Providers())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(public), "super-secret-key") {
+		t.Fatalf("secret leaked in public provider list: %s", public)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "super-secret-key") {
+		t.Fatal("expected secret to be persisted in the protected runtime state")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("config mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestProviderValidationRejectsRemoteHTTPAndURLCredentials(t *testing.T) {
+	cases := []ProviderConfig{
+		{ID: "remote-http", Name: "Remote HTTP", Type: ProviderOpenAI, BaseURL: "http://example.com/v1", Enabled: true},
+		{ID: "credentials", Name: "Credentials", Type: ProviderOpenAI, BaseURL: "https://user:password@example.com/v1", Enabled: true},
+		{ID: "query", Name: "Query", Type: ProviderOpenAI, BaseURL: "https://example.com/v1?api_key=secret", Enabled: true},
+		{ID: "cloud-private", Name: "Cloud Private", Type: ProviderOpenAI, BaseURL: "http://192.168.1.5:1234/v1", Enabled: true},
+	}
+	for _, cfg := range cases {
+		t.Run(cfg.ID, func(t *testing.T) {
+			if err := ValidateProviderConfig(cfg); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestOllamaNativeAPIWithoutAPIKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"qwen2.5:3b","model":"qwen2.5:3b","digest":"sha256:fixture","size":1234,"modified_at":"2026-10-24T10:00:00Z","details":{"format":"gguf","family":"qwen2","families":["qwen2"],"parameter_size":"3B","quantization_level":"Q4_K_M"}}]}`))
+		case "/api/chat":
+			_, _ = w.Write([]byte(`{"model":"qwen2.5:3b","message":{"role":"assistant","content":"local ollama reply"},"done":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	provider, err := newProvider(ProviderConfig{ID: "ollama", Name: "Ollama", Type: ProviderOllama, BaseURL: server.URL, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := provider.ListModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "qwen2.5:3b" {
+		t.Fatalf("unexpected models: %#v", models)
+	}
+	if models[0].Family != "qwen2" || models[0].ParameterSize != "3B" || models[0].QuantizationLevel != "Q4_K_M" || models[0].SizeBytes != 1234 || models[0].Format != "gguf" || models[0].Metadata["digest"] != "sha256:fixture" {
+		t.Fatalf("Ollama model metadata was not preserved: %#v", models[0])
+	}
+	response, err := provider.Generate(context.Background(), GenerateRequest{Model: "qwen2.5:3b", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Content != "local ollama reply" {
+		t.Fatalf("content = %q", response.Content)
+	}
+}
+
+func TestTaskSchedulerCompletesChatTask(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"test-model","choices":[{"message":{"content":"task completed"}}]}`))
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := manager.RuntimeConfig()
+	cfg.Mode = ModeLocalFirst
+	cfg.DefaultModel = "local/test-model"
+	if err := manager.UpdateRuntimeConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	task, err := manager.StartChatTask(GenerateRequest{Messages: []Message{{Role: "user", Content: "hello"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := manager.Task(task.ID)
+		if ok && current.Status == TaskCompleted {
+			if current.Result == nil || current.Result.Content != "task completed" {
+				t.Fatalf("unexpected task result: %#v", current)
+			}
+			return
+		}
+		if ok && current.Status == TaskFailed {
+			t.Fatalf("task failed: %#v", current.Error)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("task did not complete before the test deadline")
+}
+
+func TestBookDiscussionEnforcesAgentTaskPermissions(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.UpsertAgent(AgentDefinition{ID: "chat-only", Name: "Chat only", Role: "general assistant", Instructions: "Answer general questions.", Tasks: []string{"chat"}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.runDiscussion(context.Background(), DiscussionRequest{BookTitle: "Example", Question: "Discuss this book", AgentIDs: []string{"chat-only"}}, "")
+	var runtimeErr *Error
+	if !errors.As(err, &runtimeErr) || runtimeErr.Code != "invalid_request" || !strings.Contains(runtimeErr.Message, "not permitted") {
+		t.Fatalf("discussion permission error = %#v, want explicit task-permission rejection", err)
+	}
+}
+
+func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"test-model","choices":[{"message":{"content":"## Synthesis\nThe passage supports a cautious reading. [source:page-1]\n\n## Material disagreements\nThe agents differ on whether the example is central or illustrative.\n\n## Evidence gaps and uncertainty\nThe passage does not establish the author's wider intent."}}]}`))
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true, MaxConcurrent: 2}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "local/test-model"
+	config.MaxConcurrent = 2
+	config.MaxAgents = 2
+	config.MaxDiscussionRounds = 2
+	config.TaskModels["book_discussion"] = "local/test-model"
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	task, err := manager.StartDiscussion(DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "What is the point?", Parallel: true, Rounds: 2,
+		AgentIDs: []string{"reader", "tutor"},
+		Context:  []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "An illustrative passage from the book."}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := manager.Task(task.ID)
+		if ok && current.Status == TaskCompleted {
+			if current.Workflow == nil {
+				t.Fatal("completed discussion has no workflow result")
+			}
+			if got := len(current.Workflow.Contributions); got != 4 {
+				t.Fatalf("contribution count = %d, want 4 across two rounds", got)
+			}
+			if current.Workflow.Contributions[0].Round != 1 || current.Workflow.Contributions[2].Round != 2 {
+				t.Fatalf("round labels incorrect: %#v", current.Workflow.Contributions)
+			}
+			if len(current.Workflow.Disagreements) != 1 || !strings.Contains(current.Workflow.Disagreements[0], "differ") {
+				t.Fatalf("material disagreements were not extracted: %#v", current.Workflow.Disagreements)
+			}
+			if len(current.Workflow.Contributions[0].SourceIDs) != 1 || current.Workflow.Contributions[0].SourceIDs[0] != "page-1" {
+				t.Fatalf("known source marker was not validated: %#v", current.Workflow.Contributions[0])
+			}
+			if got := calls.Load(); got != 5 {
+				t.Fatalf("provider call count = %d, want four agent calls plus synthesis", got)
+			}
+			return
+		}
+		if ok && current.Status == TaskFailed {
+			t.Fatalf("discussion failed: %#v", current.Error)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("discussion did not complete before the test deadline")
+}
+
+func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *testing.T) {
+	var calls atomic.Int32
+	var mu sync.Mutex
+	var captured []struct {
+		Messages  []Message `json:"messages"`
+		MaxTokens int       `json:"max_tokens"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var request struct {
+			Messages  []Message `json:"messages"`
+			MaxTokens int       `json:"max_tokens"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil {
+			t.Errorf("decode completion request: %v", err)
+		}
+		mu.Lock()
+		captured = append(captured, request)
+		mu.Unlock()
+		call := calls.Add(1)
+		content := "Reader found one central claim supported by the passage. [source:page-1]"
+		if call == 2 {
+			content = "Tutor builds on Reader's claim: the example shows how the principle works. [source:page-1]"
+		} else if call > 2 {
+			content = "Unexpected extra call."
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "local/test-model"
+	// Keep book_discussion unrouted to verify agents inherit the configured default model.
+	delete(config.TaskModels, "book_discussion")
+	config.MaxAgents = 3
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "What is the key claim?",
+		AgentIDs: []string{"reader", "tutor"}, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "The passage presents a principle and a short example."}},
+	}, "")
+	if err != nil {
+		t.Fatalf("sequential discussion failed: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("provider calls = %d, want two sequential agent calls and no synthesis", got)
+	}
+	if len(result.Contributions) != 2 || result.Synthesis != "" {
+		t.Fatalf("unexpected workflow result: %#v", result)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(captured) != 2 {
+		t.Fatalf("captured requests = %d, want 2", len(captured))
+	}
+	if captured[1].MaxTokens > 220 || captured[1].MaxTokens <= 0 {
+		t.Fatalf("discussion max_tokens = %d, want 1..220", captured[1].MaxTokens)
+	}
+	secondPrompt := ""
+	for _, message := range captured[1].Messages {
+		secondPrompt += message.Content + "\n"
+	}
+	if !strings.Contains(secondPrompt, "Reader found one central claim") {
+		t.Fatalf("second agent did not receive the first agent's turn: %s", secondPrompt)
+	}
+}
+
+func TestBookDiscussionChairSpeaksLastAndLaterRoundsSeeFullHistory(t *testing.T) {
+	var calls atomic.Int32
+	var mu sync.Mutex
+	var captured []struct {
+		Messages []Message `json:"messages"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var request struct {
+			Messages []Message `json:"messages"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil {
+			t.Errorf("decode provider request: %v", err)
+		}
+		call := calls.Add(1)
+		mu.Lock()
+		captured = append(captured, request)
+		mu.Unlock()
+		content := fmt.Sprintf("Agent turn %d refines the supported interpretation. [source:page-1]", call)
+		if call == 1 {
+			content = "Reader round one central claim is narrowly supported. [source:page-1]"
+		}
+		if call == 2 {
+			content = "Tutor responds to Reader's central claim and narrows its scope. [source:page-1]"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true, MaxConcurrent: 2}, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := manager.RuntimeConfig()
+	cfg.Mode = ModeLocalFirst
+	cfg.DefaultModel = "local/test-model"
+	cfg.MaxAgents = 3
+	cfg.MaxDiscussionRounds = 2
+	if err := manager.UpdateRuntimeConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "Test continuity", AgentIDs: []string{"reader", "discussion-chair", "tutor"}, Rounds: 2,
+		SkipSynthesis: true, Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "A narrow claim from the current page."}},
+	}, "")
+	if err != nil {
+		t.Fatalf("run discussion: %v", err)
+	}
+	if len(result.Contributions) != 6 {
+		t.Fatalf("contributions = %d, want six turns across two rounds", len(result.Contributions))
+	}
+	if result.Contributions[2].AgentID != "discussion-chair" || result.Contributions[5].AgentID != "discussion-chair" {
+		t.Fatalf("chair did not speak last in each round: order = %q, %q", result.Contributions[2].AgentID, result.Contributions[5].AgentID)
+	}
+	if result.Contributions[3].Round != 2 {
+		t.Fatalf("fourth contribution round = %d, want 2", result.Contributions[3].Round)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(captured) != 6 {
+		t.Fatalf("captured requests = %d, want 6", len(captured))
+	}
+	var roundTwoReaderPrompt strings.Builder
+	for _, message := range captured[3].Messages {
+		roundTwoReaderPrompt.WriteString(message.Content)
+		roundTwoReaderPrompt.WriteByte('\n')
+	}
+	if !strings.Contains(roundTwoReaderPrompt.String(), "Reader round one central claim") || !strings.Contains(roundTwoReaderPrompt.String(), "Tutor responds to Reader's central claim") {
+		t.Fatalf("round two did not receive the complete prior-round history: %s", roundTwoReaderPrompt.String())
+	}
+}
+
+func TestDiscussionValidationCanRetainSafeCompleteAnswerWithMissingCitationWarning(t *testing.T) {
+	allowed := map[string]bool{"page-20": true}
+	passages := []ContextPassage{{ID: "page-20", Page: 20, Text: "The passage discusses a theory of justice through a hypothetical social contract."}}
+	answer := "The passage discusses justice through a hypothetical social contract, though one page is not enough to assess the whole book."
+	if problem := validateDiscussionOutput(answer, allowed, passages, false); problem != missingCitationProblem {
+		t.Fatalf("strict validation problem = %q, want missing-citation warning", problem)
+	}
+	if problem := validateDiscussionOutputWithoutCitationRequirement(answer, allowed, passages, false); problem != "" {
+		t.Fatalf("lenient-after-repair validation rejected otherwise safe answer: %s", problem)
+	}
+	for _, unsafe := range []string{
+		"The passage discusses justice. [source:invented-page]",
+		"Chapter IX resolves the argument. [source:page-20]",
+		"Reading the pa",
+	} {
+		if problem := validateDiscussionOutputWithoutCitationRequirement(unsafe, allowed, passages, false); problem == "" {
+			t.Errorf("lenient validation incorrectly accepted unsafe answer: %q", unsafe)
+		}
+	}
+}
+
+func TestBookDiscussionKeepsRepairedUncitedContributionWithWarning(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		content := "Reading the pa"
+		if call == 2 {
+			content = "The passage discusses justice through a hypothetical social contract, though one page is not enough to assess the whole book."
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true, MaxConcurrent: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := manager.RuntimeConfig()
+	cfg.Mode = ModeLocalFirst
+	cfg.DefaultModel = "local/test-model"
+	cfg.TaskModels["book_discussion"] = "local/test-model"
+	cfg.MaxAgents = 1
+	cfg.MaxDiscussionRounds = 1
+	if err := manager.UpdateRuntimeConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	task, err := manager.StartDiscussion(DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "What do you think about this book?", AgentIDs: []string{"tutor"},
+		Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "page-20", BookID: "book-1", Page: 20, Text: "The passage discusses a theory of justice through a hypothetical social contract."}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := manager.Task(task.ID)
+		if ok && current.Status == TaskCompleted {
+			if current.Workflow == nil || len(current.Workflow.Contributions) != 1 {
+				t.Fatalf("unexpected workflow: %#v", current.Workflow)
+			}
+			got := current.Workflow.Contributions[0]
+			if got.Status != "completed" {
+				t.Fatalf("repaired contribution status = %q, want completed: %#v", got.Status, got.Error)
+			}
+			if len(got.Warnings) != 1 || !strings.Contains(got.Warnings[0], "lacks an exact source marker") {
+				t.Fatalf("missing transparent citation warning: %#v", got.Warnings)
+			}
+			if got.Content == "" || calls.Load() != 2 {
+				t.Fatalf("content/call count not preserved: %#v, calls=%d", got, calls.Load())
+			}
+			return
+		}
+		if ok && current.Status == TaskFailed {
+			t.Fatalf("discussion failed: %#v", current.Error)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("discussion did not complete before the test deadline")
+}
+
+func TestIncompleteDiscussionResponseDetectsDanglingListItem(t *testing.T) {
+	if !incompleteDiscussionResponse("Claim: fairness matters.\n1. First item\n3.") {
+		t.Fatal("expected a dangling numbered item to be treated as incomplete")
+	}
+	if incompleteDiscussionResponse("Claim: fairness matters.\nEvidence: [source:page-1] supports this.\nReading: This is a limited interpretation.") {
+		t.Fatal("complete three-line reading should not be treated as incomplete")
+	}
+}
+
+func TestDiscussionValidationAllowsNonEvidencePeerCritiqueWithoutCitation(t *testing.T) {
+	allowed := map[string]bool{"page-20": true}
+	for _, content := range []string{
+		"I cannot verify that connection from the supplied passage, so I would not treat it as established.",
+		"Orion's inference is too broad because a mention does not establish central emphasis.",
+		"I see no grounded connection to the supplied earlier concepts, so this point remains open.",
+	} {
+		if problem := discussionResponseProblem(content, allowed, true, false); problem != "" {
+			t.Errorf("non-source claim was unexpectedly rejected: %q -> %s", content, problem)
+		}
+	}
+}
+
+func TestDiscussionValidationStillRequiresCitationForTextualClaims(t *testing.T) {
+	allowed := map[string]bool{"page-20": true}
+	if problem := discussionResponseProblem("The passage emphasizes autonomy as its central value.", allowed, true, false); problem == "" {
+		t.Fatal("specific claim about the passage was accepted without a source marker")
+	}
+	if problem := discussionResponseProblem("The passage emphasizes autonomy as its central value. [source:page-20]", allowed, true, false); problem != "" {
+		t.Fatalf("valid source marker was rejected: %s", problem)
+	}
+}
+
+func TestDiscussionValidationRejectsUnseenSectionAndChapterNameDropping(t *testing.T) {
+	allowed := map[string]bool{"page-20": true}
+	passages := []ContextPassage{{ID: "page-20", Page: 20, Text: "The passage discusses social contract theory and principles of justice."}}
+	for _, content := range []string{
+		"The best place to read next is §§66–67 on moral worth. [source:page-20]",
+		"Chapter IX resolves this point. [source:page-20]",
+		"Later chapters make the theory clearer. [source:page-20]",
+	} {
+		if problem := validateDiscussionOutput(content, allowed, passages, false); problem == "" {
+			t.Errorf("unsupported wider-book reference was accepted: %q", content)
+		}
+	}
+	grounded := []ContextPassage{{ID: "page-20", Page: 20, Text: "The author cross-references §§66–67 and Chapter IX in this passage."}}
+	if problem := validateDiscussionOutput("The page mentions §§66–67 and Chapter IX. [source:page-20]", allowed, grounded, false); problem != "" {
+		t.Fatalf("explicitly supplied section/chapter reference was rejected: %s", problem)
+	}
+}
+
+func TestIncompleteDiscussionResponseDetectsTruncatedTail(t *testing.T) {
+	if !incompleteDiscussionResponse("Reading the pa") {
+		t.Fatal("a stream-truncated phrase should be treated as unfinished")
+	}
+	if incompleteDiscussionResponse("The passage gives a limited account of justice. [source:page-20]") {
+		t.Fatal("complete sentence with a source marker was treated as unfinished")
+	}
+}
+
+func TestDiscussionRepairInstructionDoesNotRequireOpeningSpeakerToAddressPeer(t *testing.T) {
+	markers := map[string]bool{"page-20": true, "annotation-abc": true}
+	opening := discussionRepairInstruction("the answer is empty", markers, false, false)
+	if !strings.Contains(opening, "opening contribution") || !strings.Contains(opening, "[source:page-20]") || !strings.Contains(opening, "[source:annotation-abc]") {
+		t.Fatalf("repair instruction doesn't describe opening turn or exact markers: %s", opening)
+	}
+	if strings.Contains(opening, "Address one actually completed peer") {
+		t.Fatal("opening repair incorrectly requires a peer that does not exist")
+	}
+	peer := discussionRepairInstruction("missing citation", markers, false, true)
+	if !strings.Contains(peer, "Address one actually completed peer") {
+		t.Fatal("repair should address an actual peer after one completed turn")
+	}
+}
+
+func TestDiscussionReviewExcludesFailedEmptyTurns(t *testing.T) {
+	messages := []Message{{Role: "system", Content: "base"}, {Role: "user", Content: "page"}}
+	turns := []AgentContribution{
+		{AgentID: "tutor", AgentName: "Tutor", Status: "failed", Error: &Error{Code: "rejected", Message: "empty"}},
+		{AgentID: "reader", AgentName: "Reader", Status: "completed", Content: "The passage makes a narrow claim.", Warnings: []string{"This contribution lacks an exact source marker; treat its textual claim as unverified."}},
+	}
+	got := discussionReviewMessages(messages, AgentDefinition{Name: "Reviewer"}, 1, turns, false)
+	joined := strings.Join([]string{got[len(got)-1].Content}, "\n")
+	if strings.Contains(joined, "Agent Tutor") || !strings.Contains(joined, "Agent Reader") {
+		t.Fatalf("review context should include valid peer only, got: %s", joined)
+	}
+	if !strings.Contains(joined, "treat its textual claim as unverified") {
+		t.Fatalf("peer review did not preserve the contribution's evidence warning: %s", joined)
+	}
+}
+
+func TestBookDiscussionDefersReaderQuestionUntilPeersReviewIt(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": "The passage leaves one ambiguity about fairness. [source:page-1]\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"}}}})
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL, DefaultModel: "test-model", Enabled: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "local/test-model"
+	config.TaskModels["book_discussion"] = "local/test-model"
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "Discuss this passage",
+		AgentIDs: []string{"discussion-chair", "tutor", "reader"}, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "A rule about fair institutions."}},
+	}, "")
+	if err != nil {
+		t.Fatalf("discussion with reader question failed: %v", err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("provider calls = %d, want all three agents to review the question before asking the reader", got)
+	}
+	if len(result.Contributions) != 3 {
+		t.Fatalf("contributions = %d, want all three agents to speak", len(result.Contributions))
+	}
+	if result.Contributions[0].Status != "completed" || agentQuestionMarker.MatchString(result.Contributions[0].Content) || !strings.Contains(result.Contributions[0].Content, "Issue for peer review") {
+		t.Fatalf("first contribution should defer its reader question for peer review: %#v", result.Contributions[0])
+	}
+	if result.Contributions[1].Status != "completed" || agentQuestionMarker.MatchString(result.Contributions[1].Content) {
+		t.Fatalf("second agent should review without interrupting the reader: %#v", result.Contributions[1])
+	}
+	if result.Contributions[2].Status != "completed" || !agentQuestionMarker.MatchString(result.Contributions[2].Content) {
+		t.Fatalf("final chair should ask the consolidated reader question: %#v", result.Contributions[2])
+	}
+	if len(result.Warnings) == 0 || !strings.Contains(result.Warnings[len(result.Warnings)-1], "paused for the reader") {
+		t.Fatalf("missing reader pause notice after the final chair turn: %#v", result.Warnings)
+	}
+}
+
+func TestExistingBuiltinAgentsReceiveCompactDiscussionSkillDefaultsOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ai-runtime.json")
+	initial := `{"runtime":{"mode":"local-first","max_concurrent":1,"max_queued":4,"workflow_timeout_seconds":60,"max_agents":3,"max_discussion_rounds":1},"providers":[],"agents":[{"id":"reader","name":"Reader","role":"close reader","instructions":"Keep this custom instruction.","tasks":["book_discussion"],"enabled":true}]}`
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := NewManager(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	agents := manager.Agents()
+	if len(agents) != len(builtinAgents()) {
+		t.Fatalf("agent count = %d, want every built-in profile plus no duplicate reader; built-ins=%d", len(agents), len(builtinAgents()))
+	}
+	var reader *AgentDefinition
+	present := map[string]bool{}
+	for i := range agents {
+		present[agents[i].ID] = true
+		if agents[i].ID == "reader" {
+			reader = &agents[i]
+		}
+	}
+	if reader == nil {
+		t.Fatal("existing reader agent was lost during migration")
+	}
+	if reader.Instructions != "Keep this custom instruction." {
+		t.Fatalf("migration overwrote the user's custom instruction: %q", reader.Instructions)
+	}
+	if len(reader.SkillIDs) == 0 || !strings.Contains(strings.Join(reader.SkillIDs, ","), "sequential-agent-dialogue") {
+		t.Fatalf("reader defaults did not get compact dialogue skills: %#v", reader.SkillIDs)
+	}
+	if !strings.Contains(reader.SkillInstructions, "exact supplied evidence") {
+		t.Fatalf("compact role skill instructions were not attached: %q", reader.SkillInstructions)
+	}
+	for _, id := range []string{"concept-connector", "socratic-questioner", "counterexample-tester", "context-keeper", "example-builder", "discussion-chair", "evidence-auditor", "ambiguity-scout", "steelman", "scope-keeper", "code-cartographer", "signal-scout"} {
+		if !present[id] {
+			t.Errorf("new built-in discussion persona %q was not seeded", id)
+		}
+	}
+	if !manager.state.AgentSkillsInitialized {
+		t.Fatal("agent skill-default migration flag was not persisted")
+	}
+	if !manager.state.BuiltinDiscussionAgentsInitialized {
+		t.Fatal("new discussion-agent migration flag was not persisted")
+	}
+	if !manager.state.BuiltinRoundtableV2Initialized {
+		t.Fatal("round-table v2 profile migration flag was not persisted")
+	}
+}
+
+func TestBuiltinRoleProfileV3MigrationRefreshesDefaultsAndPreservesUserEdits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ai-runtime.json")
+	initial := `{"runtime":{"mode":"local-first","max_concurrent":1,"max_queued":4,"workflow_timeout_seconds":60,"max_agents":5,"max_discussion_rounds":5},"providers":[],"agent_skills_initialized":true,"builtin_discussion_agents_initialized":true,"builtin_roundtable_v2_initialized":true,"agents":[{"id":"reader","name":"Reader","description":"Finds one central claim and its strongest textual support.","role":"close reader","instructions":"State the main claim and one exact piece of evidence. Separate text from interpretation. Flag at most one useful ambiguity. Cite only supplied [source:ID] markers.","tasks":["reading_analysis","book_discussion","explanation"],"skill_ids":["core-reliability","active-reading"],"enabled":true},{"id":"tutor","name":"My custom Tutor","description":"User-authored profile","role":"personal tutor","instructions":"Keep this custom instruction exactly.","tasks":["book_discussion","explanation"],"skill_ids":["learning-coach"],"enabled":true},{"id":"evidence-auditor","name":"Vera · Evidence Auditor","description":"Checks whether claims are actually supported by the page and supplied references.","role":"evidence auditor","instructions":"Audit one named speaker's exact claim. Separate what the page says from inference. Never invent quotes, citations, page references, or claims about unseen chapters.","tasks":["book_discussion","review","reading_analysis"],"enabled":true}]}`
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := NewManager(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	var reader, tutor, auditor *AgentDefinition
+	present := map[string]bool{}
+	for _, agent := range manager.Agents() {
+		present[agent.ID] = true
+		switch agent.ID {
+		case "reader":
+			copy := agent
+			reader = &copy
+		case "tutor":
+			copy := agent
+			tutor = &copy
+		case "evidence-auditor":
+			copy := agent
+			auditor = &copy
+		}
+	}
+	if reader == nil || tutor == nil || auditor == nil {
+		t.Fatal("migration lost built-in agents")
+	}
+	if reader.Name != "Orion · Reader" {
+		t.Errorf("reader name = %q; expected migrated built-in display name", reader.Name)
+	}
+	if !strings.Contains(reader.Instructions, "strongest exact textual support") {
+		t.Errorf("reader instructions were not migrated: %q", reader.Instructions)
+	}
+	if !containsString(reader.SkillIDs, "claim-evidence-audit") {
+		t.Errorf("reader missing evidence-audit skill: %#v", reader.SkillIDs)
+	}
+	if !containsString(reader.Tasks, "book_discussion") {
+		t.Errorf("reader lost book-discussion permission: %#v", reader.Tasks)
+	}
+	if tutor.Name != "My custom Tutor" || tutor.Instructions != "Keep this custom instruction exactly." || tutor.Role != "personal tutor" {
+		t.Errorf("migration overwrote user-customized tutor profile: %#v", tutor)
+	}
+	if !strings.Contains(auditor.Instructions, "Audit one exact claim") {
+		t.Errorf("legacy evidence-auditor instructions were not upgraded: %q", auditor.Instructions)
+	}
+	if !containsString(tutor.SkillIDs, "concept-explanation") {
+		t.Errorf("custom tutor did not receive role skill additions: %#v", tutor.SkillIDs)
+	}
+	for _, id := range []string{"reader", "tutor", "translator", "reviewer", "note-writer", "concept-connector", "socratic-questioner", "counterexample-tester", "context-keeper", "example-builder", "discussion-chair", "evidence-auditor", "ambiguity-scout", "steelman", "scope-keeper", "code-cartographer", "signal-scout"} {
+		if !present[id] {
+			t.Errorf("built-in profile %q missing after migration", id)
+		}
+	}
+	if !manager.state.BuiltinRoleProfilesV3Initialized {
+		t.Fatal("role-profile migration flag was not set")
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDiscussionReviewMessagesRetainEarlyClaimsInCompactLedger(t *testing.T) {
+	previous := make([]AgentContribution, 12)
+	for i := range previous {
+		previous[i] = AgentContribution{Round: i/5 + 1, AgentID: fmt.Sprintf("agent-%d", i), AgentName: fmt.Sprintf("Agent %d", i), Status: "completed", Content: fmt.Sprintf("Contribution number %d offers a distinct reason.", i)}
+	}
+	previous[0].AgentName = "Orion · Reader"
+	previous[0].Content = "ORIGINAL_CLAIM_CANARY: the passage distinguishes institutional rules from personal motives."
+	previous[11].Content = "LATEST_TURN_CANARY: the reviewer challenges the scope of the inference."
+	messages := []Message{{Role: "user", Content: "Review the live discussion."}}
+	got := discussionReviewMessages(messages, AgentDefinition{ID: "tutor", Name: "Sage · Tutor"}, 3, previous, false)
+	if len(got) != 2 {
+		t.Fatalf("message count = %d, want original source plus separate bounded review context", len(got))
+	}
+	if !strings.Contains(got[1].Content, "EARLIER DISCUSSION LEDGER") || !strings.Contains(got[1].Content, "ORIGINAL_CLAIM_CANARY") {
+		t.Fatalf("early claim was dropped from the compressed discussion history: %s", got[1].Content)
+	}
+	if !strings.Contains(got[1].Content, "LATEST_TURN_CANARY") || !strings.Contains(got[1].Content, "RECENT PEER TURNS") {
+		t.Fatalf("latest peer turn was not retained at full priority: %s", got[1].Content)
+	}
+	if got[0].Content != "Review the live discussion." {
+		t.Fatalf("original source/question message was unexpectedly modified: %q", got[0].Content)
+	}
+}
+
+func TestDiscussionModelRoutingUsesRoleAndPreservesExplicitPreference(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "ollama-local", Name: "Ollama Local", Type: ProviderOllama, BaseURL: "http://127.0.0.1:11434", Enabled: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	manager.mu.Lock()
+	manager.state.Models = []Model{
+		{ProviderID: "ollama-local", ID: "qwen2.5:7b", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "qwen2.5:3b", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "translategemma:4b", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "deepseek-r1:1.5b", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "qwen2.5-coder:latest", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "qwen3:1.7b", Availability: "checking"},
+		{ProviderID: "ollama-local", ID: "qwen3:0.6b", Availability: "available"},
+	}
+	manager.mu.Unlock()
+	tests := []struct {
+		agent    AgentDefinition
+		fallback string
+		want     string
+	}{
+		{AgentDefinition{ID: "discussion-chair"}, "global/model", "ollama-local/qwen2.5:7b"},
+		{AgentDefinition{ID: "translator"}, "global/model", "ollama-local/translategemma:4b"},
+		{AgentDefinition{ID: "tutor"}, "global/model", "ollama-local/qwen2.5:3b"},
+		{AgentDefinition{ID: "socratic-questioner"}, "global/model", "ollama-local/deepseek-r1:1.5b"},
+		{AgentDefinition{ID: "code-cartographer"}, "global/model", "ollama-local/qwen2.5-coder:latest"},
+		{AgentDefinition{ID: "signal-scout"}, "global/model", "ollama-local/qwen3:0.6b"},
+		{AgentDefinition{ID: "scope-keeper"}, "global/model", "ollama-local/qwen3:0.6b"},
+		{AgentDefinition{ID: "discussion-chair", PreferredModel: "ollama-local/custom-model"}, "global/model", "ollama-local/custom-model"},
+		{AgentDefinition{ID: "unknown-role"}, "global/model", "global/model"},
+	}
+	for _, tc := range tests {
+		if got := manager.discussionModelForAgent(tc.agent, tc.fallback); got != tc.want {
+			t.Errorf("discussionModelForAgent(%q) = %q, want %q", tc.agent.ID, got, tc.want)
+		}
+	}
+	manager.mu.Lock()
+	for i := range manager.state.Models {
+		if manager.state.Models[i].ID == "qwen3:1.7b" {
+			manager.state.Models[i].Availability = "available"
+		}
+	}
+	manager.mu.Unlock()
+	if got := manager.discussionModelForAgent(AgentDefinition{ID: "tutor"}, "global/model"); got != "ollama-local/qwen3:1.7b" {
+		t.Fatalf("tutor did not adopt the newly available reasoning model: %q", got)
+	}
+}
+
+func TestBookDiscussionDisablesNativeThinkingUnlessRequested(t *testing.T) {
+	var mu sync.Mutex
+	var payloads []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			http.NotFound(w, r)
+			return
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode Ollama payload: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		payloads = append(payloads, payload)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model":   "qwen3:1.7b",
+			"message": map[string]any{"role": "assistant", "content": "The passage makes a limited claim about justice. [source:page-20]"},
+			"done":    true,
+		})
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "ollama-local", Name: "Ollama Local", Type: ProviderOllama, BaseURL: server.URL, Enabled: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "ollama-local/qwen3:1.7b"
+	config.TaskModels["book_discussion"] = "ollama-local/qwen3:1.7b"
+	config.MaxAgents = 1
+	config.MaxDiscussionRounds = 1
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	manager.mu.Lock()
+	manager.state.Models = []Model{{ProviderID: "ollama-local", ID: "qwen3:1.7b", Availability: "available"}}
+	manager.mu.Unlock()
+
+	for _, effort := range []string{"", "medium"} {
+		_, err := manager.runDiscussion(context.Background(), DiscussionRequest{
+			BookID: "book-1", BookTitle: "Example", Question: "What do you think of this page?",
+			AgentIDs: []string{"reader"}, Rounds: 1, SkipSynthesis: true, ReasoningEffort: effort,
+			Context: []ContextPassage{{ID: "page-20", Page: 20, Text: "The passage discusses a principle of justice."}},
+		}, "")
+		if err != nil {
+			t.Fatalf("discussion with reasoning effort %q failed: %v", effort, err)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(payloads) != 2 {
+		t.Fatalf("Ollama request count = %d, want 2", len(payloads))
+	}
+	if got, ok := payloads[0]["think"].(bool); !ok || got {
+		t.Fatalf("Thinking Off payload think = %#v, want false", payloads[0]["think"])
+	}
+	if got, ok := payloads[1]["think"].(bool); !ok || !got {
+		t.Fatalf("Thinking On payload think = %#v, want true", payloads[1]["think"])
+	}
+	for i, payload := range payloads {
+		options, ok := payload["options"].(map[string]any)
+		if !ok {
+			t.Fatalf("request %d has no generation options: %#v", i, payload)
+		}
+		if numPredict, ok := options["num_predict"].(float64); !ok || numPredict < 200 {
+			t.Fatalf("request %d num_predict = %#v, want at least 200 tokens", i, options["num_predict"])
+		}
+	}
+}
+
+func TestDiscussionPromptListsExactSourcesAndLimitsWholeBookClaims(t *testing.T) {
+	messages := discussionMessages(DiscussionRequest{
+		BookTitle: "Example", Question: "What do you think about this book?",
+		Context: []ContextPassage{{ID: "page-20", Page: 20, Text: "A theory of justice."}},
+	}, AgentDefinition{ID: "reader", Name: "Orion", Role: "Reader", Instructions: "Read closely."}, false, nil)
+	prompt := messages[len(messages)-1].Content
+	for _, required := range []string{"Exact source markers available: [source:page-20]", "You do not automatically have the whole book", "Do not recommend specific sections/chapters unless that exact reference appears"} {
+		if !strings.Contains(prompt, required) {
+			t.Errorf("discussion prompt is missing %q: %s", required, prompt)
+		}
+	}
+}
+
+func TestReasoningModeRequiresAdvertisedModelCapability(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "ollama-local", Name: "Ollama Local", Type: ProviderOllama, BaseURL: "http://127.0.0.1:11434", Enabled: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	trueValue := true
+	falseValue := false
+	manager.mu.Lock()
+	manager.state.Models = []Model{
+		{ProviderID: "ollama-local", ID: "reasoner", Reasoning: &trueValue},
+		{ProviderID: "ollama-local", ID: "ordinary", Reasoning: &falseValue},
+		{ProviderID: "ollama-local", ID: "parameter-model", SupportedParameters: []string{"think"}},
+		{ProviderID: "ollama-local", ID: "qwen3:0.6b"},
+		{ProviderID: "ollama-local", ID: "deepseek-r1:1.5b"},
+		{ProviderID: "ollama-local", ID: "qwen2.5:7b"},
+	}
+	manager.mu.Unlock()
+	for _, tc := range []struct {
+		provider, model string
+		want            bool
+	}{
+		{"ollama-local", "reasoner", true},
+		{"ollama-local", "ordinary", false},
+		{"ollama-local", "parameter-model", true},
+		{"ollama-local", "qwen3:0.6b", true},
+		{"ollama-local", "deepseek-r1:1.5b", true},
+		{"ollama-local", "qwen2.5:7b", false},
+		{"ollama-local", "missing", false},
+		{"other-provider", "reasoner", false},
+	} {
+		if got := manager.modelSupportsReasoning(tc.provider, tc.model); got != tc.want {
+			t.Errorf("modelSupportsReasoning(%q, %q) = %v, want %v", tc.provider, tc.model, got, tc.want)
+		}
+	}
+}
+
+func TestConfiguredAgentCatalogSupportsAtLeastOneHundredCustomRoles(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("custom-role-%03d", i)
+		_, err := manager.UpsertAgent(AgentDefinition{
+			ID: id, Name: fmt.Sprintf("Custom Role %03d", i), Role: "custom discussion role",
+			Instructions: "Make one concise, source-grounded contribution.",
+			Tasks:        []string{"book_discussion"}, Enabled: true, MaxTokens: 120,
+		})
+		if err != nil {
+			t.Fatalf("adding custom agent %s failed: %v", id, err)
+		}
+	}
+
+	agents := manager.Agents()
+	if len(agents) < 100 {
+		t.Fatalf("configured agent catalog contains %d agents after adding 100; want at least 100", len(agents))
+	}
+	if len(agents) != len(builtinAgents())+100 {
+		t.Fatalf("configured agent count = %d, want %d built-ins plus 100 custom roles", len(agents), len(builtinAgents()))
+	}
+}
+
+func TestOfflineOnlyBlocksCloudHealthCheckAndModelDiscovery(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: "secret", DefaultModel: "vendor/model", Enabled: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeOfflineOnly
+	config.AllowCloudFallback = true
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	if manager.RuntimeConfig().AllowCloudFallback {
+		t.Fatal("Offline-only must clear cloud fallback on the backend")
+	}
+	_, err = manager.TestProvider(context.Background(), "cloud")
+	var runtimeErr *Error
+	if !errors.As(err, &runtimeErr) || runtimeErr.Code != "offline_policy_blocked" {
+		t.Fatalf("cloud health check error = %#v, want offline_policy_blocked", err)
+	}
+	models, err := manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("Offline-only discovery should skip configured cloud providers without contacting them: %v", err)
+	}
+	if len(models) != 0 {
+		t.Fatalf("cloud models unexpectedly discovered while offline-only: %#v", models)
+	}
+}
+
+type catalogueOnlyTestProvider struct{ models []Model }
+
+func (p *catalogueOnlyTestProvider) ID() string         { return "cloud" }
+func (p *catalogueOnlyTestProvider) Kind() ProviderKind { return ProviderOpenRouter }
+func (p *catalogueOnlyTestProvider) Local() bool        { return false }
+func (p *catalogueOnlyTestProvider) ListModels(context.Context) ([]Model, error) {
+	return append([]Model(nil), p.models...), nil
+}
+func (p *catalogueOnlyTestProvider) Generate(context.Context, GenerateRequest) (GenerateResponse, error) {
+	return GenerateResponse{}, errors.New("inference should be blocked")
+}
+func (p *catalogueOnlyTestProvider) Stream(context.Context, GenerateRequest, func(string) error) error {
+	return errors.New("inference should be blocked")
+}
+func (p *catalogueOnlyTestProvider) Health(context.Context) HealthStatus {
+	return HealthStatus{State: "healthy"}
+}
+
+func TestLocalFirstWithoutCloudFallbackDiscoversCloudCatalogueButBlocksInference(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	manager.mu.Lock()
+	manager.state.Providers = append(manager.state.Providers, ProviderConfig{
+		ID: "cloud", Name: "Cloud Router", Type: ProviderOpenRouter,
+		BaseURL: "https://openrouter.ai/api/v1", APIKey: "test-key", Enabled: true, DefaultModel: "router/model-a",
+	})
+	manager.state.Config.Mode = ModeLocalFirst
+	manager.state.Config.AllowCloudFallback = false
+	manager.rebuildProvidersLocked()
+	manager.mu.Unlock()
+	manager.providerFactory = func(ProviderConfig) (Provider, error) {
+		return &catalogueOnlyTestProvider{models: []Model{
+			{ID: "router/model-a", Name: "Router model A", Capabilities: map[string]bool{"text_generation": true}},
+			{ID: "router/model-b", Name: "Router model B", Capabilities: map[string]bool{"text_generation": true}},
+		}}, nil
+	}
+
+	models, err := manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("Local-first catalogue refresh should discover cloud models: %v", err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("models = %#v, want both router models discoverable", models)
+	}
+	for _, model := range models {
+		if model.ProviderID != "cloud" {
+			t.Errorf("provider id = %q, want cloud", model.ProviderID)
+		}
+		if model.Availability != "blocked" || !strings.Contains(model.AvailabilityMessage, "Local-first") {
+			t.Errorf("model state = %#v, want catalogue-visible but inference-blocked by Local-first", model)
+		}
+	}
+}
+
+func TestRefreshModelsKeepsSettingsUsableWhenProviderIsUnavailable(t *testing.T) {
+	providerDown := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if providerDown {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"kept-model","name":"Kept model"}]}`))
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "local-test", Name: "Local test", Type: ProviderOpenAI,
+		BaseURL: server.URL + "/v1", Enabled: true, TrustedLocal: true,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	models, err := manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("model discovery should be best-effort when a provider is down: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "kept-model" {
+		t.Fatalf("initial models = %#v, want the discovered model", models)
+	}
+	checkedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	manager.mu.Lock()
+	manager.state.Models[0].Availability = "available"
+	manager.state.Models[0].AvailabilityMessage = "Model passed a direct probe"
+	manager.state.Models[0].ProbeCheckedAt = checkedAt
+	manager.state.Models[0].ProbeLatencyMS = 123
+	manager.mu.Unlock()
+
+	providerDown = true
+	models, err = manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("refresh should be best-effort when a provider later goes down: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "kept-model" {
+		t.Fatalf("models = %#v, want last-known catalogue preserved", models)
+	}
+	if models[0].Availability != "available" || !models[0].ProbeCheckedAt.Equal(checkedAt) || models[0].ProbeLatencyMS != 123 {
+		t.Fatalf("provider outage overwrote the model-level probe cache: %#v", models[0])
+	}
+	providers := manager.Providers()
+	if len(providers) != 1 || providers[0].Health.State != "unavailable" {
+		t.Fatalf("provider health = %#v, want unavailable", providers)
+	}
+
+	providerDown = false
+	models, err = manager.RefreshModels(context.Background())
+	if err != nil {
+		t.Fatalf("provider recovery refresh failed: %v", err)
+	}
+	if len(models) != 1 || models[0].Availability != "available" || !models[0].ProbeCheckedAt.Equal(checkedAt) || models[0].ProbeLatencyMS != 123 {
+		t.Fatalf("successful catalogue refresh should preserve matching model probe results: %#v", models)
+	}
+}
+
+func TestTestModelRunsModelSpecificCheckAndPersistsAvailability(t *testing.T) {
+	var completions atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"probe-model","name":"Probe model"}]}`))
+		case "/v1/chat/completions":
+			completions.Add(1)
+			_, _ = w.Write([]byte(`{"model":"probe-model","choices":[{"message":{"content":"OK"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "probe", Name: "Probe", Type: ProviderOpenAI, BaseURL: server.URL + "/v1", Enabled: true, TrustedLocal: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RefreshModels(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	model, err := manager.TestModel(context.Background(), "probe", "probe-model")
+	if err != nil {
+		t.Fatalf("TestModel() error = %v", err)
+	}
+	if model.Availability != "available" || model.ProbeCheckedAt.IsZero() {
+		t.Fatalf("model probe status = %#v, want a persisted available result", model)
+	}
+	if completions.Load() != 1 {
+		t.Fatalf("completion probes = %d, want 1", completions.Load())
+	}
+	cached := manager.Models()
+	if len(cached) != 1 || cached[0].Availability != "available" {
+		t.Fatalf("cached model status = %#v, want available", cached)
+	}
+}
+
+func TestModelProbeTimeoutAllowsColdOllamaLoads(t *testing.T) {
+	if got := modelProbeTimeout(ProviderConfig{Type: ProviderOllama, TimeoutSeconds: 15}); got != 180*time.Second {
+		t.Fatalf("Ollama probe timeout = %s, want 180s minimum for cold loads", got)
+	}
+	if got := modelProbeTimeout(ProviderConfig{Type: ProviderOllama, TimeoutSeconds: 240}); got != 240*time.Second {
+		t.Fatalf("configured Ollama probe timeout = %s, want 240s", got)
+	}
+	if got := modelProbeTimeout(ProviderConfig{Type: ProviderOpenAI, TimeoutSeconds: 120}); got != 15*time.Second {
+		t.Fatalf("cloud/OpenAI-compatible probe timeout = %s, want existing 15s bound", got)
+	}
+}
+
+func TestTestOllamaModelCapturesPerformanceAndArchitectureMetadata(t *testing.T) {
+	var probeCalls atomic.Int32
+	var sawWrongLegacyProbe atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"deepseek-r1:1.5b","model":"deepseek-r1:1.5b","size":1500000000,"details":{"format":"gguf","family":"deepseek2","parameter_size":"1.5B","quantization_level":"Q4_K_M"}}]}`))
+		case "/api/chat":
+			probeCalls.Add(1)
+			var input struct {
+				Model     string         `json:"model"`
+				Stream    bool           `json:"stream"`
+				Think     bool           `json:"think"`
+				KeepAlive string         `json:"keep_alive"`
+				Messages  []Message      `json:"messages"`
+				Options   map[string]any `json:"options"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Errorf("decode Ollama probe: %v", err)
+			}
+			if input.Model != "deepseek-r1:1.5b" || !input.Stream || input.Think || input.KeepAlive != "0" {
+				t.Errorf("unexpected Ollama probe fields: %#v", input)
+			}
+			if input.Options["num_predict"] != float64(32) || input.Options["temperature"] != float64(0) {
+				t.Errorf("unexpected Ollama probe options: %#v", input.Options)
+			}
+			_, _ = w.Write([]byte(`{"model":"deepseek-r1:1.5b","message":{"role":"assistant","content":"Hello"},"done":false}` + "\n"))
+			_, _ = w.Write([]byte(`{"model":"deepseek-r1:1.5b","done":true,"total_duration":5000000000,"load_duration":1500000000,"prompt_eval_count":9,"prompt_eval_duration":500000000,"eval_count":6,"eval_duration":2000000000}` + "\n"))
+		case "/api/show":
+			_, _ = w.Write([]byte(`{"model_info":{"deepseek2.context_length":32768,"deepseek2.block_count":28,"deepseek2.embedding_length":2048,"general.parameter_count":1500000000},"capabilities":["completion","tools","thinking"]}`))
+		case "/api/models/test":
+			sawWrongLegacyProbe.Store(true)
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "ollama-local-test", Name: "Ollama Local test", Type: ProviderOllama, BaseURL: server.URL, Enabled: true, TrustedLocal: true, TimeoutSeconds: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RefreshModels(context.Background()); err != nil {
+		t.Fatalf("RefreshModels() error = %v", err)
+	}
+	model, err := manager.TestModel(context.Background(), "ollama-local-test", "deepseek-r1:1.5b")
+	if err != nil {
+		t.Fatalf("TestModel() error = %v", err)
+	}
+	if model.Availability != "available" || model.ProbeLatencyMS < 0 {
+		t.Fatalf("model probe = %#v, want available", model)
+	}
+	if model.Performance == nil {
+		t.Fatal("model performance metadata is nil")
+	}
+	if model.Performance.PromptTokens != 9 || model.Performance.GeneratedTokens != 6 || model.Performance.TokensPerSecond != 3 || model.Performance.PromptTokensPerSecond != 18 || model.Performance.LoadDurationMS != 1500 || model.Performance.ResponseDurationMS != 5000 {
+		t.Fatalf("unexpected model performance: %#v", model.Performance)
+	}
+	if model.ContextSize != 32768 || model.Metadata["block_count"] != 28 || model.Capabilities["tools"] != true || model.Capabilities["thinking"] != true {
+		t.Fatalf("Ollama /api/show metadata not captured: %#v", model)
+	}
+	if probeCalls.Load() != 1 {
+		t.Fatalf("Ollama native probe calls = %d, want 1", probeCalls.Load())
+	}
+	if sawWrongLegacyProbe.Load() {
+		t.Fatal("Ollama model test hit the unrelated 9Router /api/models/test endpoint")
+	}
+	cached := manager.Models()
+	if len(cached) != 1 || cached[0].Performance == nil || cached[0].Performance.GeneratedTokens != 6 {
+		t.Fatalf("performance metadata was not persisted: %#v", cached)
+	}
+}
+
+func TestTestModelUsesNineRouterNativeProbeWithoutCompletion(t *testing.T) {
+	var completions atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"cc/example-model","name":"Example"}]}`))
+		case "/api/models/test":
+			var input map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input["model"] != "cc/example-model" || input["kind"] != "llm" {
+				t.Errorf("unexpected 9Router probe body: %#v, err=%v", input, err)
+			}
+			_, _ = w.Write([]byte(`{"ok":true,"latencyMs":17}`))
+		case "/v1/chat/completions":
+			completions.Add(1)
+			_, _ = w.Write([]byte(`{"model":"cc/example-model","choices":[{"message":{"content":"OK"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "nine", Name: "Local gateway", Type: ProviderOpenAI, BaseURL: server.URL + "/v1", Enabled: true, TrustedLocal: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RefreshModels(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	model, err := manager.TestModel(context.Background(), "nine", "cc/example-model")
+	if err != nil {
+		t.Fatalf("TestModel() error = %v", err)
+	}
+	if model.Availability != "available" || model.ProbeLatencyMS != 17 {
+		t.Fatalf("model probe = %#v, want native available probe", model)
+	}
+	if completions.Load() != 0 {
+		t.Fatalf("completion calls = %d, want zero for the native 9Router probe", completions.Load())
+	}
+}
+
+func TestTestModelDoesNotContactCloudInOfflineOnly(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"cloud-model"}]}`))
+	}))
+	defer server.Close()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	// Register a cloud provider with HTTPS-style URL semantics is validated by the
+	// provider manager; use a normal configured cloud endpoint in the state directly
+	// to exercise the policy boundary without performing network requests.
+	manager.mu.Lock()
+	manager.state.Providers = append(manager.state.Providers, ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenAI, BaseURL: "https://example.invalid/v1", Enabled: true, DefaultModel: "cloud-model"})
+	manager.state.Models = append(manager.state.Models, Model{ProviderID: "cloud", ID: "cloud-model"})
+	manager.state.Config.Mode = ModeOfflineOnly
+	manager.rebuildProvidersLocked()
+	manager.mu.Unlock()
+	model, err := manager.TestModel(context.Background(), "cloud", "cloud-model")
+	if err != nil {
+		t.Fatalf("TestModel() error = %v", err)
+	}
+	if model.Availability != "blocked" {
+		t.Fatalf("model availability = %q, want blocked", model.Availability)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("cloud requests = %d, want zero in Offline-only", requests.Load())
+	}
+}
+
+func TestTestModelFallsBackWhenNativeProbeEndpointFails(t *testing.T) {
+	var nativeCalls atomic.Int32
+	var completionBudget int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"ollama/gpt-oss:120b","name":"GPT OSS 120B"}]}`))
+		case "/api/models/test":
+			nativeCalls.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"native test route unavailable"}`))
+		case "/v1/chat/completions":
+			var payload struct {
+				MaxTokens int `json:"max_tokens"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Errorf("decode completion probe: %v", err)
+			}
+			completionBudget = payload.MaxTokens
+			_, _ = w.Write([]byte(`{"model":"ollama/gpt-oss:120b","choices":[{"message":{"content":"OK"}}]}`))
+		default:
+			t.Errorf("unexpected endpoint %q", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{ID: "gateway", Name: "Local gateway", Type: ProviderOpenAI, BaseURL: server.URL + "/v1", Enabled: true, TrustedLocal: true}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RefreshModels(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	model, err := manager.TestModel(context.Background(), "gateway", "ollama/gpt-oss:120b")
+	if err != nil {
+		t.Fatalf("TestModel() error = %v", err)
+	}
+	if model.Availability != "available" {
+		t.Fatalf("model availability = %q, want available; message: %s", model.Availability, model.AvailabilityMessage)
+	}
+	if nativeCalls.Load() != 1 {
+		t.Fatalf("native probe calls = %d, want 1", nativeCalls.Load())
+	}
+	if completionBudget < 256 {
+		t.Fatalf("fallback max_tokens = %d, want >= 256 for reasoning models", completionBudget)
+	}
+}
+
+func TestRefreshProviderModelsContactsOnlySelectedProviderAndPreservesOtherCache(t *testing.T) {
+	var firstRequests atomic.Int32
+	var secondRequests atomic.Int32
+	newCatalogueServer := func(counter *atomic.Int32, modelID string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			counter.Add(1)
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"` + modelID + `"}]}`))
+		}))
+	}
+	first := newCatalogueServer(&firstRequests, "first-model")
+	defer first.Close()
+	second := newCatalogueServer(&secondRequests, "second-model")
+	defer second.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	for _, provider := range []ProviderConfig{
+		{ID: "first", Name: "First provider", Type: ProviderOpenAI, BaseURL: first.URL + "/v1", Enabled: true, TrustedLocal: true},
+		{ID: "second", Name: "Second provider", Type: ProviderOpenAI, BaseURL: second.URL + "/v1", Enabled: true, TrustedLocal: true},
+	} {
+		if _, err := manager.UpsertProvider(provider, false); err != nil {
+			t.Fatalf("UpsertProvider(%s): %v", provider.ID, err)
+		}
+	}
+
+	if _, err := manager.RefreshProviderModels(context.Background(), "second"); err != nil {
+		t.Fatalf("seed second provider cache: %v", err)
+	}
+	secondRequests.Store(0)
+
+	models, err := manager.RefreshProviderModels(context.Background(), "first")
+	if err != nil {
+		t.Fatalf("refresh selected provider: %v", err)
+	}
+	if firstRequests.Load() != 1 {
+		t.Fatalf("selected provider requests = %d, want 1", firstRequests.Load())
+	}
+	if secondRequests.Load() != 0 {
+		t.Fatalf("unselected provider requests = %d, want 0", secondRequests.Load())
+	}
+	foundFirst, foundSecond := false, false
+	for _, model := range models {
+		foundFirst = foundFirst || (model.ProviderID == "first" && model.ID == "first-model")
+		foundSecond = foundSecond || (model.ProviderID == "second" && model.ID == "second-model")
+	}
+	if !foundFirst || !foundSecond {
+		t.Fatalf("targeted refresh must return the selected result and preserve other cached models; models = %#v", models)
+	}
+}

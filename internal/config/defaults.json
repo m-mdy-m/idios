@@ -205,7 +205,7 @@
     "refresh_interval_seconds": 30
   },
   "web": {
-    "theme": "system",
+    "theme": "dark",
     "custom_themes": {},
     "sidebar_collapsed": false,
     "compact": false

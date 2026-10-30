@@ -1,4 +1,4 @@
-# PSX project-shape policy for the Go Engine, CLI/TUI, and embedded local Web UI.
+# PSX project-shape policy for the Go Engine, CLI, and embedded local Web UI.
 # Rules are an allow-list: omitted rules are intentionally not checked.
 # Reference: https://github.com/m-mdy-m/psx/blob/main/docs/CONFIGURATION.md
 version: 1
@@ -35,7 +35,7 @@ rules:
   roadmap: false
   pull_request_template: warning
   issue_templates: info
-  api_docs: warning       # Browser API development notes live in docs/development/WEB_API.md
+  api_docs: warning       # Browser API notes live in docs/arch/http-api.md
   openapi: false
   runbook: false
 

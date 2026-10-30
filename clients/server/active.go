@@ -44,7 +44,7 @@ func ActiveURL() (string, bool) {
 }
 
 // ProbeActive reports whether the currently recorded local server responds to its health check.
-// It deliberately has a short timeout because it is also used by the interactive TUI scheduler.
+// It deliberately has a short timeout because it is also used by the background service scheduler.
 func ProbeActive(parent context.Context) bool {
 	base, ok := ActiveURL()
 	if !ok {

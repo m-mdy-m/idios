@@ -1,0 +1,64 @@
+schema_version = 1
+
+[project]
+name = "idios"
+description = "Local-first learning and development workspace"
+
+[defaults]
+timeout_seconds = 900
+fail_fast = true
+
+[tasks.docs]
+description = "Validate documentation links and required entry points"
+command = ["python", "scripts/check-docs.py"]
+timeout_seconds = 60
+
+[tasks.format]
+description = "Check Go source formatting"
+command = ["make", "fmt-check"]
+timeout_seconds = 120
+
+[tasks.go-test]
+description = "Run Go unit and integration tests"
+command = ["make", "test"]
+timeout_seconds = 900
+
+[tasks.go-vet]
+description = "Run go vet"
+command = ["make", "vet"]
+timeout_seconds = 600
+
+[tasks.web-lint]
+description = "Lint the Web client"
+command = ["make", "web-lint"]
+timeout_seconds = 900
+
+[tasks.check]
+description = "Run documentation, formatting, Go, and Web lint checks"
+command = ["python", "-c", "print('IDIOS checks completed')"]
+depends_on = ["docs", "format", "go-test", "go-vet", "web-lint"]
+timeout_seconds = 30
+
+[tasks.build]
+description = "Build the embedded CLI and Web executable"
+command = ["make", "build"]
+depends_on = ["check"]
+timeout_seconds = 1800
+
+[tasks.race]
+description = "Run Go tests with the race detector"
+command = ["make", "test-race"]
+depends_on = ["build"]
+timeout_seconds = 1800
+
+[tasks.smoke]
+description = "Smoke-test the built executable and local SQLite workflow"
+command = ["make", "smoke"]
+depends_on = ["race"]
+timeout_seconds = 600
+
+[tasks.ci]
+description = "Run the full local IDIOS verification sequence"
+command = ["python", "-c", "print('IDIOS CI task graph completed')"]
+depends_on = ["smoke"]
+timeout_seconds = 30

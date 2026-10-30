@@ -70,7 +70,7 @@ func TestExtractExecutablesFromTarGz(t *testing.T) {
 	var raw bytes.Buffer
 	gz := gzip.NewWriter(&raw)
 	tw := tar.NewWriter(gz)
-	for _, entry := range []struct{ name, body string }{{"./idios", "cli-binary"}, {"./idios-tui", "tui-binary"}, {"README.md", "not executable"}} {
+	for _, entry := range []struct{ name, body string }{{"./idios", "cli-binary"}, {"./idios-tui", "retired tui binary"}, {"README.md", "not executable"}} {
 		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: 0o755, Size: int64(len(entry.body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
 		}
@@ -88,7 +88,7 @@ func TestExtractExecutablesFromTarGz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(files["idios"]) != "cli-binary" || string(files["idios-tui"]) != "tui-binary" {
+	if string(files["idios"]) != "cli-binary" || len(files) != 1 {
 		t.Fatalf("unexpected extracted payloads: %#v", files)
 	}
 }
@@ -96,7 +96,7 @@ func TestExtractExecutablesFromTarGz(t *testing.T) {
 func TestExtractExecutablesFromZip(t *testing.T) {
 	var raw bytes.Buffer
 	zw := zip.NewWriter(&raw)
-	for name, body := range map[string]string{"idios.exe": "cli-binary", "idios-tui.exe": "tui-binary"} {
+	for name, body := range map[string]string{"idios.exe": "cli-binary", "idios-tui.exe": "retired tui binary"} {
 		w, err := zw.Create(name)
 		if err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestExtractExecutablesFromZip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(files["idios"]) != "cli-binary" || string(files["idios-tui"]) != "tui-binary" {
+	if string(files["idios"]) != "cli-binary" || len(files) != 1 {
 		t.Fatalf("unexpected extracted payloads: %#v", files)
 	}
 }
@@ -133,9 +133,7 @@ func TestUnixHelperHasValidShellSyntax(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "dir with 'quote")
 	prepared := Prepared{
 		StagedCLI: filepath.Join(dir, ".idios.new"),
-		StagedTUI: filepath.Join(dir, ".idios-tui.new"),
 		DestCLI:   filepath.Join(dir, "idios"),
-		DestTUI:   filepath.Join(dir, "idios-tui"),
 	}
 	scriptPath := filepath.Join(t.TempDir(), "upgrade-helper.sh")
 	if err := os.WriteFile(scriptPath, []byte(unixHelper(prepared, 42)), 0o600); err != nil {
@@ -149,9 +147,7 @@ func TestUnixHelperHasValidShellSyntax(t *testing.T) {
 func TestWindowsHelperStartsNewAppBeforeRemovingBackups(t *testing.T) {
 	prepared := Prepared{
 		StagedCLI: `C:\Program Files\IDIOS\.idios.new.exe`,
-		StagedTUI: `C:\Program Files\IDIOS\.idios-tui.new.exe`,
 		DestCLI:   `C:\Program Files\IDIOS\idios.exe`,
-		DestTUI:   `C:\Program Files\IDIOS\idios-tui.exe`,
 	}
 	script := windowsHelper(prepared, 42)
 	start := strings.Index(script, "Start-Process -FilePath $destCli")
@@ -164,9 +160,7 @@ func TestWindowsHelperStartsNewAppBeforeRemovingBackups(t *testing.T) {
 func TestUpdateHelpersRestartWithRequestedArguments(t *testing.T) {
 	prepared := Prepared{
 		StagedCLI: "/tmp/.idios.new",
-		StagedTUI: "/tmp/.idios-tui.new",
 		DestCLI:   "/opt/idios/idios",
-		DestTUI:   "/opt/idios/idios-tui",
 	}
 	unix := unixHelperWithArgs(prepared, 42, []string{"web", "--no-open"})
 	if !strings.Contains(unix, `"$DEST_CLI" 'web' '--no-open'`) {

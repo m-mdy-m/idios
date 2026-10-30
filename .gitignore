@@ -13,3 +13,10 @@ coverage.out
 /clients/web/node_modules/
 /clients/web/.vite/
 /clients/web/*.tsbuildinfo
+
+# Pinned shared pipeline checkout (downloaded by scripts/run-pipeline.py).
+/.tools/
+.pipeline-artifacts/
+
+# Temporary platform packaging stage.
+/release/

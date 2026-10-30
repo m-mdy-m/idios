@@ -262,7 +262,7 @@ func TestBulkIssueCreateReturnsPerBatchResult(t *testing.T) {
 	}
 }
 
-func TestSharedCatalogCoversCoreTUIAndWebWorkflows(t *testing.T) {
+func TestSharedCatalogCoversCLIAndWebWorkflows(t *testing.T) {
 	commands := make(map[string]Command)
 	for _, command := range Catalog() {
 		commands[command.ID] = command

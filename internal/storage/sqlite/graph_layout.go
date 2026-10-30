@@ -56,6 +56,9 @@ func normalizeGraphLayout(layout *domain.GraphLayout) {
 	if layout.Views == nil {
 		layout.Views = map[string]domain.GraphViewport{}
 	}
+	if layout.Shapes == nil {
+		layout.Shapes = map[string]string{}
+	}
 	for _, mode := range []string{"organic", "flowchart"} {
 		view, ok := layout.Views[mode]
 		if !ok || view.Scale < 0.35 || view.Scale > 3.2 {

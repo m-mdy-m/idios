@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">IDIOS — graphite ceramic artwork</title>
+<desc id="desc">A dark architectural wall made from individual matte ceramic tiles, cool reflected light and the IDIOS identity.</desc>
+<rect width="1600" height="1000" fill="#090D13"/>
+<!-- ceramic tile wall -->
+<g stroke="#080C12" stroke-width="9">
+ <rect x="0" y="0" width="396" height="246" fill="#111923"/><rect x="402" y="0" width="392" height="246" fill="#182331"/><rect x="800" y="0" width="396" height="246" fill="#101923"/><rect x="1202" y="0" width="398" height="246" fill="#172230"/>
+ <rect x="0" y="252" width="396" height="338" fill="#172230"/><rect x="402" y="252" width="392" height="338" fill="#101821"/><rect x="800" y="252" width="396" height="338" fill="#1A2634"/><rect x="1202" y="252" width="398" height="338" fill="#111A25"/>
+ <rect x="0" y="596" width="396" height="404" fill="#101821"/><rect x="402" y="596" width="392" height="404" fill="#1A2634"/><rect x="800" y="596" width="396" height="404" fill="#121B26"/><rect x="1202" y="596" width="398" height="404" fill="#1B2735"/>
+</g>
+<!-- subtle grazing light and material reflections -->
+<path d="M930 -30h360L1030 1030H680Z" fill="#B7CCE6" opacity=".055"/>
+<path d="M1080 -30h120L925 1030H805Z" fill="#DCE8F7" opacity=".035"/>
+<g fill="none" stroke="#DDE8F5" stroke-opacity=".10" stroke-width="2"><path d="M18 18h360v1H18zM420 18h356M818 18h360M1220 18h360"/><path d="M18 270h360M420 270h356M818 270h360M1220 270h360"/><path d="M18 614h360M420 614h356M818 614h360M1220 614h360"/></g>
+<g fill="#8FA6C2" opacity=".16"><path d="M402 0h4v1000h-4zM796 0h4v1000h-4zM1198 0h4v1000h-4z"/><path d="M0 246h1600v5H0zM0 590h1600v5H0z"/></g>
+<rect x="24" y="24" width="1552" height="952" fill="none" stroke="#41536A" stroke-opacity=".32" stroke-width="2"/>
+<!-- IDIOS symbol -->
+<g transform="translate(142 638) scale(1.25)">
+ <path d="M64 9 111 36v56l-47 27L17 92V36L64 9Zm0 13.8L29 43v42l35 20.2L99 85V43L64 22.8Z" fill="#D6E2F0" fill-rule="evenodd"/>
+ <path d="M64 30.5 88 44.4v26.8L64 85.1 40.2 71.3V57.5l11.8-6.8v13.7L64 71.7l12.2-7V51.2L64 44.1 52 51.1l-11.8-6.8L64 30.5Z" fill="#B6C9E1"/>
+ <path d="M64 44.1v27.6" stroke="#101821" stroke-width="7.4" stroke-linecap="square"/>
+</g>
+<text x="330" y="735" fill="#EEF3FA" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="600" letter-spacing="21">IDIOS</text>
+<text x="338" y="796" fill="#A8B8CC" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="7.5">MINIMAL  /  MODULAR  /  UNIX-LIKE</text>
+<path d="M338 844h330" stroke="#8196B0" stroke-opacity=".58"/>
+<text x="338" y="888" fill="#D3DEEB" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="1">A minimal OS for curious minds.</text>
+</svg>

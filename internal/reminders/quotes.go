@@ -1,4 +1,4 @@
-// Package reminders contains quote-reminder policy shared by the background server and TUI.
+// Package reminders contains quote-reminder policy shared by the background server and Web inbox.
 package reminders
 
 import (
@@ -102,7 +102,7 @@ func Choose(items []domain.Quote, lastID string) domain.Quote {
 	return candidates[n.Int64()]
 }
 
-// FormatText formats a quote consistently for both the TUI notification and web inbox.
+// FormatText formats a quote consistently for notifications and the Web inbox.
 func FormatText(item domain.Quote) string {
 	body := "“" + item.Text + "”"
 	if item.Author != "" {

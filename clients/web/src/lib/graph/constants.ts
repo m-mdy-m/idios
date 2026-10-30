@@ -4,6 +4,7 @@ export const GRAPH_COLORS: Record<string, string> = {
   branch: 'var(--graph-branch)',
   project: 'var(--graph-project)',
   concept: 'var(--graph-concept)',
+  shelf_book: 'var(--accent)',
   note: 'var(--graph-note)',
   pull_request: 'var(--graph-pr)',
   label: 'var(--graph-label)',

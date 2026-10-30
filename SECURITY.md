@@ -8,7 +8,7 @@ application has a separate historical schema and is not upgraded in place by the
 
 ## Security boundaries
 
-IDIOS is a local CLI/TUI application with no network listener and no required outbound
+IDIOS is a local CLI and embedded-Web application with no network listener and no required outbound
 connections at runtime. The primary boundaries are the local user account, the SQLite database,
 legacy databases passed to the importer, and the build dependencies.
 

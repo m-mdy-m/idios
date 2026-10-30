@@ -1,0 +1,171 @@
+.shelf-pdf-reader-page {
+  --background: #0b1017;
+  --panel: #141b26;
+  --card: #141b26;
+  --foreground: #e7edf6;
+  --muted-foreground: #9aa8ba;
+  --border: #2b3544;
+  --primary: #8aabff;
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--foreground);
+  background: radial-gradient(ellipse at 12% -10%, rgb(59 91 151 / 18%), transparent 46%), #0b1017;
+  color-scheme: dark;
+}
+.shelf-pdf-reader-page__topline {
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 16px;
+  border-bottom: 1px solid #202a38;
+  background: #0b1017;
+  color: #9aa8ba;
+  font-size: 10px;
+}
+.shelf-pdf-reader-page__topline span:first-child { display: inline-flex; align-items: center; gap: 7px; color: #a8c0ff; font-size: 9px; font-weight: 800; letter-spacing: .13em; }
+.shelf-pdf-reader-page__topline span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.shelf-pdf-reader-page .shelf-pdf-reader {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--foreground);
+  background: var(--panel);
+  box-shadow: none;
+}
+.shelf-pdf-reader-page .shelf-pdf-reader__toolbar { flex: 0 0 auto; min-height: 58px; padding: 10px 16px; border-color: #2b3544; }
+.shelf-pdf-reader-page .shelf-pdf-reader__body { flex: 1 1 auto; min-height: 0; grid-template-columns: minmax(0, 1fr) 292px; }
+.shelf-pdf-reader-page .shelf-pdf-reader__body--wide { grid-template-columns: minmax(0, 1fr); }
+.shelf-pdf-reader-page .shelf-pdf-reader__workspace { display: flex; flex-direction: column; min-height: 0; background: #0e141d; }
+.shelf-pdf-reader-page .shelf-pdf-reader__searchbar { flex: 0 0 auto; border-color: #2b3544; background: #141b26; }
+.shelf-pdf-reader-page .shelf-pdf-reader__page-stage { flex: 1 1 auto; width: 100%; max-height: none; min-height: 0; padding: 22px; overflow: auto; background: #0e141d; }
+.shelf-pdf-reader-page .shelf-pdf-reader__page-footer { flex: 0 0 auto; border-color: #2b3544; background: #141b26; }
+.shelf-pdf-reader-page .shelf-pdf-reader__side-panel { min-height: 0; border-color: #2b3544; background: #141b26; }
+.shelf-pdf-reader-page .shelf-pdf-reader__annotation-list { flex: 1 1 auto; max-height: none; min-height: 0; }
+.shelf-pdf-reader-page .shelf-pdf-reader__selection-card { color: #e7edf6; background: #182130; border-color: #354258; }
+.shelf-pdf-reader-page .shelf-pdf-reader__rendering { background: rgb(11 16 23 / 74%); color: #dce5f4; }
+.shelf-pdf-reader-page .shelf-pdf-reader__page-sheet { background: #fff; }
+.shelf-pdf-reader-page--state { align-items: center; justify-content: center; gap: 12px; color: #a9b7ca; font-size: 12px; }
+.shelf-pdf-reader-page__error { display: flex; max-width: 460px; align-items: center; flex-direction: column; gap: 10px; padding: 32px; text-align: center; border: 1px solid #2b3544; border-radius: 14px; background: #141b26; }
+.shelf-pdf-reader-page__error > svg { color: #ffb86b; }
+.shelf-pdf-reader-page__error h1 { margin: 0; color: #e7edf6; font-size: 17px; }
+.shelf-pdf-reader-page__error p { margin: 0 0 8px; color: #9aa8ba; font-size: 12px; line-height: 1.6; }
+.shelf-pdf-reader-page__error button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid #354258; border-radius: 8px; color: #e7edf6; background: #1a2534; cursor: pointer; }
+@media (max-width: 900px) {
+  .shelf-pdf-reader-page .shelf-pdf-reader__body { grid-template-columns: minmax(0, 1fr) 245px; }
+  .shelf-pdf-reader-page .shelf-pdf-reader__toolbar { align-items: flex-start; flex-direction: column; }
+  .shelf-pdf-reader-page .shelf-pdf-reader__controls { width: 100%; justify-content: flex-start; }
+}
+@media (max-width: 720px) {
+  .shelf-pdf-reader-page__topline { padding: 0 10px; }
+  .shelf-pdf-reader-page .shelf-pdf-reader__body { grid-template-columns: minmax(0, 1fr); }
+  .shelf-pdf-reader-page .shelf-pdf-reader__side-panel { border-top: 1px solid #2b3544; border-left: 0; }
+  .shelf-pdf-reader-page .shelf-pdf-reader__annotation-list { max-height: 210px; }
+  .shelf-pdf-reader-page .shelf-pdf-reader__page-stage { padding: 10px; }
+}
+
+/* v17.2 — Focus Mode is a small toggle in the existing reader toolbar. */
+.shelf-pdf-reader-page:fullscreen,
+.shelf-pdf-reader-page--focus-session {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.shelf-focus-search-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid #526c5d;
+  border-radius: 7px;
+  color: #d4eadb;
+  background: #1b3025;
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.shelf-focus-search-link:hover { border-color: #83aa91; background: #23402f; }
+
+/* Reader remains the main surface; focus only dims the surrounding chrome. */
+.shelf-pdf-reader-page--focused {
+  isolation: isolate;
+  background: #0d1117;
+}
+.shelf-focus-tool__eyebrow {
+  display: block;
+  margin-bottom: 9px;
+  color: #9eb8d2;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .16em;
+}
+.shelf-focus-notice { position: absolute; z-index: 8; top: 67px; left: 50%; max-width: min(620px, 92vw); transform: translateX(-50%); padding: 9px 13px; border: 1px solid #526647; border-radius: 8px; color: #deebd7; background: #1a261c; box-shadow: 0 8px 28px rgb(0 0 0 / 28%); font-size: 11px; line-height: 1.5; }
+.shelf-focus-tool {
+  position: absolute;
+  z-index: 10;
+  top: 68px;
+  right: 16px;
+  width: min(440px, calc(100vw - 24px));
+  max-height: min(76vh, 760px);
+  overflow: auto;
+  border: 1px solid #394758;
+  border-radius: 12px;
+  color: #dce5ef;
+  background: #141c26;
+  box-shadow: 0 16px 55px rgb(0 0 0 / 45%);
+}
+.shelf-focus-tool__heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 16px 12px; border-bottom: 1px solid #2b3542; }
+.shelf-focus-tool__heading > div { min-width: 0; }
+.shelf-focus-tool__heading .shelf-focus-tool__eyebrow { margin: 0 0 5px; font-size: 8px; }
+.shelf-focus-tool__heading strong { color: #edf2f8; font-size: 14px; font-weight: 650; }
+.shelf-focus-tool__heading > button { display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border: 1px solid #303d4c; border-radius: 7px; color: #acb9c8; background: #18212c; cursor: pointer; }
+.shelf-focus-tool form { display: flex; flex-direction: column; gap: 10px; padding: 13px 15px 15px; }
+.shelf-focus-tool__language { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #a9b6c6; font-size: 10px; }
+.shelf-focus-tool__language select { max-width: 65%; padding: 7px 8px; border: 1px solid #354355; border-radius: 7px; color: #e3ebf5; background: #101821; font-size: 10px; }
+.shelf-focus-tool textarea { width: 100%; min-height: 92px; resize: vertical; padding: 11px 12px; border: 1px solid #354254; border-radius: 8px; color: #e4ebf4; background: #0e151e; font: inherit; font-size: 12px; line-height: 1.65; }
+.shelf-focus-tool textarea::placeholder { color: #758599; }
+.shelf-focus-tool__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shelf-focus-tool__actions > span { color: #8696a9; font-size: 9px; line-height: 1.5; }
+.shelf-focus-tool__actions > button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-height: 32px; padding: 0 11px; border: 1px solid #9ab5a3; border-radius: 7px; color: #13221a; background: #c7ddce; font-size: 10px; font-weight: 750; cursor: pointer; }
+.shelf-focus-tool__actions > button:disabled { opacity: .5; cursor: not-allowed; }
+.shelf-focus-tool__error { margin: 0; padding: 0 15px 13px; color: #f0b8bd; font-size: 11px; line-height: 1.65; }
+.shelf-focus-tool__error button { display: block; margin-top: 6px; padding: 0; border: 0; color: #c5d9ff; background: transparent; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.shelf-focus-tool__result { margin: 0 15px 15px; padding: 11px 12px; border: 1px solid #2d3e4b; border-radius: 8px; background: #101821; }
+.shelf-focus-tool__result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #a5bfaf; font-size: 10px; }
+.shelf-focus-tool__result-heading button { padding: 4px 7px; border: 1px solid #354658; border-radius: 5px; color: #c5d9e8; background: #18232d; font-size: 9px; cursor: pointer; }
+.shelf-focus-tool__result p { margin: 8px 0 0; overflow-wrap: anywhere; color: #d4dfeb; font-size: 11px; line-height: 1.8; white-space: pre-wrap; }
+.shelf-focus-tool__result--translation { border-color: #3b5144; background: #121c19; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__toolbar { min-height: 46px; padding-top: 5px; padding-bottom: 5px; background: #151d27; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__brand { display: none; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__controls { width: 100%; justify-content: flex-start; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__controls > button[aria-label="Open original PDF in a new tab"],
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__controls > button[aria-label="Toggle fullscreen"] { display: none; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__body { min-height: 0; }
+.shelf-pdf-reader--focus-session .shelf-pdf-reader__page-stage { padding: clamp(12px, 2.4vw, 30px); }
+.shelf-focus-active { overflow: hidden !important; }
+.shelf-focus-active #root { overscroll-behavior: none; }
+@media (max-width: 720px) {
+  .shelf-focus-tool { top: 54px; right: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 70px); }
+}
+
+/* Keep Focus Mode quiet without replacing the original reader layout. */
+.shelf-pdf-reader-page--focus-session .shelf-pdf-reader__page-footer { display: none; }
+.shelf-pdf-reader-page--focus-session .shelf-pdf-reader__page-stage { height: auto; max-height: none; }
+
+/* Preserve paragraph and list line breaks in contextual translation results. */
+.shelf-focus-tool__result--translation p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; }

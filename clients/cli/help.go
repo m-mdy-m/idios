@@ -12,7 +12,7 @@ import (
 // printHelp lists the real command table, so help cannot drift away from what dispatch
 // actually accepts. Per-command flags live in `idios help <command>`.
 func printHelp(w io.Writer) {
-	fmt.Fprint(w, `IDIOS — issues, projects and notes with dependencies
+	fmt.Fprint(w, `IDIOS — local learning and development workspace
 
 Usage:
   idios [--db PATH] [--json] [--verbose] COMMAND [FLAGS]
@@ -47,7 +47,7 @@ Workflow:
   5. idios pr accept --id CPU!1 --summary 'Core concepts reviewed'   (issue becomes done)
 
 An Issue can become done only through an accepted PR. No real Git commit, file merge,
-or non-main branch operations are performed in v1. See docs/user/WORKSPACE_GUIDE.md.
+or non-main branch operations are performed by IDIOS. See docs/guides/workspace.md.
 `)
 }
 

@@ -1,36 +1,11 @@
-import type { GraphEdge, GraphLayoutMode, GraphNode } from '@/types/idios';
+import type { GraphEdge, GraphNode } from '@/types/idios';
 
 export interface GraphPoint { x: number; y: number }
 
 // Deterministic force-directed placement. Spatial buckets keep repulsion cheaper than
 // all-pairs comparison on larger workspaces; this layout is a starting point, not a lock.
-export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], mode: GraphLayoutMode = 'organic'): Map<string, GraphPoint> {
-  if (mode === 'flowchart') return layoutFlowchart(nodes);
+export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): Map<string, GraphPoint> {
   return layoutOrganic(nodes, edges);
-}
-
-function layoutFlowchart(nodes: GraphNode[]): Map<string, GraphPoint> {
-  const map = new Map<string, GraphPoint>();
-  if (!nodes.length) return map;
-  // Stable semantic lanes make common workflow directions read left-to-right.
-  const laneFor: Record<string, number> = {
-    project: 0, concept: 0, repository: 1, issue: 2, note: 2,
-    pull_request: 3, branch: 4, completion: 5,
-  };
-  // Labels and milestones are intentionally auxiliary and hidden until branch hover.
-  // Six active lanes therefore use the whole canvas without reserving an empty seventh lane.
-  const lanes = Array.from({ length: 6 }, () => [] as GraphNode[]);
-  for (const node of nodes) lanes[laneFor[node.type] ?? 2].push(node);
-  for (const lane of lanes) lane.sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label));
-  const left = 68; const right = 892; const top = 40; const bottom = 520;
-  const laneWidth = (right - left) / Math.max(1, lanes.length - 1);
-  lanes.forEach((lane, laneIndex) => {
-    lane.forEach((node, nodeIndex) => {
-      const spacing = (bottom - top) / Math.max(1, lane.length + 1);
-      map.set(node.id, { x: left + laneIndex * laneWidth, y: top + (nodeIndex + 1) * spacing });
-    });
-  });
-  return map;
 }
 
 function layoutOrganic(nodes: GraphNode[], edges: GraphEdge[]): Map<string, GraphPoint> {

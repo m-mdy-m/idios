@@ -16,7 +16,7 @@ Closes #
 
 ## Changes
 
-<!-- The main pieces, grouped by layer if it helps (domain / application / storage / cli / tui). -->
+<!-- The main pieces, grouped by layer if it helps (domain / application / storage / cli / web). -->
 
 -
 
@@ -29,7 +29,7 @@ Closes #
 - [ ] `make smoke` (needed for workflow, CLI or storage changes)
 - [ ] `make psx-check`
 - [ ] Added or updated tests; they fail without this change
-- [ ] Tried the main flow by hand (CLI / TUI)
+- [ ] Tried the main flow by hand (CLI / Web)
 
 ```text
 $ make check
@@ -41,13 +41,13 @@ $ make check
 
 - [ ] **Schema:** new numbered migration; shipped migrations are unchanged
 - [ ] **Legacy importer:** still read-only
-- [ ] **CLI / JSON protocol:** unchanged, or documented in `docs/user/CLI_REFERENCE.md` and `docs/development/WEB_API.md`
-- [ ] **Layering:** `domain` stays pure; `cli` and `tui` do not import each other or write SQL (see `AGENTS.md`)
+- [ ] **CLI / JSON protocol:** unchanged, or documented in `docs/reference/cli.md` and `docs/arch/http-api.md`
+- [ ] **Layering:** `domain` stays pure; `cli` does not write SQL and the Web UI does not bypass Application (see `AGENTS.md`)
 - [ ] **Docs and `CHANGELOG.md`** updated for anything users will notice
 
 ## Screenshots / terminal output
 
-<!-- TUI or CLI output changes: before and after. Use a plain-text block, and also check with `--no-color`. -->
+<!-- CLI output changes: before and after. Use a plain-text block, and also check with `--no-color`. -->
 
 ## Risk and rollback
 

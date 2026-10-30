@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -64,7 +65,6 @@ func TestFeatureCatalogEndpointPublishesSharedClientFeatures(t *testing.T) {
 		Features       []struct {
 			ID            string `json:"id"`
 			WebPath       string `json:"web_path"`
-			TUIPage       string `json:"tui_page"`
 			WebNavigation bool   `json:"web_navigation"`
 		} `json:"features"`
 	}
@@ -94,7 +94,7 @@ func TestRoutesServeRootAndSPAWithoutConflict(t *testing.T) {
 	})
 	handler := s.routes()
 
-	for _, path := range []string{"/", "/issues", "/projects/example", "/repositories/xoron5/"} {
+	for _, path := range []string{"/", "/issues", "/projects/example", "/repositories/xoron5/", "/shelf/Test-Book", "/shelf/asks", "/shelf/graph"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:43170"+path, nil)
 			rec := httptest.NewRecorder()
@@ -354,6 +354,79 @@ func TestInstallUpdateRejectsConcurrentUpdateBeforeDoingNetworkWork(t *testing.T
 	}
 }
 
+func TestShelfPDFEndpointServesInlineInsteadOfDownload(t *testing.T) {
+	store, err := sqlite.OpenStore(filepath.Join(t.TempDir(), "shelf-pdf-api.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	root := t.TempDir()
+	bookDir := filepath.Join(root, "Test-Book")
+	if err := os.MkdirAll(bookDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bookDir, "README.md"), []byte("# Test Book\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pdf := []byte("%PDF-1.4 fixture")
+	if err := os.WriteFile(filepath.Join(bookDir, "Test-Book.pdf"), pdf, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	app := application.New(store)
+	if err := app.SetShelfRootPath(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	server := New(app, Options{Config: config.AppConfig{Server: config.ServerConfig{Host: "127.0.0.1", Port: 43170}}})
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:43170/api/shelf/books/Test-Book/pdf", nil)
+	request.Host = "127.0.0.1:43170"
+	// A stale client validator must never turn this explicit PDF read into an empty response.
+	request.Header.Set("If-Modified-Since", time.Now().Add(24*time.Hour).UTC().Format(http.TimeFormat))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET shelf PDF status = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline;") {
+		t.Fatalf("Content-Disposition = %q, want inline disposition", disposition)
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/pdf" {
+		t.Fatalf("Content-Type = %q, want application/pdf", got)
+	}
+	if got := response.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if got := response.Header().Get("X-IDIOS-PDF-Protocol"); got != "shelf-pdf-bytes-v1" {
+		t.Fatalf("PDF protocol marker = %q, want shelf-pdf-bytes-v1", got)
+	}
+	if got := response.Header().Get("Content-Length"); got != fmt.Sprint(len(pdf)) {
+		t.Fatalf("Content-Length = %q, want %d", got, len(pdf))
+	}
+	if response.Body.String() != string(pdf) {
+		t.Fatalf("PDF body = %q, want original fixture", response.Body.String())
+	}
+
+	// HEAD reports the same full-file metadata without returning bytes.
+	head := httptest.NewRecorder()
+	handler := server.routes()
+	headRequest := httptest.NewRequest(http.MethodHead, "http://127.0.0.1:43170/api/shelf/books/Test-Book/pdf", nil)
+	handler.ServeHTTP(head, headRequest)
+	if head.Code != http.StatusOK || head.Body.Len() != 0 || head.Header().Get("Content-Length") != fmt.Sprint(len(pdf)) {
+		t.Fatalf("HEAD response = status %d, length %q, body length %d; want 200, %d, and no body", head.Code, head.Header().Get("Content-Length"), head.Body.Len(), len(pdf))
+	}
+
+	// Keep range requests working for users who open the original PDF in a browser tab.
+	ranged := httptest.NewRecorder()
+	rangeRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:43170/api/shelf/books/Test-Book/pdf", nil)
+	rangeRequest.Header.Set("Range", "bytes=0-4")
+	handler.ServeHTTP(ranged, rangeRequest)
+	if ranged.Code != http.StatusPartialContent || ranged.Body.String() != "%PDF-" {
+		t.Fatalf("Range response = status %d, body %q; want 206 and %q", ranged.Code, ranged.Body.String(), "%PDF-")
+	}
+}
+
 func TestGraphLayoutAPIStoresModeAndResettablePositions(t *testing.T) {
 	store, err := sqlite.OpenStore(filepath.Join(t.TempDir(), "graph-layout-api.sqlite3"))
 	if err != nil {
@@ -403,5 +476,126 @@ func TestGraphLayoutAPIStoresModeAndResettablePositions(t *testing.T) {
 	}
 	if restored.Mode != "flowchart" || len(restored.Positions["flowchart"]) != 0 || restored.Views["flowchart"].Scale != 1 {
 		t.Fatalf("layout reset did not restore the active mode: %+v", restored)
+	}
+}
+
+func TestShelfReadingSessionsAPIStoresIdempotentHistory(t *testing.T) {
+	store, err := sqlite.OpenStore(filepath.Join(t.TempDir(), "shelf-reading-sessions.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	root := t.TempDir()
+	bookDir := filepath.Join(root, "Focus-Test")
+	if err := os.MkdirAll(bookDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bookDir, "Focus-Test.pdf"), []byte("%PDF-1.4 fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := application.New(store)
+	if err := app.SetShelfRootPath(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	handler := New(app, Options{}).routes()
+	started := time.Now().UTC().Add(-3 * time.Minute).Truncate(time.Millisecond)
+	ended := started.Add(3 * time.Minute)
+	input := struct {
+		ID        string    `json:"id"`
+		BookID    string    `json:"book_id"`
+		StartedAt time.Time `json:"started_at"`
+		EndedAt   time.Time `json:"ended_at"`
+		StartPage int       `json:"start_page"`
+		EndPage   int       `json:"end_page"`
+	}{ID: "focus-session-test-1", BookID: "Focus-Test", StartedAt: started, EndedAt: ended, StartPage: 4, EndPage: 8}
+	body, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		create := httptest.NewRecorder()
+		handler.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/shelf/reading-sessions", strings.NewReader(string(body))))
+		if create.Code != http.StatusCreated {
+			t.Fatalf("POST reading session attempt %d status=%d body=%s", attempt+1, create.Code, create.Body.String())
+		}
+		var saved domain.ShelfReadingSession
+		if err := json.Unmarshal(create.Body.Bytes(), &saved); err != nil {
+			t.Fatalf("decode created reading session: %v", err)
+		}
+		if saved.ID != input.ID || saved.BookID != input.BookID || saved.BookTitle != "Focus Test" || saved.DurationSeconds != 180 || saved.StartPage != 4 || saved.EndPage != 8 {
+			t.Fatalf("unexpected persisted reading session: %+v", saved)
+		}
+	}
+
+	list := httptest.NewRecorder()
+	handler.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/shelf/reading-sessions?book_id=Focus-Test", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("GET reading sessions status=%d body=%s", list.Code, list.Body.String())
+	}
+	var sessions []domain.ShelfReadingSession
+	if err := json.Unmarshal(list.Body.Bytes(), &sessions); err != nil {
+		t.Fatalf("decode reading sessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != input.ID {
+		t.Fatalf("idempotent retry created duplicates: %+v", sessions)
+	}
+
+	activity := httptest.NewRecorder()
+	handler.ServeHTTP(activity, httptest.NewRequest(http.MethodGet, "/api/activity?limit=20", nil))
+	if activity.Code != http.StatusOK || !strings.Contains(activity.Body.String(), "shelf.session_completed") {
+		t.Fatalf("reading session was not recorded in Activity: status=%d body=%s", activity.Code, activity.Body.String())
+	}
+}
+
+func TestShelfPDFAnnotationAPIStoresHighlightsAndNotes(t *testing.T) {
+	store, err := sqlite.OpenStore(filepath.Join(t.TempDir(), "shelf-annotations.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	root := t.TempDir()
+	bookDir := filepath.Join(root, "Reader-Test")
+	if err := os.MkdirAll(bookDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bookDir, "Reader-Test.pdf"), []byte("%PDF-1.4 fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := application.New(store)
+	if err := app.SetShelfRootPath(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	handler := New(app, Options{}).routes()
+	body := `{"page":4,"quote":"A selected passage","note":"Review this argument","color":"yellow","rectangles":[{"x":0.1,"y":0.2,"width":0.35,"height":0.025}]}`
+	create := httptest.NewRecorder()
+	handler.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/shelf/books/Reader-Test/annotations", strings.NewReader(body)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("POST annotations status=%d body=%s", create.Code, create.Body.String())
+	}
+	var item domain.ShelfAnnotation
+	if err := json.Unmarshal(create.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	if item.ID == "" || item.Page != 4 || item.Quote != "A selected passage" || len(item.Rectangles) != 1 {
+		t.Fatalf("unexpected created annotation: %+v", item)
+	}
+
+	list := httptest.NewRecorder()
+	handler.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/shelf/books/Reader-Test/annotations", nil))
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "Review this argument") {
+		t.Fatalf("GET annotations status=%d body=%s", list.Code, list.Body.String())
+	}
+
+	patch := httptest.NewRecorder()
+	handler.ServeHTTP(patch, httptest.NewRequest(http.MethodPatch, "/api/shelf/annotations/"+item.ID, strings.NewReader(`{"note":"Solved","color":"green"}`)))
+	if patch.Code != http.StatusOK || !strings.Contains(patch.Body.String(), `"color":"green"`) {
+		t.Fatalf("PATCH annotation status=%d body=%s", patch.Code, patch.Body.String())
+	}
+
+	remove := httptest.NewRecorder()
+	handler.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/api/shelf/annotations/"+item.ID, nil))
+	if remove.Code != http.StatusNoContent {
+		t.Fatalf("DELETE annotation status=%d body=%s", remove.Code, remove.Body.String())
 	}
 }

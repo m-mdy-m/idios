@@ -106,7 +106,7 @@ type WebConfig struct {
 	Compact          bool                      `json:"compact"`
 }
 
-// QuoteReminderConfig controls random quote reminders shared by the Go service and TUI fallback.
+// QuoteReminderConfig controls random quote reminders shared by the Go service.
 // NextAt and LastQuoteID are persisted scheduler state, not user-facing preferences.
 type QuoteReminderConfig struct {
 	Enabled            bool   `json:"enabled"`
@@ -172,7 +172,7 @@ func LoadAppConfig() (AppConfig, error) {
 		return cfg, fmt.Errorf("read IDIOS config %q: %w", path, err)
 	}
 	// Merge the main file over packaged defaults, then apply config.d fragments in lexical
-	// order. The same resolved config is consumed by CLI, TUI and the local server.
+	// order. The same resolved config is consumed by CLI and the local server.
 	var base, override map[string]any
 	if err := json.Unmarshal(defaultConfigJSON, &base); err != nil {
 		return cfg, fmt.Errorf("parse embedded IDIOS defaults: %w", err)
@@ -306,7 +306,7 @@ func LoadAppConfig() (AppConfig, error) {
 		cfg.Server.RefreshIntervalSeconds = 30
 	}
 	if cfg.Web.Theme == "" {
-		cfg.Web.Theme = "system"
+		cfg.Web.Theme = "dark"
 	}
 	return cfg, nil
 }

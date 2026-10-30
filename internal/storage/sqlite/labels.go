@@ -264,7 +264,7 @@ func (s *Store) ListMilestones(ctx context.Context, scopeType, scopeRef string) 
 }
 
 // ListIssueMilestones returns Issue-to-milestone assignments keyed by stable Issue ID.
-// Results are bulk-loaded so TUI views do not issue one query per row.
+// Results are bulk-loaded so Web views do not issue one query per row.
 func (s *Store) ListIssueMilestones(ctx context.Context) (map[string][]domain.Milestone, error) {
 	rows, err := s.p().all(ctx, `SELECT im.issue_id AS issue_id,m.id,m.title,m.description,m.scope_type,m.scope_id,COALESCE(r.name,p.name,'') AS scope_name,m.due_date,m.created_at,m.updated_at
  FROM issue_milestones im JOIN milestones m ON m.id=im.milestone_id

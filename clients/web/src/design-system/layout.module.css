@@ -1,0 +1,6 @@
+.box { min-width: 0; }
+.stack { display: flex; flex-direction: column; min-width: 0; gap: var(--stack-gap, 12px); }
+.inline { display: flex; align-items: center; min-width: 0; flex-wrap: wrap; gap: var(--inline-gap, 8px); }
+.text { color: var(--text); line-height: 1.6; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

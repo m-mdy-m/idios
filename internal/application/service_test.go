@@ -416,6 +416,11 @@ func TestGraphLayoutRejectsInvalidModesAndCoordinates(t *testing.T) {
 	if _, err := app.SaveGraphLayout(ctx, layout); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("expected out-of-bounds node position to be rejected, got %v", err)
 	}
+	layout = domain.DefaultGraphLayout()
+	layout.Shapes["issue:bad"] = "star"
+	if _, err := app.SaveGraphLayout(ctx, layout); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("expected unsupported node shape to be rejected, got %v", err)
+	}
 }
 
 func TestGraphLayoutResetPreservesOtherMode(t *testing.T) {

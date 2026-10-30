@@ -1,0 +1,1 @@
+export { QuotesPage } from './QuotesPage';

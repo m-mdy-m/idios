@@ -33,7 +33,7 @@ body:
       label: Proposed behavior
       description: What would you type or press, and what would you see? Rough examples are fine.
       placeholder: |
-        Command or TUI flow:
+        CLI command or Web flow:
         Expected output:
     validations:
       required: true
@@ -46,7 +46,7 @@ body:
         - Domain / workflow rules
         - SQLite storage / migration
         - CLI / JSON protocol
-        - TUI / Graph Explorer
+        - Web workspace / Graph Explorer
         - Documentation / CI
         - Future GUI / IPC
     validations:

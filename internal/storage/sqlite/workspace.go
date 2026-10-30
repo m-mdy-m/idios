@@ -27,6 +27,7 @@ CASE n.linked_entity_type
  WHEN 'concept' THEN (SELECT c.name FROM concepts c WHERE c.id=n.linked_entity_id)
  WHEN 'pull_request' THEN (SELECT r.name||'!'||pr.number||' · '||pr.title FROM pull_requests pr JOIN repositories r ON r.id=pr.repository_id WHERE pr.id=n.linked_entity_id)
  WHEN 'note' THEN (SELECT n2.title FROM notes n2 WHERE n2.id=n.linked_entity_id)
+ WHEN 'shelf_book' THEN (SELECT b.title FROM shelf_books b WHERE b.id=n.linked_entity_id)
  ELSE '' END AS linked_entity_label FROM notes n`
 
 func noteLabelFrom(r Row) domain.NoteLabel {
