@@ -45,6 +45,8 @@ export function ShelfPDFReaderPage() {
   const { slug = '' } = useParams();
   const navigate = useNavigate();
   const [book, setBook] = useState<ShelfBook | null>(null);
+  const bookRef = useRef<ShelfBook | null>(null);
+  useEffect(() => { bookRef.current = book; }, [book]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
@@ -379,7 +381,7 @@ export function ShelfPDFReaderPage() {
   }, [book, currentPage, readerContext, targetLanguage, tool, toolText]);
 
   const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<string> => {
-    const currentBook = book;
+    const currentBook = bookRef.current;
     if (!currentBook) throw new Error('Book details are still loading. Please try again.');
     const settings = readStudyAISettings();
     const selectedModel = settings.model ? splitRuntimeModel(settings.model) : null;
@@ -449,7 +451,7 @@ export function ShelfPDFReaderPage() {
     const content = response.content?.trim();
     if (!content) throw new Error('The selected model returned an empty response. Check provider health or choose another model.');
     return content;
-  }, [book]);
+  }, []);
 
   if (loading) return <main className="shelf-pdf-reader-page shelf-pdf-reader-page--state"><LoaderCircle size={22} className="spin" /><span>Opening your reading room…</span></main>;
   if (!book) return <main className="shelf-pdf-reader-page shelf-pdf-reader-page--state"><section className="shelf-pdf-reader-page__error"><FileWarning size={28} /><h1>Could not open this book</h1><p>{error || 'The book could not be loaded.'}</p><button type="button" onClick={() => navigate(`/shelf/${encodeURIComponent(slug)}`)}><ArrowLeft size={15} /> Back to book</button></section></main>;
