@@ -4,18 +4,20 @@
 
 ### Added
 
-- Add an in-reader AI translation and language-learning companion for PDF pages, selected passages, and individual words, with dedicated vocabulary, grammar, and IELTS tabs.
-- Add translation parsing checks that keep source-aligned segments and accept vocabulary, grammar, and academic expressions only when they are grounded in the supplied book text.
-- Add a reader-side AI model selector backed by the shared Runtime catalogue, showing the active provider/model and persisting the selection with Shelf's AI preference.
+- Add an in-reader, translation-first companion for PDF pages and selected passages. The full page translation is the default view; Word, Grammar, and IELTS are available from a compact tool menu and run as focused tasks.
+- Add a compact settings popover for target language, AI model, and per-request timeout, plus a resizable floating translation window anchored above Mimi.
+- Add source-grounded grammar and IELTS analysis on demand, without making either analysis part of the page-translation request.
 
 ### Changed
 
-- Use nearby pages, book metadata, saved notes, highlights, and a glossary from previously translated pages as context for more consistent terminology.
-- Keep the reader open while the translation companion is shown beside the PDF; cap its desktop width and use a compact bottom sheet on narrow screens so the book remains visible.
-- Translate long pages as small sequential chunks, show partial progress/results, reuse the provider's configured timeout, and retain completed chunks in the reader session so retries resume instead of starting over.
+- Use book subject, nearby PDF pages, saved notes, highlights, and the existing glossary only as supporting context for terminology and meaning.
+- Return plain complete translation text for page and selection requests rather than requiring a large JSON response containing translation, vocabulary, grammar, and IELTS data together.
+- Translate long pages in sequential chunks, display partial results, and keep completed chunks in the Reader session so a retry resumes at the first unfinished chunk.
+- Allow translation requests up to the Runtime's bounded 10-minute ceiling; the provider HTTP client no longer silently truncates a longer per-request deadline at its ordinary 120-second default.
 
 ### Fixed
 
+- Keep the PDF layout unchanged when translation opens; show the companion as a floating, dismissible window rather than a permanent side column or bottom sheet.
 - Keep the sidebar expand control available while navigation is collapsed, so the same control can collapse and restore the sidebar without opening Settings.
 - Render Search as a centered icon in the collapsed sidebar instead of squeezing its text label into the narrow navigation rail.
 
