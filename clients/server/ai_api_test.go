@@ -18,7 +18,7 @@ func TestAIRuntimeStatusAndProviderSecretsStayPrivate(t *testing.T) {
 	if status.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want %d: %s", status.Code, http.StatusOK, status.Body.String())
 	}
-	if !strings.Contains(status.Body.String(), `"mode":"cloud-first"`) {
+	if !strings.Contains(status.Body.String(), `"mode":"local-first"`) {
 		t.Fatalf("default execution mode missing: %s", status.Body.String())
 	}
 
