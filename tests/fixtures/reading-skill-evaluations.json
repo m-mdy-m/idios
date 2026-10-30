@@ -497,5 +497,24 @@
       "Invent the contents of Chapters IV–VIII",
       "Repeat peer consensus without checking the passage"
     ]
+  },
+  {
+    "id": "sequential-dialogue-chair-echo-and-negation-fidelity",
+    "skill": "sequential-agent-dialogue",
+    "prompt": "Continue the debate as Tutor after Mira · Chair has concluded that the passage explicitly rejects treating Chapters IV–VIII as peripheral. Add a distinct role-specific contribution without copying the Chair's conclusion.",
+    "context": "Current passage [source:page-21]: 'By not including most of Chapters IV–VIII in the more basic parts of the book, I do not mean to suggest that these chapters are peripheral, or merely applications.' It also says that conclusions about the topics discussed modify the proposed view in turn. Earlier peer transcript: Mira · Chair: 'The author explicitly rejects treating Chapters IV–VIII as peripheral or merely applications. [source:page-21]'. The current speaker is Tutor; this is a peer turn, not the final Chair turn.",
+    "pass_criteria": [
+      "Preserve the explicit negation and the scope of Chapters IV–VIII without reverting to the rejected 'peripheral or merely applications' reading",
+      "Address Mira · Chair by exact displayed name and assess the actual claim as supported",
+      "Add a distinct Tutor contribution explaining the reciprocal relationship between testing a theory against considered judgments and revising the theory",
+      "Cite only [source:page-21], stay within 55 words, and ask no reader question"
+    ],
+    "critical_failures": [
+      "Repeat Mira's conclusion with synonyms but add no role-specific insight",
+      "Present Chapters IV–VIII as peripheral or merely applications",
+      "Drop the author's explicit negation or the 'in turn' qualification",
+      "Invent chapter contents or an unsupported source ID",
+      "Ask the reader a question during a peer turn"
+    ]
   }
 ]

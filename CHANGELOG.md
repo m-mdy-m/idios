@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Strengthen the sequential-agent skill with mandatory role-specific contribution, non-echo review after Chair turns, and explicit preservation of negation, scope, and argument structure.
 - Preserve up to 40 completed discussion turns across continuations, using shared UTF-8 byte limits between the Web client and Go runtime instead of dropping history after eight turns.
 - Keep source markers when discussion history must be compacted, and disclose omitted or shortened carry-over to subsequent agents.
 - Require an available Mira · Chair for Shelf round-table starts and continuations; final synthesis must compare evidence rather than count repeated agreement.
