@@ -1,0 +1,15 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD033": {
+      "allowed_elements": ["p", "img"]
+    },
+    "MD041": false,
+    "MD060": false
+  },
+  "ignores": [
+    "clients/web/src/features/reading-skills/skills/**/SKILL.md",
+    "clients/web/src/features/shelf/model/reading-companion.skill.md"
+  ]
+}
