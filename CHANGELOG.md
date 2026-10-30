@@ -6,11 +6,13 @@
 
 - Add an in-reader AI translation and language-learning companion for PDF pages, selected passages, and individual words, with dedicated vocabulary, grammar, and IELTS tabs.
 - Add translation parsing checks that keep source-aligned segments and accept vocabulary, grammar, and academic expressions only when they are grounded in the supplied book text.
+- Add a reader-side AI model selector backed by the shared Runtime catalogue, showing the active provider/model and persisting the selection with Shelf's AI preference.
 
 ### Changed
 
 - Use nearby pages, book metadata, saved notes, highlights, and a glossary from previously translated pages as context for more consistent terminology.
-- Keep the reader open while the translation companion is shown beside the PDF; on narrow screens it opens as a dismissible overlay.
+- Keep the reader open while the translation companion is shown beside the PDF; cap its desktop width and use a compact bottom sheet on narrow screens so the book remains visible.
+- Translate long pages as small sequential chunks, show partial progress/results, reuse the provider's configured timeout, and retain completed chunks in the reader session so retries resume instead of starting over.
 
 ### Fixed
 
