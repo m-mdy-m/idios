@@ -92,6 +92,18 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	if *noOpenBrowser {
 		cfg.Server.OpenBrowser = false
 	}
+	// A desktop shortcut may be clicked repeatedly. Reuse the running local
+	// server and open another browser tab instead of trying to bind its port again.
+	if cfg.Server.OpenBrowser {
+		handled, openErr := openRunningServer(baseURL, stdout, server.Probe, server.OpenBrowser)
+		if handled {
+			if openErr != nil {
+				fmt.Fprintf(stderr, "open browser: %v\\n", openErr)
+				return 1
+			}
+			return 0
+		}
+	}
 	store, err := sqlite.OpenStore(*dbPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "open IDIOS database: %v\n", err)
@@ -118,6 +130,24 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// openRunningServer opens an existing local instance when a launcher requests --open.
+func openRunningServer(
+	baseURL string,
+	stdout io.Writer,
+	probe func(string) (bool, map[string]any),
+	open func(string) error,
+) (bool, error) {
+	running, _ := probe(baseURL)
+	if !running {
+		return false, nil
+	}
+	if err := open(baseURL); err != nil {
+		return true, err
+	}
+	fmt.Fprintf(stdout, "IDIOS server is already running at %s; opened the workspace.\\n", baseURL)
+	return true, nil
 }
 
 func runWeb(args []string, stdout, stderr io.Writer) int {
