@@ -439,9 +439,9 @@ export function ShelfPDFReaderPage() {
   const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<ReaderTranslationCompletion> => {
     const currentBook = bookRef.current;
     if (!currentBook) throw new Error('Book details are still loading. Please try again.');
-    const selectedModel = splitRuntimeModel(translationModelRefRef.current);
+    const selectedModel = splitRuntimeModel(request.modelRef);
     if (!selectedModel) throw new Error('Choose the AI model in the Reading Companion panel before translating.');
-    const selectedOption = translationModelOptionsRef.current.find((option) => option.value === translationModelRefRef.current);
+    const selectedOption = translationModelOptionsRef.current.find((option) => option.value === request.modelRef);
     if (!selectedOption) throw new Error('The selected model is not in the current AI Runtime catalogue. Refresh models in AI Settings.');
 
     const targetLanguageName = targetLanguages.find((item) => item.value === request.targetLanguage)?.label ?? request.targetLanguage;
@@ -529,7 +529,7 @@ export function ShelfPDFReaderPage() {
     const providerName = selectedOption.label.split(' · ')[0] || response.provider_id;
     const modelName = translationModelOptionsRef.current.find((option) => option.value === response.provider_id + '/' + response.model)?.label
       || providerName + ' · ' + response.model;
-    setLastUsedTranslationModel(modelName);
+    if (translationModelRefRef.current === request.modelRef) setLastUsedTranslationModel(modelName);
     return { content, providerID: response.provider_id, model: response.model, durationMS: response.duration_ms };
   }, []);
 
