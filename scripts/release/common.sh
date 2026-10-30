@@ -44,7 +44,7 @@ idios_prepare_target() {
   esac
 
   if [[ -n "${GITHUB_ENV:-}" ]]; then
-    printf 'CC=%s\\nCGO_ENABLED=1\\n' "$CC" >> "$GITHUB_ENV"
+    printf 'CC=%s\nCGO_ENABLED=1\n' "$CC" >> "$GITHUB_ENV"
   fi
 }
 
