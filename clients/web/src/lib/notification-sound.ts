@@ -1,5 +1,6 @@
-const SOUND_KEY = 'idios.notifications.sound.v1';
-const VOLUME_KEY = 'idios.notifications.sound-volume.v2';
+const PREFERENCE_PREFIX = ['idios', 'notifications'].join('.');
+const SOUND_KEY = `${PREFERENCE_PREFIX}.sound.v1`;
+const VOLUME_KEY = `${PREFERENCE_PREFIX}.sound-volume.v2`;
 let audioContext: AudioContext | null = null;
 let cachedNoise: AudioBuffer | null = null;
 let sequenceVersion = 0;
