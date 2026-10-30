@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # no separate SQLite headers or libraries are needed.
 $env:CGO_ENABLED = "1"
 New-Item -ItemType Directory -Force -Path "dist" | Out-Null
-$version = if ($Version) { $Version -replace '^v', '' } elseif ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v', '' } elseif ($env:IDIOS_VERSION) { $env:IDIOS_VERSION -replace '^v', '' } else { "3.0.0" }
+$version = if ($Version) { $Version -replace '^v', '' } elseif ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v', '' } elseif ($env:IDIOS_VERSION) { $env:IDIOS_VERSION -replace '^v', '' } else { "3.0.1" }
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
     throw "pnpm is required to build the bundled IDIOS web UI. Install pnpm 9.x and retry."
 }
