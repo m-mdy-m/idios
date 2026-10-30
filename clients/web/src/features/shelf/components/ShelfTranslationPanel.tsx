@@ -51,6 +51,7 @@ export function ShelfTranslationPanel({
   pageData, selectionData, wordData, activeText, selectedText, hoveredWord,
   pageBusy, selectionBusy, wordBusy, error,
   onClose, onTranslatePage, onTranslateSelection, onExplainWord, onSelectTerm,
+  translationModel, modelOptions, modelsLoading, modelError, lastUsedModel, onModelChange, progress,
 }: {
   pageNumber: number;
   targetLanguage: string;
@@ -72,6 +73,13 @@ export function ShelfTranslationPanel({
   onTranslateSelection: () => void;
   onExplainWord: () => void;
   onSelectTerm: (term: string) => void;
+  translationModel: string;
+  modelOptions: Array<{ value: string; label: string; availability: 'available' | 'unknown'; local: boolean }>;
+  modelsLoading: boolean;
+  modelError: string;
+  lastUsedModel: string;
+  onModelChange: (model: string) => void;
+  progress: { done: number; total: number };
 }) {
   const activeNeedle = normalizeTranslationMatch(activeText);
   const activeSegment = pageData?.segments.find((segment) => {
@@ -95,13 +103,29 @@ export function ShelfTranslationPanel({
       <button type="button" className="shelf-translation-panel__close" onClick={onClose} aria-label="Close translation panel" title="Close panel"><X size={16} /></button>
     </header>
 
+    <section className="shelf-translation-panel__model-card" aria-label="AI translation model">
+      <label className="shelf-translation-panel__model-label" htmlFor="shelf-reader-model">AI MODEL</label>
+      <div className="shelf-translation-panel__model-select">
+        <select id="shelf-reader-model" value={translationModel} onChange={(event) => onModelChange(event.target.value)} disabled={modelsLoading || modelOptions.length === 0}>
+          {!translationModel && <option value="">Select a model…</option>}
+          {modelOptions.map((model) => <option key={model.value} value={model.value}>{model.label}{model.availability === 'unknown' ? ' · not checked' : ''}</option>)}
+        </select>
+        {modelsLoading ? <LoaderCircle size={14} className="is-spinning" /> : <span className="shelf-translation-panel__model-dot" />}
+      </div>
+      <div className="shelf-translation-panel__model-meta">
+        <span>{translationModel ? (lastUsedModel || modelOptions.find((model) => model.value === translationModel)?.label || translationModel) : modelError || 'Choose a model to begin'}</span>
+        <a href="/settings/ai">Manage models</a>
+      </div>
+      {modelError && !modelsLoading && <p className="shelf-translation-panel__model-error">{modelError}</p>}
+    </section>
+
     <div className="shelf-translation-panel__controls">
       <label>Translate into
         <select value={targetLanguage} onChange={(event) => onTargetLanguageChange(event.target.value)}>
           {languages.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
         </select>
       </label>
-      <button type="button" onClick={onTranslatePage} disabled={pageBusy} aria-label="Translate this page again" title="Translate this page again">
+      <button type="button" onClick={onTranslatePage} disabled={pageBusy || !translationModel} aria-label="Translate this page again" title="Translate this page again">
         {pageBusy ? <LoaderCircle size={14} className="is-spinning" /> : <RefreshCw size={14} />}
       </button>
     </div>
@@ -114,7 +138,12 @@ export function ShelfTranslationPanel({
     </nav>
 
     <div className="shelf-translation-panel__content">
-      {error && <p className="shelf-translation-panel__error" role="alert">{error}</p>}
+      {error && <div className="shelf-translation-panel__error" role="alert">
+        <p>{error}</p>
+        {tab === 'translate' && <button type="button" onClick={onTranslatePage} disabled={!translationModel || pageBusy}>
+          <RefreshCw size={12} /> {pageData ? 'Resume translation' : 'Retry translation'}
+        </button>}
+      </div>}
       {tab === 'translate' && <>
         <div className="shelf-translation-panel__section-title"><span>PAGE {pageNumber} · FULL TRANSLATION</span>{pageData && <span>{pageData.segments.length} aligned parts</span>}</div>
         {selectionData && selectedText.trim() && <section className="shelf-translation-panel__selection-result">
@@ -125,8 +154,12 @@ export function ShelfTranslationPanel({
         {selectedText.trim() && !selectedCovered && !selectionData && <button type="button" className="shelf-translation-panel__action" onClick={onTranslateSelection} disabled={selectionBusy}>
           {selectionBusy ? <LoaderCircle size={14} className="is-spinning" /> : <Sparkles size={14} />} Translate selected passage
         </button>}
-        {pageBusy && !pageData && <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={19} className="is-spinning" /><strong>Translating this page…</strong><span>Using nearby pages and book terminology for context.</span></div>}
-        {!pageBusy && !pageData && <div className="shelf-translation-panel__empty"><Languages size={22} /><strong>Translation is not ready</strong><p>Start a page translation to read the full passage beside the PDF.</p><button type="button" onClick={onTranslatePage}>Translate page</button></div>}
+        {pageBusy && <div className="shelf-translation-panel__progress" role="status" aria-live="polite">
+          <div><LoaderCircle size={16} className="is-spinning" /><strong>{progress.total > 1 ? `Translating part ${Math.max(1, progress.done + 1)} of ${progress.total}` : 'Translating this page'}</strong><span>{progress.total > 1 ? 'Completed parts are cached; retries continue from the interrupted part.' : 'Using the selected model and nearby book context.'}</span></div>
+          <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '8%' }} /></div>
+          <small>{progress.total ? `${progress.done}/${progress.total} parts complete` : 'Preparing passage…'} · {lastUsedModel || 'Connecting to model'}</small>
+        </div>}
+        {!pageBusy && !pageData && <div className="shelf-translation-panel__empty"><Languages size={22} /><strong>{translationModel ? 'Ready to translate' : 'Choose your translation model'}</strong><p>{translationModel ? 'Translate this page in short parts. Completed parts are kept so a retry does not start from zero.' : 'Select a model above, or open AI Settings to configure and refresh your model catalogue.'}</p><button type="button" onClick={onTranslatePage} disabled={!translationModel}>Translate page</button></div>}
         {hoveredWord && currentTerm && <article className="shelf-translation-panel__inline-word">
           <small>{currentTerm.source} · {currentTerm.partOfSpeech || 'IN THIS CONTEXT'}</small>
           <strong>{currentTerm.translation}</strong>
@@ -162,7 +195,7 @@ export function ShelfTranslationPanel({
 
       {tab === 'grammar' && <>
         <div className="shelf-translation-panel__section-title"><span>GRAMMAR IN CONTEXT</span><span>PAGE {pageNumber}</span></div>
-        {pageBusy && !pageData ? <div className="shelf-translation-panel__loading"><LoaderCircle size={18} className="is-spinning" /><span>Reading the page for useful grammar patterns…</span></div> : (pageData?.grammar.length ?? 0) > 0 ? pageData!.grammar.map((note, index) => <GrammarCard key={index} note={note} />) : <div className="shelf-translation-panel__empty"><Lightbulb size={22} /><strong>No grammar notes yet</strong><p>Translate the page first. The companion will point out useful structures without turning the reading into a lesson.</p><button type="button" onClick={onTranslatePage} disabled={pageBusy}>Analyse this page</button></div>}
+        {pageBusy && !pageData ? <div className="shelf-translation-panel__loading"><LoaderCircle size={18} className="is-spinning" /><span>Reading the page for useful grammar patterns…</span></div> : (pageData?.grammar.length ?? 0) > 0 ? pageData!.grammar.map((note, index) => <GrammarCard key={index} note={note} />) : <div className="shelf-translation-panel__empty"><Lightbulb size={22} /><strong>No grammar notes yet</strong><p>Translate the page first. The companion will point out useful structures without turning the reading into a lesson.</p><button type="button" onClick={onTranslatePage} disabled={pageBusy || !translationModel}>Analyse this page</button></div>}
       </>}
 
       {tab === 'ielts' && <>
