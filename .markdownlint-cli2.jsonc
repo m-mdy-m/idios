@@ -3,10 +3,16 @@
     "default": true,
     "MD013": false,
     "MD033": {
-      "allowed_elements": ["p", "img"]
+      "allowed_elements": [
+        "p",
+        "img"
+      ]
     },
     "MD041": false,
-    "MD060": false
+    "MD060": false,
+    "MD024": {
+      "siblings_only": true
+    }
   },
   "ignores": [
     "clients/web/src/features/reading-skills/skills/**/SKILL.md",
