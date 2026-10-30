@@ -29,7 +29,7 @@ Use this contract for every multi-agent book discussion. The supplied page text 
 ## Deterministic peer validation
 
 - Every non-opening peer turn must identify at least one real completed participant by their displayed name or unambiguous role label. A statement such as “the previous claim” without a real speaker is insufficient.
-- The final Chair must identify at least two actual peer positions when at least two completed peer contributions are available. Do not use anonymous phrases such as “the agents agree” in place of attribution.
+- The final Chair must identify at least two distinct participants when at least two distinct peers have completed contributions. Do not use anonymous phrases such as “the agents agree” in place of attribution.
 - Do not copy a peer contribution verbatim. Agreement is allowed, but it must add a distinct reason, implication, qualification, or explicit statement that no further supported point is available.
 - The runtime rejects an unreferenced peer turn, a verbatim echo, or a Chair conclusion that omits available named positions. It attempts one focused repair; a second failure remains failed and is not passed to later agents as a valid argument.
 
