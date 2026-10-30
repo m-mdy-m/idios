@@ -234,6 +234,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [translationTab, setTranslationTab] = useState<ShelfTranslationTab>('translate');
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState('fa');
   const [pageTranslation, setPageTranslation] = useState<ReaderTranslationData | null>(null);
+  const [partialPageTranslation, setPartialPageTranslation] = useState<ReaderTranslationData | null>(null);
   const [selectionTranslation, setSelectionTranslation] = useState<ReaderTranslationData | null>(null);
   const [wordTranslation, setWordTranslation] = useState<ReaderTranslationData | null>(null);
   const [wordTranslationKey, setWordTranslationKey] = useState('');
@@ -553,7 +554,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
     const cachedPages = Array.from(pageTranslationCache.current.entries()).sort((left, right) => Number(left[0].split(':')[1]) - Number(right[0].split(':')[1]));
     for (const [cacheKey, data] of cachedPages) {
-      const [cachedBook, cachedPage, cachedLanguage, cachedModel] = cacheKey.split(':');
+      const [cachedBook, cachedPage, cachedLanguage, ...cachedModelParts] = cacheKey.split(':');
+      const cachedModel = cachedModelParts.join(':');
       if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || cachedModel !== translationModel || Number(cachedPage) >= pageNumber) continue;
       for (const term of data.terms) {
         const termKey = normalizeTranslationMatch(term.source);
@@ -584,6 +586,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const cached = translationChunkCache.current.get(cacheKey);
       if (cached) {
         results.push(cached);
+        if (kind === 'page') setPartialPageTranslation(mergeReaderTranslations(results));
         for (const term of cached.terms) {
           const key = normalizeTranslationMatch(term.source);
           if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
@@ -603,6 +606,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
       translationChunkCache.current.set(cacheKey, parsed);
       results.push(parsed);
+      if (kind === 'page') setPartialPageTranslation(mergeReaderTranslations(results));
       for (const term of parsed.terms) {
         const key = normalizeTranslationMatch(term.source);
         if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
@@ -610,7 +614,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       setTranslationProgress({ done: index + 1, total: chunks.length });
     }
     setTranslationProgress({ done: chunks.length, total: chunks.length });
-    return results.length === 1 ? results[0] : mergeReaderTranslations(results);
+    const combined = results.length === 1 ? results[0] : mergeReaderTranslations(results);
+    if (kind === 'page') setPartialPageTranslation(null);
+    return combined;
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage]);
 
   const refreshPageTranslation = useCallback(() => {
@@ -618,8 +624,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
-    const chunkPrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:page:`;
-    for (const key of translationChunkCache.current.keys()) if (key.startsWith(chunkPrefix)) translationChunkCache.current.delete(key);
+    setPartialPageTranslation(null);
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
@@ -679,12 +684,14 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     let active = true;
     const requestID = ++translationRequestID.current;
     setPageTranslation(null);
+    setPartialPageTranslation(null);
     setSelectionTranslation(null);
     setPageTranslationBusy(true);
     setTranslationError('');
     void requestTranslation(currentPageText, 'page').then((translated) => {
       if (!active || requestID !== translationRequestID.current) return;
       setPageTranslation(translated);
+      setPartialPageTranslation(null);
       pageTranslationCache.current.set(key, translated);
       if (pageTranslationCache.current.size > 40) {
         const oldestKey = pageTranslationCache.current.keys().next().value;
@@ -1002,12 +1009,12 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         modelsLoading={translationModelsLoading}
         modelError={translationModelError}
         lastUsedModel={lastUsedTranslationModel}
-        onModelChange={(model) => { onTranslationModelChange(model); setTranslationPageKey(''); setPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
+        onModelChange={(model) => { onTranslationModelChange(model); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
         targetLanguage={translationTargetLanguage}
-        onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setSelectionTranslation(null); }}
+        onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); }}
         tab={translationTab}
         onTabChange={setTranslationTab}
-        pageData={pageTranslation}
+        pageData={pageTranslation ?? partialPageTranslation}
         selectionData={selectionTranslation}
         wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
         activeText={selectedTextForAI || hoveredTextForAI}
