@@ -241,6 +241,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [wordTranslationBusy, setWordTranslationBusy] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const wordTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
+  const pageTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const wordTranslationInFlight = useRef<Set<string>>(new Set());
   const translationPageInFlight = useRef('');
   const translationRequestID = useRef(0);
@@ -544,6 +545,18 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const source = text.trim();
     if (!source) throw new Error('Select some readable text first.');
     const documentContext = await getTranslationContext(pageNumber);
+    const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
+    for (const [cacheKey, data] of pageTranslationCache.current.entries()) {
+      const [cachedBook, cachedPage, cachedLanguage] = cacheKey.split(':');
+      if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || Number(cachedPage) >= pageNumber) continue;
+      for (const term of data.terms) {
+        const termKey = normalizeTranslationMatch(term.source);
+        if (!termKey) continue;
+        if (glossary.has(termKey)) glossary.delete(termKey);
+        glossary.set(termKey, { source: term.source, translation: term.translation, meaning: term.meaning });
+      }
+    }
+    const priorGlossary = Array.from(glossary.values()).slice(-60);
     const request: ReaderTranslationRequest = {
       text: source,
       pageText: currentPageText,
@@ -551,6 +564,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       targetLanguage: translationTargetLanguage,
       kind,
       documentContext,
+      priorGlossary,
     };
     const raw = await onTranslateText(request);
     const parsed = parseReaderTranslation(raw, source);
@@ -559,13 +573,14 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [currentPageText, getTranslationContext, onTranslateText, pageNumber, translationTargetLanguage]);
 
   const refreshPageTranslation = useCallback(() => {
+    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}`);
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
-  }, []);
+  }, [bookID, pageNumber, translationTargetLanguage]);
 
   const translateSelection = useCallback(async () => {
     const selected = selectedTextForAI.trim();
@@ -609,6 +624,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     if (!translationOpen || !currentPageText.trim() || !pdf) return;
     const key = `${bookID}:${pageNumber}:${translationTargetLanguage}`;
     if ((translationPageKey === key && pageTranslation) || translationPageInFlight.current === key) return;
+    const cachedTranslation = pageTranslationCache.current.get(key);
+    if (cachedTranslation) {
+      setPageTranslation(cachedTranslation);
+      setTranslationPageKey(key);
+      setPageTranslationBusy(false);
+      return;
+    }
     translationPageInFlight.current = key;
     let active = true;
     const requestID = ++translationRequestID.current;
@@ -619,6 +641,11 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     void requestTranslation(currentPageText, 'page').then((translated) => {
       if (!active || requestID !== translationRequestID.current) return;
       setPageTranslation(translated);
+      pageTranslationCache.current.set(key, translated);
+      if (pageTranslationCache.current.size > 40) {
+        const oldestKey = pageTranslationCache.current.keys().next().value;
+        if (oldestKey) pageTranslationCache.current.delete(oldestKey);
+      }
       setTranslationPageKey(key);
     }).catch((cause) => {
       if (active && requestID === translationRequestID.current) {
