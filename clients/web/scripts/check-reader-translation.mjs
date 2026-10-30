@@ -22,6 +22,13 @@ assert.equal(valid.grammar.length, 1);
 assert.equal(valid.ielts.length, 1);
 assert.equal(normalizeTranslationMatch('  ＡＲＧＵＭＥＮＴ  '), 'argument');
 
+const grammarOnly = parseReaderTranslation(JSON.stringify({
+  translation: '',
+  grammar: [{ pattern: 'is not guaranteed', explanation: 'A focused grammar note from the source.' }],
+}), 'The outcome is not guaranteed.');
+assert.equal(grammarOnly.translation, '', 'analysis-only responses must not be mistaken for translated page text');
+assert.equal(grammarOnly.grammar.length, 1, 'analysis-only grammar should be retained');
+
 const fallback = parseReaderTranslation('یک ترجمه ساده بدون JSON', 'A sentence.');
 assert.equal(fallback.translation, 'یک ترجمه ساده بدون JSON');
 assert.equal(fallback.segments[0]?.source, 'A sentence.');
