@@ -1,4 +1,7 @@
-export type ReaderTranslationKind = 'page' | 'selection' | 'word';
+export type ReaderTranslationKind = 'page' | 'chunk' | 'selection' | 'word';
+
+export type ReaderTranslationCompletion = { content: string; providerID: string; model: string; durationMS: number };
+export type ReaderTranslationModelOption = { value: string; label: string; availability: 'available' | 'unknown'; local: boolean; timeoutSeconds: number };
 
 export type ReaderTranslationRequest = {
   text: string;
@@ -51,6 +54,67 @@ function stripCodeFence(value: string): string {
  * Parse the structured translation response. Keep a plain-text fallback for smaller
  * models that do not follow the JSON contract; never discard a non-empty translation.
  */
+
+/** Split long PDF text at sentence/paragraph boundaries without dropping source characters. */
+export function splitReaderTranslationText(value: string, maxLength = 1100): string[] {
+  const source = value.trim();
+  if (!source) return [];
+  const limit = Math.max(350, maxLength);
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < source.length) {
+    if (source.length - start <= limit) {
+      chunks.push(source.slice(start).trim());
+      break;
+    }
+    const hardEnd = start + limit;
+    const searchStart = start + Math.floor(limit * 0.55);
+    let boundary = -1;
+    for (let index = hardEnd; index >= searchStart; index -= 1) {
+      const character = source[index - 1];
+      if (character === '\\n' || character === '.' || character === '?' || character === '!' || character === ';') {
+        boundary = index;
+        break;
+      }
+    }
+    if (boundary < 0) {
+      for (let index = hardEnd; index >= searchStart; index -= 1) {
+        if (/\\s/.test(source[index - 1] ?? '')) { boundary = index; break; }
+      }
+    }
+    if (boundary <= start) boundary = hardEnd;
+    const chunk = source.slice(start, boundary).trim();
+    if (chunk) chunks.push(chunk);
+    start = boundary;
+    while (start < source.length && /\\s/.test(source[start])) start += 1;
+  }
+  return chunks;
+}
+
+export function mergeReaderTranslations(parts: ReaderTranslationData[]): ReaderTranslationData {
+  const uniqueBy = <T,>(items: T[], keyOf: (item: T) => string, limit: number): T[] => {
+    const seen = new Set<string>();
+    const result: T[] = [];
+    for (const item of items) {
+      const key = keyOf(item).toLocaleLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+      if (result.length >= limit) break;
+    }
+    return result;
+  };
+  const notes = uniqueBy(parts.map((part) => part.translatorNote ?? '').filter(Boolean), (item) => item, 6);
+  return {
+    translation: parts.map((part) => part.translation.trim()).filter(Boolean).join(' '),
+    segments: parts.flatMap((part) => part.segments),
+    terms: uniqueBy(parts.flatMap((part) => part.terms), (item) => item.source, 24),
+    grammar: uniqueBy(parts.flatMap((part) => part.grammar), (item) => item.pattern, 10),
+    ielts: uniqueBy(parts.flatMap((part) => part.ielts), (item) => item.expression, 10),
+    ...(notes.length ? { translatorNote: notes.join(' · ') } : {}),
+  };
+}
+
 export function parseReaderTranslation(raw: string, sourceText: string): ReaderTranslationData {
   const fallbackText = raw.trim();
   const fallback: ReaderTranslationData = {
