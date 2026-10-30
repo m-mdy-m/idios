@@ -15,35 +15,27 @@ idios_prepare_target() {
       export CC=clang
       command -v clang >/dev/null 2>&1 || { echo "Xcode Command Line Tools (clang) are required." >&2; exit 1; }
       ;;
-    windows-amd64|windows-arm64)
-      local msys_root="C:/msys64"
-      if [[ ! -f "$msys_root/usr/bin/bash.exe" && -f "C:/tools/msys64/usr/bin/bash.exe" ]]; then
-        msys_root="C:/tools/msys64"
-      fi
-      if [[ ! -f "$msys_root/usr/bin/bash.exe" ]]; then
-        powershell.exe -NoProfile -Command "choco install msys2 --yes --no-progress --params '/InstallDir:C:\\msys64'"
-      fi
-      if [[ ! -f "$msys_root/usr/bin/bash.exe" && -f "C:/tools/msys64/usr/bin/bash.exe" ]]; then
-        msys_root="C:/tools/msys64"
-      fi
-      local msys_bash="$msys_root/usr/bin/bash.exe"
-      [[ -f "$msys_bash" ]] || { echo "MSYS2 was not installed at an expected path." >&2; exit 1; }
-      if [[ "$target" == windows-amd64 ]]; then
-        "$msys_bash" -lc 'pacman -Syu --noconfirm || true'
-        "$msys_bash" -lc 'pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-gcc'
-        export CC=gcc
-        export PATH="$msys_root/ucrt64/bin:$PATH"
-        [[ -n "${GITHUB_PATH:-}" ]] && printf '%s\n' "$msys_root/ucrt64/bin" >> "$GITHUB_PATH"
-      else
-        "$msys_bash" -lc 'pacman -Syu --noconfirm || true'
-        "$msys_bash" -lc 'pacman -S --needed --noconfirm mingw-w64-clang-aarch64-clang'
-        export CC=clang
-        export PATH="$msys_root/clangarm64/bin:$PATH"
-        [[ -n "${GITHUB_PATH:-}" ]] && printf '%s\n' "$msys_root/clangarm64/bin" >> "$GITHUB_PATH"
-      fi
-      if [[ -n "${GITHUB_ENV:-}" ]]; then
-        printf 'CC=%s\nCGO_ENABLED=1\n' "$CC" >> "$GITHUB_ENV"
-      fi
+    windows-amd64)
+      [[ "${MSYSTEM:-}" == "UCRT64" ]] || {
+        echo "windows-amd64 requires the MSYS2 UCRT64 environment." >&2
+        exit 1
+      }
+      command -v gcc >/dev/null 2>&1 || {
+        echo "The UCRT64 GCC toolchain is missing; provision mingw-w64-ucrt-x86_64-gcc first." >&2
+        exit 1
+      }
+      export CC=gcc
+      ;;
+    windows-arm64)
+      [[ "${MSYSTEM:-}" == "CLANGARM64" ]] || {
+        echo "windows-arm64 requires the MSYS2 CLANGARM64 environment." >&2
+        exit 1
+      }
+      command -v clang >/dev/null 2>&1 || {
+        echo "The CLANGARM64 compiler is missing; provision mingw-w64-clang-aarch64-clang first." >&2
+        exit 1
+      }
+      export CC=clang
       ;;
     *) echo "Unknown release target: $target" >&2; exit 2 ;;
   esac
@@ -78,7 +70,7 @@ idios_verify_target() {
   unformatted="$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
   if [[ -n "$unformatted" ]]; then
     echo "Go files need gofmt:" >&2
-    printf '%s\n' "$unformatted" >&2
+    printf '%s\\n' "$unformatted" >&2
     exit 1
   fi
   go test ./...
