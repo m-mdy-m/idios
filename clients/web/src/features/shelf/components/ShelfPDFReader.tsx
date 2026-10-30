@@ -235,6 +235,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [selectionTranslation, setSelectionTranslation] = useState<ReaderTranslationData | null>(null);
   const [wordTranslation, setWordTranslation] = useState<ReaderTranslationData | null>(null);
   const [translationPageKey, setTranslationPageKey] = useState('');
+  const [translationRevision, setTranslationRevision] = useState(0);
   const [pageTranslationBusy, setPageTranslationBusy] = useState(false);
   const [selectionTranslationBusy, setSelectionTranslationBusy] = useState(false);
   const [wordTranslationBusy, setWordTranslationBusy] = useState(false);
@@ -526,7 +527,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       try {
         const page = await document.getPage(pageNo);
         const content = await page.getTextContent();
-        const text = content.items.map((item) => 'str' in item ? item.str : '').join(' ').replace(/\\s+/g, ' ').trim();
+        const text = content.items.map((item) => 'str' in item ? item.str : '').join(' ').replace(/\s+/g, ' ').trim();
         pageTextCache.current.set(pageNo, text);
         return { pageNo, text };
       } catch {
@@ -561,6 +562,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
+    setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
   }, []);
@@ -595,7 +597,6 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const translated = await requestTranslation(word, 'word');
       wordTranslationCache.current.set(key, translated);
       setWordTranslation(translated);
-      setTranslationTab('vocabulary');
     } catch (cause) {
       setTranslationError(cause instanceof Error ? cause.message : 'The word could not be explained in context.');
     } finally {
@@ -627,8 +628,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }).finally(() => {
       if (active && requestID === translationRequestID.current) setPageTranslationBusy(false);
     });
-    return () => { active = false; };
-  }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationOpen, translationPageKey, translationTargetLanguage]);
+    return () => { active = false; if (translationPageInFlight.current === key) translationPageInFlight.current = ''; };
+  }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
     setWordTranslation(null);
@@ -734,6 +735,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
     }).filter((rect) => rect.width > 0.001 && rect.height > 0.001).slice(0, 300);
     if (!rectangles.length) { setPending(null); setSelectedTextForAI(''); return; }
+    setSelectionTranslation(null);
     setSelectedTextForAI(quote.slice(0, 10000));
     setPending({ quote: quote.slice(0, 8000), rectangles });
   }, []);
