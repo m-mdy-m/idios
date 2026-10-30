@@ -108,5 +108,15 @@ for _ in $(seq 1 50); do
   sleep 0.1
 done
 [ "$opened" -eq 1 ] || { cat "$WORK_DIR/server.log" 2>/dev/null || true; fail "browser handler was not called with $BASE_URL"; }
+
+# A second click must reuse the existing server, not attempt to bind its port again.
+if [[ "$TARGET_ID" == darwin-* ]]; then
+  "$APP/Contents/MacOS/IDIOS"
+else
+  "$CLI" serve --open --addr "127.0.0.1:$PORT" --db "$WORK_DIR/engine.sqlite3"
+fi
+sleep 0.3
+opened_twice="$(grep -Fc "$BASE_URL" "$IDIOS_BROWSER_TEST_LOG" || true)"
+[ "$opened_twice" -ge 2 ] || fail "second launcher click did not reopen the existing workspace (browser calls: $opened_twice)"
 "$CLI" server stop >/dev/null 2>&1 || true
-pass "downloaded artifacts, native package metadata, server startup and browser URL"
+pass "downloaded artifacts, shortcut startup, browser URL and repeat-click reuse"

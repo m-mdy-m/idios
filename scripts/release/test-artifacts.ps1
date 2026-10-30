@@ -81,9 +81,8 @@ func main() {
     $env:IDIOS_BROWSER_TEST_LOG = $BrowserLog
     $env:PATH = "$ShimDir;$env:PATH"
 
-    $WScript = Join-Path $env:SystemRoot 'System32\wscript.exe'
-    & $WScript //B //NoLogo $Launcher
-    if ($LASTEXITCODE -ne 0) { throw "WScript failed with exit code $LASTEXITCODE." }
+    # Run the real .lnk through the Windows shell, not just the VBS payload.
+    Start-Process -FilePath $DesktopLink
     Assert-Condition (Wait-ForHealth $BaseUrl) "server did not become healthy at $BaseUrl."
     $ServerStarted = $true
 
@@ -98,6 +97,16 @@ func main() {
     Assert-Condition $BrowserOpened "rundll32 was not called with $BaseUrl."
     $BrowserArgs = Get-Content -LiteralPath $BrowserLog -Raw
     Assert-Condition ($BrowserArgs.Contains('url.dll,FileProtocolHandler')) 'Windows browser handler arguments were not preserved.'
+
+    # Clicking the shortcut again must open a second tab while reusing the first server.
+    Start-Process -FilePath $DesktopLink
+    $SecondOpen = $false
+    for ($i = 0; $i -lt 50; $i++) {
+        $Calls = if (Test-Path $BrowserLog) { (Get-Content -LiteralPath $BrowserLog | Where-Object { $_ -match [regex]::Escape($BaseUrl) }).Count } else { 0 }
+        if ($Calls -ge 2) { $SecondOpen = $true; break }
+        Start-Sleep -Milliseconds 100
+    }
+    Assert-Condition $SecondOpen 'second desktop shortcut click did not reopen the existing workspace.'
 
     & $Cli server stop | Out-Null
     $ServerStarted = $false

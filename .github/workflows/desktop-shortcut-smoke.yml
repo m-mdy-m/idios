@@ -34,7 +34,7 @@ on:
       - "CHANGELOG.md"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: idios-desktop-shortcut-smoke-${{ github.ref }}
