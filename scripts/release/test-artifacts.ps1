@@ -65,7 +65,15 @@ import (
 func main() {
     path := os.Getenv("IDIOS_BROWSER_TEST_LOG")
     if path == "" { os.Exit(2) }
-    _ = os.WriteFile(path, []byte(strings.Join(os.Args[1:], "\\n")+"\\n"), 0600)
+
+    // Every shortcut click is a separate browser-open request. Append each
+    // invocation instead of overwriting the first call's diagnostic record.
+    log, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+    if err != nil { os.Exit(3) }
+    defer log.Close()
+    if _, err := log.WriteString(strings.Join(os.Args[1:], "\\n")+"\\n"); err != nil {
+        os.Exit(4)
+    }
 }
 '@
     [System.IO.File]::WriteAllText($ShimSource, $ShimCode, [System.Text.UTF8Encoding]::new($false))
