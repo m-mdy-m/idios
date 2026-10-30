@@ -119,10 +119,11 @@ func NewProviderHTTPClient(cfg ProviderConfig) (*http.Client, error) {
 }
 
 func providerHTTPClient(cfg ProviderConfig) *http.Client {
-	timeout := time.Duration(cfg.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 120 * time.Second
-	}
+	// The request context created by the Runtime owns the configured per-operation
+	// deadline. Keep the shared HTTP client ceiling at the Runtime's hard maximum so
+	// a deliberate longer translation timeout is not silently cut off by the provider's
+	// ordinary default timeout.
+	timeout := 10 * time.Minute
 	transport := &http.Transport{
 		Proxy: nil, // Provider requests must not bypass address validation through an environment proxy.
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
