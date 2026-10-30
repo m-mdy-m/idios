@@ -24,7 +24,7 @@ endif
 CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
 CLI_BIN = $(BIN_DIR)/idios$(EXE_EXT)
 
-.PHONY: all build run-built web-install web-build web-lint install install-user uninstall test test-race test-cover vet fmt fmt-check check ci smoke pipeline-validate pipeline-list pipeline-check psx-check psx-fix tidy clean help
+.PHONY: all build run-built web-install web-build web-lint install install-user uninstall test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 
 all: ci
 
@@ -119,15 +119,6 @@ else
 smoke: build ## Smoke-test the CLI, embedded Web serving and SQLite workflow.
 	IDIOS_BIN=$(CLI_BIN) sh ./scripts/smoke-platform.sh
 endif
-
-pipeline-validate: ## Validate the task graph in the shared pipeline main branch.
-	python scripts/run-pipeline.py validate
-
-pipeline-list: ## List tasks provided by the shared pipeline main branch.
-	python scripts/run-pipeline.py list
-
-pipeline-check: ## Run the full task graph from pipeline.toml.
-	python scripts/run-pipeline.py run ci
 
 psx-check: ## Check repository structure and documentation with PSX v3.
 	@command -v $(PSX) >/dev/null 2>&1 || { echo "PSX not found. Install github.com/m-mdy-m/psx/cmd/psx or skip this optional check." >&2; exit 2; }
