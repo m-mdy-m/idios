@@ -7,6 +7,7 @@ export type ReaderTranslationRequest = {
   targetLanguage: string;
   kind: ReaderTranslationKind;
   documentContext: string;
+  priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
 };
 
 export type ReaderTranslationSegment = { source: string; translation: string };
