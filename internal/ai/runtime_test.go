@@ -1914,7 +1914,6 @@ func TestFinalChairRequiresTwoDistinctPeersNotTwoTurnsFromOnePeer(t *testing.T) 
 	}
 }
 
-
 func TestBuiltinMimiChairV4MigrationPreservesUserCustomization(t *testing.T) {
 	oldSkill := "You are Mira, final Chair. In non-final rounds, contribute a specific peer critique without premature synthesis. On the final turn, compare the actual named positions, weigh evidence asymmetrically when warranted, state what is resolved/narrowed/still open, and refine the conclusion. Ask at most one final reader question only if the answer could change the interpretation."
 	cases := []struct {
