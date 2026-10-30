@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -265,7 +266,9 @@ func TestProviderSecretsAreNotReturnedAndPersistPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// POSIX permission bits are observable on Unix. Windows exposes file access
+	// through ACLs rather than FileMode.Perm(), which reports a generic 0666 here.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("config mode = %o, want 600", info.Mode().Perm())
 	}
 }
