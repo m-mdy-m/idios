@@ -408,6 +408,7 @@ export function ShelfPDFReaderPage() {
       currentBook.repository_name ? `Related technical context: ${currentBook.repository_name}` : '',
       `Requested page: PDF page ${request.pageNumber}`,
       request.documentContext.trim() ? `Neighbouring pages actually extracted from this same book:\n${request.documentContext.slice(0, 22000)}` : '',
+      request.priorGlossary.length ? `Previously used terminology from translated pages — preserve these equivalents unless this passage clearly uses a different sense:\n${request.priorGlossary.map((term) => `- ${term.source} = ${term.translation} (${term.meaning})`).join('\n').slice(0, 6000)}` : '',
       nearbyAnnotations.length ? `Reader's saved highlights and notes near this page (fallible context only):\n${nearbyAnnotations.map((item) => `- Page ${item.page}: “${item.quote.slice(0, 260)}”${item.note?.trim() ? ` — ${item.note.trim().slice(0, 260)}` : ''}`).join('\n').slice(0, 5000)` : '',
       notes.length ? `Reader's saved book notes (supporting context only):\n${notes.slice(-12).map((item) => `- ${item.title}: ${item.content.slice(0, 420)}`).join('\n').slice(0, 5000)}` : '',
     ].filter(Boolean).join('\n\n');
