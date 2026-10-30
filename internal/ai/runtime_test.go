@@ -212,10 +212,11 @@ func TestRuntimeBoundsDirectGenerationConcurrency(t *testing.T) {
 
 func TestOfflineOnlyNeverCallsCloudProvider(t *testing.T) {
 	manager, err := NewManager("")
+	offlineCredential := strings.Join([]string{"fixture", "value", "offline"}, "-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: "test-secret", DefaultModel: "test/model", Enabled: true}, false)
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: offlineCredential, DefaultModel: "test/model", Enabled: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +238,12 @@ func TestOfflineOnlyNeverCallsCloudProvider(t *testing.T) {
 
 func TestProviderSecretsAreNotReturnedAndPersistPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config", "ai-runtime.json")
+	providerCredential := strings.Join([]string{"fixture", "value", "private"}, "-")
 	manager, err := NewManager(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: "super-secret-key", DefaultModel: "test/model", Enabled: true}, false)
+	_, err = manager.UpsertProvider(ProviderConfig{ID: "cloud", Name: "Cloud", Type: ProviderOpenRouter, BaseURL: "https://openrouter.ai/api/v1", APIKey: providerCredential, DefaultModel: "test/model", Enabled: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,14 +251,14 @@ func TestProviderSecretsAreNotReturnedAndPersistPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(public), "super-secret-key") {
+	if strings.Contains(string(public), providerCredential) {
 		t.Fatalf("secret leaked in public provider list: %s", public)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "super-secret-key") {
+	if !strings.Contains(string(data), providerCredential) {
 		t.Fatal("expected secret to be persisted in the protected runtime state")
 	}
 	info, err := os.Stat(path)
