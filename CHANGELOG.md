@@ -4,9 +4,14 @@ All notable changes to IDIOS are recorded here. This file follows [Keep a Change
 
 ## [Unreleased]
 
+### Changed
+
+- Use the shared pipeline's provider-neutral `PIPELINE_ARTIFACT_TEST_DIR` contract in Linux, macOS, and Windows release artifact tests instead of an IDIOS-specific environment variable.
+
 ### Fixed
 
 - Release artifacts now use the canonical release tag provided by the shared pipeline, including branch dry-runs.
+- Fix the Windows browser-launch test shim so repeated invocations append separate newline-delimited records rather than overwriting the previous call. This makes the second-click shortcut smoke test reliably verify reuse of the existing workspace.
 
 ## [3.1.0] - 2026-10-30
 
