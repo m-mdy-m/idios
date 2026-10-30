@@ -1048,14 +1048,15 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
               setTranslationOpen(false);
               return;
             }
-            const width = Math.min(560, window.innerWidth - 24);
-            const height = Math.min(600, window.innerHeight - 32);
             const mascot = document.querySelector('.shelf-study-mascot__character')?.getBoundingClientRect();
+            const width = Math.min(560, window.innerWidth - 24);
+            const availableAboveMascot = mascot ? mascot.top - 26 : window.innerHeight - 110;
+            const height = Math.min(600, window.innerHeight - 32, Math.max(300, availableAboveMascot));
             const left = mascot
               ? Math.max(12, Math.min(window.innerWidth - width - 12, mascot.right - width))
               : Math.max(12, window.innerWidth - width - 24);
             const top = mascot
-              ? Math.max(12, Math.min(window.innerHeight - height - 12, mascot.top - height - 14))
+              ? Math.max(12, mascot.top - height - 14)
               : Math.max(12, window.innerHeight - height - 100);
             setTranslationPanelWidth(width);
             setTranslationPanelHeight(height);
