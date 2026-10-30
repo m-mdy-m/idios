@@ -79,6 +79,7 @@ func main() {
     $BrowserLog = Join-Path $Work 'browser.log'
     [System.IO.File]::WriteAllText($ConfigPath, '{"server":{"host":"127.0.0.1","port":43178,"open_browser":false}}', [System.Text.UTF8Encoding]::new($false))
     $env:IDIOS_CONFIG = $ConfigPath
+    $env:IDIOS_DB = Join-Path $Work 'engine.sqlite3'
     $env:IDIOS_BROWSER_TEST_LOG = $BrowserLog
     $env:PATH = "$ShimDir;$env:PATH"
 

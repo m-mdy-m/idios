@@ -87,6 +87,7 @@ OPEN
 fi
 
 export IDIOS_CONFIG="$WORK_DIR/config.json"
+export IDIOS_DB="$WORK_DIR/engine.sqlite3"
 export IDIOS_BROWSER_TEST_LOG="$WORK_DIR/browser.log"
 export PATH="$FAKE_BIN:$PATH"
 printf '{"server":{"host":"127.0.0.1","port":%s,"open_browser":false}}\n' "$PORT" > "$IDIOS_CONFIG"
