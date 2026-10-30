@@ -344,7 +344,11 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     }
     // Avoid duplicate source IDs if the selected text is the only context.
     const uniqueContext = context.filter((item, index) => context.findIndex((candidate) => candidate.id === item.id) === index);
-    const prior = turns.filter((item) => item.status === 'completed' && item.content?.trim()).slice(-8).map(({ threadKey: _key, runID: _runID, ...item }) => ({ ...item, content: item.content!.slice(0, 1200) }));
+    const prior = turns.filter((item) => item.status === 'completed' && item.content?.trim()).slice(-8).map(({ threadKey: _key, runID: _runID, ...item }) => {
+      void _key;
+      void _runID;
+      return { ...item, content: item.content!.slice(0, 1200) };
+    });
     const payload = {
       book_id: bookID,
       book_title: bookTitle,
