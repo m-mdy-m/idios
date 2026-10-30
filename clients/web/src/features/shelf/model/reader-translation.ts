@@ -1,4 +1,4 @@
-export type ReaderTranslationKind = 'page' | 'chunk' | 'selection' | 'word';
+export type ReaderTranslationKind = 'page' | 'chunk' | 'selection' | 'word' | 'grammar' | 'ielts';
 
 export type ReaderTranslationCompletion = { content: string; providerID: string; model: string; durationMS: number };
 export type ReaderTranslationModelOption = { value: string; label: string; availability: 'available' | 'unknown'; local: boolean; timeoutSeconds: number };
@@ -9,6 +9,7 @@ export type ReaderTranslationRequest = {
   pageNumber: number;
   targetLanguage: string;
   modelRef: string;
+  timeoutSeconds?: number;
   kind: ReaderTranslationKind;
   documentContext: string;
   priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
@@ -133,7 +134,8 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
 
   try {
     const parsed = asRecord(JSON.parse(cleaned.slice(start, end + 1)));
-    const translation = readString(parsed.translation) || fallbackText;
+    const hasTranslationField = Object.prototype.hasOwnProperty.call(parsed, 'translation');
+    const translation = readString(parsed.translation) || (hasTranslationField ? '' : fallbackText);
     const sourceNormalized = normalizeTranslationMatch(sourceText);
     const rawSegments = Array.isArray(parsed.segments) ? parsed.segments : [];
     const candidateSegments = rawSegments.map((item) => {
