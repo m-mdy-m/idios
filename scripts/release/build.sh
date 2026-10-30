@@ -46,7 +46,7 @@ esac
 # Keep the asset listing portable: macOS ships BSD find, which has no -printf.
 shopt -s nullglob
 release_assets=(dist/release/*)
-if (("${#release_assets[@]}" == 0)); then
+if ((${#release_assets[@]} == 0)); then
   echo "No release artifacts were produced in dist/release." >&2
   exit 1
 fi
