@@ -2134,11 +2134,19 @@ func compactDiscussionExcerpt(content string, maxRunes int) string {
 		}
 	}
 	suffix := strings.Join(uniqueMarkers, " ")
-	prefixLimit := maxRunes - len([]rune(suffix)) - len([]rune(" … "))
-	if suffix != "" && prefixLimit > 0 {
+	suffixRunes := len([]rune(suffix))
+	separatorRunes := len([]rune(" … "))
+	prefixLimit := maxRunes - suffixRunes - separatorRunes
+	if suffix != "" && suffixRunes <= maxRunes {
+		if prefixLimit <= 0 {
+			return suffix
+		}
 		return strings.TrimSpace(string(runes[:prefixLimit])) + " … " + suffix
 	}
-	return string(runes[:maxRunes]) + "…"
+	if maxRunes == 1 {
+		return "…"
+	}
+	return string(runes[:maxRunes-1]) + "…"
 }
 
 const missingCitationProblem = "the answer makes a claim about the supplied text without citing an exact supplied source marker"

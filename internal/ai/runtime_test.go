@@ -1748,6 +1748,15 @@ func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
 	if !strings.Contains(got, "…") {
 		t.Fatalf("expected a visible truncation marker: %q", got)
 	}
+
+	manyMarkers := strings.Repeat("context ", 120)
+	for i := 0; i < 80; i++ {
+		manyMarkers += fmt.Sprintf(" [source:page-%d]", i)
+	}
+	large := compactDiscussionExcerpt(manyMarkers, 50)
+	if len([]rune(large)) > 50 {
+		t.Fatalf("excerpt with many markers contains %d runes, want at most 50", len([]rune(large)))
+	}
 }
 
 func TestDiscussionRoleFocusIsDistinctAndInjected(t *testing.T) {
