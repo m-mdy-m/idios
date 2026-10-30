@@ -973,6 +973,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         onTranslatePage={refreshPageTranslation}
         onTranslateSelection={() => void translateSelection()}
         onExplainWord={() => void explainHoveredWord()}
+        onSelectTerm={(term) => { setSelectedTextForAI(''); setHoveredTextForAI(term); }}
       />}
       <section className="shelf-pdf-reader__workspace">
         <div className="shelf-pdf-reader__searchbar"><form onSubmit={(event) => { event.preventDefault(); void findText(1); }}><Search size={15} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Find in this book…" aria-label="Find text in PDF" /><button type="submit" disabled={searching || !searchText.trim()}>{searching ? <LoaderCircle size={14} className="spin" /> : 'Find'}</button></form>{searchPages.length > 0 && <div className="shelf-pdf-reader__search-nav"><span>{searchPages.length} matching {searchPages.length === 1 ? 'page' : 'pages'}</span><button type="button" onClick={() => void goToSearchMatch(-1)} aria-label="Previous search match"><ChevronLeft size={14} /></button><button type="button" onClick={() => void goToSearchMatch(1)} aria-label="Next search match"><ChevronRight size={14} /></button></div>}</div>
