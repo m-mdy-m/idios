@@ -72,25 +72,24 @@ export function splitReaderTranslationText(value: string, maxLength = 1100): str
     let boundary = -1;
     for (let index = hardEnd; index >= searchStart; index -= 1) {
       const character = source[index - 1];
-      if (character === '\\n' || character === '.' || character === '?' || character === '!' || character === ';') {
+      if (character === '\n' || character === '.' || character === '?' || character === '!' || character === ';') {
         boundary = index;
         break;
       }
     }
     if (boundary < 0) {
       for (let index = hardEnd; index >= searchStart; index -= 1) {
-        if (/\\s/.test(source[index - 1] ?? '')) { boundary = index; break; }
+        if (/\s/.test(source[index - 1] ?? '')) { boundary = index; break; }
       }
     }
     if (boundary <= start) boundary = hardEnd;
     const chunk = source.slice(start, boundary).trim();
     if (chunk) chunks.push(chunk);
     start = boundary;
-    while (start < source.length && /\\s/.test(source[start])) start += 1;
+    while (start < source.length && /\s/.test(source[start])) start += 1;
   }
   return chunks;
 }
-
 export function mergeReaderTranslations(parts: ReaderTranslationData[]): ReaderTranslationData {
   const uniqueBy = <T,>(items: T[], keyOf: (item: T) => string, limit: number): T[] => {
     const seen = new Set<string>();
