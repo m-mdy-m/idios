@@ -35,6 +35,7 @@ The server listens on `127.0.0.1:43170` by default. It binds to the loopback int
    ```sh
    idios server stop
    ```
+
 2. Copy `idios-engine.sqlite3` to a private backup location.
 3. Copy `config.json` as well if you want to preserve preferences, themes, provider settings, and templates.
 4. Start IDIOS again with `idios server start` or `idios web`.
