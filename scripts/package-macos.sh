@@ -3,7 +3,7 @@ set -euo pipefail
 if [[ $# -ne 3 ]]; then echo "Usage: package-macos.sh <version> <tag> <asset>" >&2; exit 2; fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION=$1; RELEASE_TAG=$2; ASSET=$3
-WORK_DIR=$(mktemp -d "/tmp/idios-package.XXXXXX")
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/idios-package.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
 case "$ASSET" in darwin-amd64) TARGET_GOARCH=amd64 ;; darwin-arm64) TARGET_GOARCH=arm64 ;; *) echo "Unsupported target: $ASSET" >&2; exit 2 ;; esac
 PAYLOAD="$WORK_DIR/payload"
@@ -22,9 +22,9 @@ ICONSET="$WORK_DIR/IDIOS.iconset"
 mkdir -p "$ICONSET"
 SOURCE_ICON="$ROOT/clients/web/public/favicon.png"
 for size in 16 32 128 256 512; do
-  sips -z "$size" "$size" "$SOURCE_ICON" --out "$ICONSET/icon_\${size}x\${size}.png" >/dev/null
+  sips -z "$size" "$size" "$SOURCE_ICON" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
   double=$((size * 2))
-  sips -z "$double" "$double" "$SOURCE_ICON" --out "$ICONSET/icon_\${size}x\${size}@2x.png" >/dev/null
+  sips -z "$double" "$double" "$SOURCE_ICON" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/IDIOS.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -48,8 +48,8 @@ PLIST
 /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist" >/dev/null
 mkdir -p "$ROOT/release"
 cp -R "$APP" "$ROOT/release/IDIOS.app"
-PKG="$ROOT/idios-\${RELEASE_TAG}-\${ASSET}.pkg"
-DMG="$ROOT/idios-\${RELEASE_TAG}-\${ASSET}.dmg"
+PKG="$ROOT/idios-${RELEASE_TAG}-${ASSET}.pkg"
+DMG="$ROOT/idios-${RELEASE_TAG}-${ASSET}.dmg"
 pkgbuild --root "$PAYLOAD" --identifier "io.github.m-mdy-m.idios" --version "$VERSION" --install-location / "$PKG"
 cp -R "$APP" "$WORK_DIR/dmg/IDIOS.app"
 cp "$PKG" "$WORK_DIR/dmg/"

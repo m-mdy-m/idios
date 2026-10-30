@@ -76,7 +76,7 @@ func main() {
     $BaseUrl = "http://127.0.0.1:$Port"
     $ConfigPath = Join-Path $Work 'config.json'
     $BrowserLog = Join-Path $Work 'browser.log'
-    '{"server":{"host":"127.0.0.1","port":43178,"open_browser":false}}' | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+    [System.IO.File]::WriteAllText($ConfigPath, '{"server":{"host":"127.0.0.1","port":43178,"open_browser":false}}', [System.Text.UTF8Encoding]::new($false))
     $env:IDIOS_CONFIG = $ConfigPath
     $env:IDIOS_BROWSER_TEST_LOG = $BrowserLog
     $env:PATH = "$ShimDir;$env:PATH"

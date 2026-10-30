@@ -37,7 +37,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: idios-desktop-shortcut-smoke-\${{ github.ref }}
+  group: idios-desktop-shortcut-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
