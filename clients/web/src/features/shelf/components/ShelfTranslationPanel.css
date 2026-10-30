@@ -1,0 +1,75 @@
+.shelf-translation-panel {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #2b3544;
+  background: #141b26;
+  color: #e7edf6;
+}
+.shelf-translation-panel__header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 14px 12px; border-bottom:1px solid #2b3544; }
+.shelf-translation-panel__identity { display:flex; align-items:center; gap:9px; min-width:0; }
+.shelf-translation-panel__identity > span { display:grid; width:30px; height:30px; flex:0 0 30px; place-items:center; border:1px solid #35445a; border-radius:8px; color:#a8c0ff; background:#1c293a; }
+.shelf-translation-panel__identity > div { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.shelf-translation-panel__identity strong { font-size:12px; font-weight:650; }
+.shelf-translation-panel__identity small { color:#91a0b4; font-size:9px; }
+.shelf-translation-panel__close,.shelf-translation-panel__controls > button { display:grid; width:29px; height:29px; flex:0 0 29px; place-items:center; border:1px solid #344154; border-radius:7px; color:#aab8ca; background:#192332; cursor:pointer; }
+.shelf-translation-panel__close:hover,.shelf-translation-panel__controls > button:hover { color:#fff; border-color:#59739b; background:#202e42; }
+.shelf-translation-panel__controls { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; padding:11px 13px 9px; }
+.shelf-translation-panel__controls label { display:flex; flex:1; flex-direction:column; gap:5px; color:#95a4b8; font-size:9px; }
+.shelf-translation-panel__controls select { width:100%; min-height:31px; padding:0 8px; border:1px solid #344154; border-radius:6px; color:#e7edf6; background:#101821; font:inherit; font-size:11px; }
+.shelf-translation-panel__tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; padding:0 10px 10px; border-bottom:1px solid #2b3544; }
+.shelf-translation-panel__tabs button { display:flex; align-items:center; justify-content:center; gap:4px; min-width:0; min-height:31px; padding:0 3px; border:1px solid transparent; border-radius:6px; color:#92a1b5; background:transparent; font-size:9px; cursor:pointer; }
+.shelf-translation-panel__tabs button:hover { color:#e7edf6; background:#1b2635; }
+.shelf-translation-panel__tabs button.is-active { border-color:#3a4d68; color:#e6efff; background:#223149; }
+.shelf-translation-panel__content { flex:1 1 auto; min-height:0; padding:12px; overflow:auto; scrollbar-width:thin; scrollbar-color:#344154 transparent; }
+.shelf-translation-panel__section-title { display:flex; justify-content:space-between; gap:8px; margin-bottom:11px; color:#92a7c5; font:8px/1.4 'JetBrains Mono Variable',ui-monospace,monospace; letter-spacing:.08em; }
+.shelf-translation-panel__section-title span:last-child { color:#74849a; text-align:right; }
+.shelf-translation-panel__segments { display:flex; flex-direction:column; gap:8px; }
+.shelf-translation-panel__segments article { padding:9px 10px; border:1px solid transparent; border-radius:7px; background:#182332; transition:border-color .12s ease,background .12s ease; }
+.shelf-translation-panel__segments article.is-active { border-color:#829fd0; background:#1d2a3d; box-shadow:inset 2px 0 #9db8ec; }
+.shelf-translation-panel__segments article small { display:block; margin-bottom:7px; color:#8497b1; font-size:9px; line-height:1.5; white-space:pre-wrap; }
+.shelf-translation-panel__segments article p { margin:0; color:#e5ebf5; font-size:12px; line-height:1.75; white-space:pre-wrap; overflow-wrap:anywhere; }
+.shelf-translation-panel mark { border-radius:3px; padding:0 2px; color:#111a25; background:#a9c4f3; }
+.shelf-translation-panel__selection-result { margin-bottom:10px; padding:10px; border:1px solid #536c91; border-radius:7px; background:#1b2a3e; }
+.shelf-translation-panel__selection-result small,.shelf-translation-panel__hovered small { display:block; margin-bottom:6px; color:#9ab7e4; font:8px 'JetBrains Mono Variable',ui-monospace,monospace; letter-spacing:.08em; }
+.shelf-translation-panel__selection-result blockquote { margin:0 0 8px; color:#aab8ca; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__selection-result p { margin:0; color:#f0f4fb; font-size:12px; line-height:1.65; white-space:pre-wrap; }
+.shelf-translation-panel__hovered { margin:0 0 10px; padding:10px; border:1px solid #394a63; border-radius:7px; background:#1a2738; }
+.shelf-translation-panel__hovered strong { display:block; font-size:15px; font-weight:650; }
+.shelf-translation-panel__word-card { padding:12px; border:1px solid #3b4c65; border-radius:8px; background:#1b293a; }
+.shelf-translation-panel__word-card > div { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.shelf-translation-panel__word-card > div strong { color:#edf3ff; font-size:15px; }
+.shelf-translation-panel__word-card > div span { color:#b7ccef; font-size:12px; font-weight:650; }
+.shelf-translation-panel__word-card > small { display:inline-block; margin-top:7px; padding:3px 6px; border-radius:4px; color:#aabbd1; background:#28374a; font-size:9px; }
+.shelf-translation-panel__word-card > p { margin:9px 0 0; color:#d2dbea; font-size:11px; line-height:1.65; }
+.shelf-translation-panel__word-card blockquote { margin:9px 0 0; padding-left:9px; border-left:2px solid #829fd0; color:#9eafc5; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__term-list { display:flex; flex-direction:column; gap:4px; margin-top:15px; }
+.shelf-translation-panel__term-list > small { margin-bottom:4px; color:#8394aa; font:8px 'JetBrains Mono Variable',ui-monospace,monospace; letter-spacing:.08em; }
+.shelf-translation-panel__term-list button { display:flex; justify-content:space-between; gap:8px; padding:7px 8px; border:1px solid transparent; border-radius:5px; color:#c9d4e3; background:transparent; text-align:left; font-size:10px; cursor:pointer; }
+.shelf-translation-panel__term-list button:hover { border-color:#3b4c65; background:#1a2738; }
+.shelf-translation-panel__term-list button strong { color:#a9c2e8; font-weight:600; }
+.shelf-translation-panel__learning-card { margin-bottom:8px; padding:10px; border:1px solid #35445a; border-radius:7px; background:#192535; }
+.shelf-translation-panel__learning-card strong { color:#e3ebf7; font-size:11px; }
+.shelf-translation-panel__learning-card p { margin:7px 0 0; color:#c2ccda; font-size:11px; line-height:1.6; }
+.shelf-translation-panel__learning-card small { display:block; margin-top:7px; padding-top:7px; border-top:1px solid #2e3b4d; color:#9eafc5; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__empty,.shelf-translation-panel__loading { display:flex; align-items:center; flex-direction:column; gap:8px; padding:30px 12px; color:#98a8bd; text-align:center; }
+.shelf-translation-panel__empty > svg { color:#9db8ec; }
+.shelf-translation-panel__empty strong,.shelf-translation-panel__loading strong { color:#e4ebf5; font-size:11px; }
+.shelf-translation-panel__empty p,.shelf-translation-panel__loading span { max-width:29ch; margin:0; font-size:10px; line-height:1.6; }
+.shelf-translation-panel__empty button,.shelf-translation-panel__action { display:inline-flex; align-items:center; gap:6px; margin-top:6px; padding:7px 10px; border:1px solid #536c91; border-radius:6px; color:#e3edff; background:#23364f; font-size:10px; cursor:pointer; }
+.shelf-translation-panel__empty button:hover,.shelf-translation-panel__action:hover { background:#2b4362; }
+.shelf-translation-panel__action { margin:0 0 10px; }
+.shelf-translation-panel__action:disabled { opacity:.6; cursor:wait; }
+.shelf-translation-panel__error { margin:0 0 10px; padding:9px; border:1px solid #754a4a; border-radius:6px; color:#ffc7c7; background:#352225; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__note { padding:9px; border:1px solid #35445a; border-radius:6px; color:#adbbce; font-size:10px; line-height:1.5; }
+.shelf-translation-panel__note strong { display:block; margin-bottom:4px; color:#e3ebf7; }
+.shelf-translation-panel__footer { display:flex; justify-content:space-between; gap:8px; padding:9px 12px; border-top:1px solid #2b3544; color:#78889d; font-size:8px; }
+.shelf-translation-panel .is-spinning { animation:shelfTranslationSpin 1s linear infinite; }
+@keyframes shelfTranslationSpin { to { transform:rotate(360deg); } }
+@media (max-width:720px) {
+  .shelf-translation-panel { position:absolute; z-index:25; inset:0 auto 0 0; width:min(92vw,360px); max-width:100%; min-height:0; border-right:1px solid #53637a; box-shadow:18px 0 50px rgb(0 0 0 / 35%); }
+  .shelf-translation-panel__content { padding:11px; }
+}
