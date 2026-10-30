@@ -65,7 +65,7 @@ def main() -> int:
             errors.append(f"legacy documentation directory must not be present: {item}")
 
     for path in ROOT.rglob("*.md"):
-        if any(part in {".git", "node_modules", "dist"} for part in path.parts):
+        if any(part in {".git", ".tools", "node_modules", "dist"} for part in path.parts):
             continue
         source = path.read_text(encoding="utf-8", errors="replace")
         targets = LINK.findall(source) + IMAGE.findall(source) + HTML_IMAGE.findall(source)
