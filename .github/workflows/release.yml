@@ -2,11 +2,12 @@ name: IDIOS Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       dry-run:
-        description: Build and verify all release assets without publishing a GitHub Release
+        description: Build and verify every release target without publishing a GitHub Release
         required: false
         type: boolean
         default: true
@@ -20,8 +21,10 @@ concurrency:
 
 jobs:
   release:
+    name: Build, verify, and publish IDIOS release assets
     uses: m-mdy-m/pipeline/.github/workflows/release.yml@main
     with:
+      pipeline-ref: main
       test-command: bash scripts/release/verify.sh linux-amd64
       build-command: bash scripts/release/build.sh linux-amd64
       artifact-path: dist/release/*

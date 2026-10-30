@@ -158,7 +158,7 @@ python scripts/run-pipeline.py list
 python scripts/run-pipeline.py run ci
 ```
 
-The first command downloads the pinned pipeline source into `.tools/pipeline/`. This folder is ignored by Git. The task definitions remain in IDIOS's root `pipeline.toml`.
+The first command downloads the current `main` branch of the shared pipeline into `.tools/pipeline/`. The runner fetches `main` again before later executions. If the network is unavailable, an existing clone is reused and its cached commit is printed as a warning. This folder is ignored by Git. The task definitions remain in IDIOS's root `pipeline.toml`.
 
 ## 9. Find the code you need
 

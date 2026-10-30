@@ -13,11 +13,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  ci:
+    name: Validate and run the IDIOS task graph
     uses: m-mdy-m/pipeline/.github/workflows/ci.yml@main
     with:
       language: go
       go-version: "1.25.0"
+      # The shared workflow owns the runner/toolchain setup. Bootstrap the
+      # frontend package manager and validate the project task graph here;
+      # the complete build/test/race/smoke sequence is defined in pipeline.toml.
       build-command: |
         corepack enable
         corepack prepare pnpm@9.15.4 --activate

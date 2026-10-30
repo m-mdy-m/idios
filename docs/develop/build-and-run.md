@@ -60,4 +60,4 @@ The Web development server uses the Vite configuration in `clients/web/vite.conf
 - `VERSION` sets the version embedded in the executable.
 - `CGO_ENABLED` controls CGO; SQLite builds require it enabled.
 
-On Windows, `scripts/build.ps1 -Version 2.1.0` can be called directly.
+On Windows, `scripts/build.ps1 -Version 3.0.0` can be called directly.

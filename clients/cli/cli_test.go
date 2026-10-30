@@ -89,8 +89,8 @@ func TestVersionReportsStableRelease(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("version exit code = %d, want 0; stderr=%q", code, stderr)
 	}
-	if got := strings.TrimSpace(stdout); got != "2.1.0" {
-		t.Fatalf("version output = %q, want 2.1.0", got)
+	if got := strings.TrimSpace(stdout); got != "3.0.0" {
+		t.Fatalf("version output = %q, want 3.0.0", got)
 	}
 	if stderr != "" {
 		t.Fatalf("version wrote unexpected stderr: %q", stderr)

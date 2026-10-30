@@ -1,0 +1,20 @@
+name: IDIOS Documentation and Workflow Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idios-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Markdown and GitHub Actions validation
+    uses: m-mdy-m/pipeline/.github/workflows/docs-check.yml@main
