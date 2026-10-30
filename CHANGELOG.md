@@ -9,10 +9,11 @@
 
 ### Changed
 
+- Make MIMI the single primary Shelf identity and final discussion Chair; prefer a larger verified local model for its moderation role while preserving explicit user model choices.
 - Strengthen the sequential-agent skill with mandatory role-specific contribution, non-echo review after Chair turns, and explicit preservation of negation, scope, and argument structure.
 - Preserve up to 40 completed discussion turns across continuations, using shared UTF-8 byte limits between the Web client and Go runtime instead of dropping history after eight turns.
 - Keep source markers when discussion history must be compacted, and disclose omitted or shortened carry-over to subsequent agents.
-- Require an available Mira · Chair for Shelf round-table starts and continuations; final synthesis must compare evidence rather than count repeated agreement.
+- Require an available MIMI · Chair for Shelf round-table starts and continuations; final synthesis must compare evidence rather than count repeated agreement.
 - Strengthen Mimi's page-reading contract to preserve explicit negations, qualifications, and the distinction between a page's main argument and secondary acknowledgements.
 
 ### Fixed

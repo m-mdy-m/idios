@@ -37,7 +37,7 @@ Book discussions use a sequential round-table. Each selected agent receives the 
 
 - Built-in agents receive a mandatory role-specific deliverable in addition to their editable profile instructions. They must not impersonate peers, treat a peer statement as source evidence, or paraphrase agreement without adding a new qualification or reason.
 - Source passages remain authoritative. Agent outputs are claims to check, not facts to inherit. Exact `[source:ID]` markers are validated against the request's supplied source IDs.
-- The final speaking turn belongs to Mira · Chair. Mira compares the actual positions, weighs the supplied text rather than counting votes, preserves explicit negations and qualifications, and reports unresolved disagreement instead of forcing consensus.
+- The final speaking turn belongs to MIMI · Chair. MIMI compares the actual positions, weighs the supplied text rather than counting votes, preserves explicit negations and qualifications, and reports unresolved disagreement instead of forcing consensus.
 - A continuation carries up to 40 completed turns, with a 5,000-byte per-turn and 48,000-byte aggregate UTF-8 budget. Oversized carry-over is bounded from the newest turn backward; truncation preserves source markers and adds a warning. Failed and waiting turns are not treated as peer evidence.
 - Older turns are represented by bounded excerpts in a later model prompt. Those excerpts retain source markers; the original contribution remains visible in the task result. The source passage is reattached in full on every generation.
 
