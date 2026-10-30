@@ -407,7 +407,6 @@ export function ShelfPDFReaderPage() {
       currentBook.tags?.length ? `Book subject tags: ${currentBook.tags.join(', ')}` : '',
       currentBook.repository_name ? `Related technical context: ${currentBook.repository_name}` : '',
       `Requested page: PDF page ${request.pageNumber}`,
-      request.pageText.trim() ? `Exact extracted text from the current PDF page:\n${request.pageText.trim().slice(0, 16000)}` : '',
       request.documentContext.trim() ? `Neighbouring pages actually extracted from this same book:\n${request.documentContext.slice(0, 22000)}` : '',
       nearbyAnnotations.length ? `Reader's saved highlights and notes near this page (fallible context only):\n${nearbyAnnotations.map((item) => `- Page ${item.page}: “${item.quote.slice(0, 260)}”${item.note?.trim() ? ` — ${item.note.trim().slice(0, 260)}` : ''}`).join('\n').slice(0, 5000)` : '',
       notes.length ? `Reader's saved book notes (supporting context only):\n${notes.slice(-12).map((item) => `- ${item.title}: ${item.content.slice(0, 420)}`).join('\n').slice(0, 5000)}` : '',
