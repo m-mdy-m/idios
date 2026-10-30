@@ -148,17 +148,27 @@ The full gate includes Go tests, race tests, Web checks/build, and a local smoke
 
 ## 8. Use the shared pipeline
 
-IDIOS uses the separate [`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) repository for the local task runner and reusable GitHub workflows.
+IDIOS keeps its task graph in the root `pipeline.toml` and uses the shared
+[`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) CLI and reusable
+GitHub Actions workflows. No project-local runner wrapper is required.
 
-With Python 3.12+ and Git installed, run:
+With Python 3.11+ and Git installed, install the shared CLI once:
 
 ```sh
-python scripts/run-pipeline.py validate
-python scripts/run-pipeline.py list
-python scripts/run-pipeline.py run ci
+python -m pip install "git+https://github.com/m-mdy-m/pipeline.git@main"
 ```
 
-The first command downloads the current `main` branch of the shared pipeline into `.tools/pipeline/`. The runner fetches `main` again before later executions. If the network is unavailable, an existing clone is reused and its cached commit is printed as a warning. This folder is ignored by Git. The task definitions remain in IDIOS's root `pipeline.toml`.
+Run the task graph directly:
+
+```sh
+pipeline validate
+pipeline list
+pipeline run ci
+```
+
+The GitHub Actions caller uses the reusable CI workflow's `pipeline-task: ci`
+input. That workflow checks out the shared engine and invokes the GitHub
+provider adapter; IDIOS only declares its task graph in `pipeline.toml`.
 
 ## 9. Find the code you need
 
