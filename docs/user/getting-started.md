@@ -27,7 +27,7 @@ The installer checks the downloaded archive against its SHA-256 checksum before 
 Open a terminal and run:
 
 ```sh
-idios web
+idios serve --open
 ```
 
 The local service starts and your browser opens at `http://127.0.0.1:43170` by default. You can also double-click the IDIOS desktop shortcut (or `IDIOS.app` on macOS) to do the same without a terminal.
@@ -35,7 +35,7 @@ The local service starts and your browser opens at `http://127.0.0.1:43170` by d
 To print the address without opening a browser:
 
 ```sh
-idios web --no-open
+idios serve --open --no-open
 ```
 
 ## 3. Create your first Repository

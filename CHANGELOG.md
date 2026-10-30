@@ -4,6 +4,26 @@ All notable changes to IDIOS are recorded here. This file follows [Keep a Change
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-30
+
+### Added
+
+- Added a native Linux desktop launcher using a .desktop entry and the IDIOS SVG icon.
+- Added a Windows desktop and Start Menu shortcut using a hidden Windows Script Host launcher.
+- Added a native macOS IDIOS.app bundle with an app icon and a bundled IDIOS server executable.
+- Added release artifact tests that download and execute each platform package on its native runner before release publication.
+
+### Changed
+
+- Installers now create platform-native launchers: desktop/menu shortcuts on Linux and Windows, and IDIOS.app on macOS.
+- Linux DEB/RPM packages and portable archives now include their desktop entry and icon.
+- Windows ZIP and Setup packages now include the VBS launcher and application icon.
+- macOS TAR, PKG, and DMG packages now include the app bundle.
+
+### Fixed
+
+- Repeated clicks on serve --open now reuse an already-running local server and open its workspace instead of failing to bind the occupied port.
+
 ## [3.0.2] — 2026-10-30
 
 IDIOS 3.0.2 is a maintenance release focused on making native release builds

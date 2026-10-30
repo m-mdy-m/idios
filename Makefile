@@ -64,9 +64,11 @@ install-user: install ## Install for the current user without administrator priv
 uninstall: ## Remove IDIOS installed by make on Windows.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1 -InstallDir "$(PREFIX)" -Uninstall
 else
-install: build ## Install the idios executable into $(DESTDIR)$(PREFIX)/bin (may require sudo).
-	install -d "$(DESTDIR)$(PREFIX)/bin"
+install: build ## Install IDIOS and its desktop entry into $(DESTDIR)$(PREFIX) (may require sudo).
+	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/share/applications" "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps"
 	install -m 0755 "$(CLI_BIN)" "$(DESTDIR)$(PREFIX)/bin/idios"
+	install -m 0644 packaging/linux/idios.desktop "$(DESTDIR)$(PREFIX)/share/applications/idios.desktop"
+	install -m 0644 clients/web/public/brand/idios-mark.svg "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/idios.svg"
 	rm -f "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
 
 install-user: PREFIX = $(HOME)/.local
@@ -80,6 +82,7 @@ install-user: install ## Install for the current user without administrator priv
 
 uninstall: ## Remove the installed IDIOS executable from $(DESTDIR)$(PREFIX)/bin.
 	rm -f "$(DESTDIR)$(PREFIX)/bin/idios" "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
+	rm -f "$(DESTDIR)$(PREFIX)/share/applications/idios.desktop" "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/idios.svg"
 endif
 
 ## Quality

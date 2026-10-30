@@ -32,6 +32,7 @@ jobs:
       test-command: bash scripts/release/verify.sh linux-amd64
       build-command: bash scripts/release/build.sh linux-amd64
       artifact-path: dist/release/*
+      artifact-test-command: bash scripts/release/test-artifacts.sh
       changelog-path: CHANGELOG.md
       # `inputs` exists only for workflow_dispatch; tag pushes must publish.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true' }}
@@ -41,6 +42,6 @@ jobs:
           {"id":"linux-arm64","os":"ubuntu-24.04-arm","test_command":"bash scripts/release/verify.sh linux-arm64","build_command":"bash scripts/release/build.sh linux-arm64","artifact_path":"dist/release/*"},
           {"id":"darwin-amd64","os":"macos-15-intel","test_command":"bash scripts/release/verify.sh darwin-amd64","build_command":"bash scripts/release/build.sh darwin-amd64","artifact_path":"dist/release/*"},
           {"id":"darwin-arm64","os":"macos-15","test_command":"bash scripts/release/verify.sh darwin-arm64","build_command":"bash scripts/release/build.sh darwin-arm64","artifact_path":"dist/release/*"},
-          {"id":"windows-amd64","os":"windows-2025","test_command":"bash scripts/release/verify.sh windows-amd64","build_command":"bash scripts/release/build.sh windows-amd64","artifact_path":"dist/release/*","msys2_msystem":"UCRT64","msys2_packages":"mingw-w64-ucrt-x86_64-gcc"},
-          {"id":"windows-arm64","os":"windows-11-arm","test_command":"bash scripts/release/verify.sh windows-arm64","build_command":"bash scripts/release/build.sh windows-arm64","artifact_path":"dist/release/*","msys2_msystem":"CLANGARM64","msys2_packages":"mingw-w64-clang-aarch64-clang"}
+          {"id":"windows-amd64","os":"windows-2025","test_command":"bash scripts/release/verify.sh windows-amd64","build_command":"bash scripts/release/build.sh windows-amd64","artifact_path":"dist/release/*","artifact_test_command":"./scripts/release/test-artifacts.ps1","msys2_msystem":"UCRT64","msys2_packages":"mingw-w64-ucrt-x86_64-gcc"},
+          {"id":"windows-arm64","os":"windows-11-arm","test_command":"bash scripts/release/verify.sh windows-arm64","build_command":"bash scripts/release/build.sh windows-arm64","artifact_path":"dist/release/*","artifact_test_command":"./scripts/release/test-artifacts.ps1","msys2_msystem":"CLANGARM64","msys2_packages":"mingw-w64-clang-aarch64-clang"}
         ]}

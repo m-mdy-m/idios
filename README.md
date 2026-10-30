@@ -29,7 +29,7 @@ The installer downloads the latest release, checks its SHA-256 checksum, and ins
 ### Open the workspace
 
 ```sh
-idios web
+idios serve --open
 ```
 
 IDIOS starts its local service when needed and opens the browser. The default address is `http://127.0.0.1:43170`. You can also double-click the installed IDIOS launcher instead of opening a terminal.
