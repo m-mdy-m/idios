@@ -65,9 +65,11 @@ export function ShelfPDFReaderPage() {
     void Promise.all([api.aiModels(), api.aiProviders(), api.aiConfig()]).then(([catalogue, providers, config]) => {
       if (!active) return;
       const providerByID = new Map<string, AIProvider>(providers.map((provider) => [provider.id, provider]));
+      const cloudBlocked = config.mode === 'offline-only' || (config.mode === 'local-first' && !config.allow_cloud_fallback);
       const options = catalogue.models.flatMap((model: AIModel) => {
         const provider = providerByID.get(model.provider_id);
         if (!provider?.enabled || provider.health?.state === 'unavailable' || provider.health?.state === 'unauthorized') return [];
+        if (cloudBlocked && !provider.local) return [];
         if (model.availability !== 'available' && model.availability !== 'unknown') return [];
         return [{
           value: model.provider_id + '/' + model.id,
