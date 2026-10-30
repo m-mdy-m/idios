@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, ExternalLink, FileText, Focus, Highlighter, Languages,
   LoaderCircle, Maximize2, MessageCircle, MessagesSquare, Search, Sparkles, StickyNote, Trash2, X, ZoomIn, ZoomOut,
@@ -232,10 +232,10 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [sidePanelMode, setSidePanelMode] = useState<'notes' | 'discussion'>('notes');
   const [translationOpen, setTranslationOpen] = useState(false);
   const [translationTab, setTranslationTab] = useState<ShelfTranslationTab>('translate');
-  const [translationPanelWidth, setTranslationPanelWidth] = useState(480);
-  const [translationPanelHeight, setTranslationPanelHeight] = useState(390);
-  const [translationResizing, setTranslationResizing] = useState(false);
-  const translationResizeOrigin = useRef<{ x: number; y: number; width: number; height: number; mobile: boolean } | null>(null);
+  const [translationPanelWidth, setTranslationPanelWidth] = useState(560);
+  const [translationPanelHeight, setTranslationPanelHeight] = useState(600);
+  const [translationPanelPosition, setTranslationPanelPosition] = useState({ left: 0, top: 0 });
+  const translationResizeOrigin = useRef<{ x: number; y: number; width: number; height: number; left: number; top: number } | null>(null);
   const [translationTimeoutSeconds, setTranslationTimeoutSeconds] = useState(300);
   const [learningAnalysisBusy, setLearningAnalysisBusy] = useState(false);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState('fa');
@@ -267,6 +267,15 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [activeCompanionPin, setActiveCompanionPin] = useState<number | null>(null);
   const [hoveredTextForAI, setHoveredTextForAI] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
+
+  useEffect(() => {
+    if (!translationOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setTranslationOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [translationOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1033,7 +1042,28 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           {focusMode && <>
             <button type="button" className="shelf-pdf-reader__icon" onClick={() => onOpenFocusTool('search')} aria-label="Search the web" title="Quick web search"><Search size={15} /></button>
           </>}
-          <button type="button" className={`shelf-pdf-reader__icon ${translationOpen ? 'is-active' : ''}`} onClick={() => { setTranslationOpen((open) => !open); setTranslationTab('translate'); setSidePanelOpen(false); setInlineChatOpen(false); }} aria-label="Toggle AI translation and learning" title="Translate & learn"><Languages size={16} /></button>
+          <button type="button" className={`shelf-pdf-reader__icon ${translationOpen ? 'is-active' : ''}`} onClick={() => {
+            if (translationOpen) {
+              setTranslationOpen(false);
+              return;
+            }
+            const width = Math.min(560, window.innerWidth - 24);
+            const height = Math.min(600, window.innerHeight - 32);
+            const mascot = document.querySelector('.shelf-study-mascot__character')?.getBoundingClientRect();
+            const left = mascot
+              ? Math.max(12, Math.min(window.innerWidth - width - 12, mascot.right - width))
+              : Math.max(12, window.innerWidth - width - 24);
+            const top = mascot
+              ? Math.max(12, Math.min(window.innerHeight - height - 12, mascot.top - height - 14))
+              : Math.max(12, window.innerHeight - height - 100);
+            setTranslationPanelWidth(width);
+            setTranslationPanelHeight(height);
+            setTranslationPanelPosition({ left, top });
+            setTranslationTab('translate');
+            setSidePanelOpen(false);
+            setInlineChatOpen(false);
+            setTranslationOpen(true);
+          }} aria-label="Toggle AI translation and learning" title="Translate & learn"><Languages size={16} /></button>
           <button type="button" className={`shelf-pdf-reader__icon ${sidePanelOpen && sidePanelMode === 'notes' ? 'is-active' : ''}`} onClick={() => { if (sidePanelOpen && sidePanelMode === 'notes') setSidePanelOpen(false); else { setSidePanelMode('notes'); setSidePanelOpen(true); } }} aria-label="Show highlights panel" title="Highlights & notes"><Bookmark size={16} /></button>
           <button type="button" className={`shelf-pdf-reader__icon ${sidePanelOpen && sidePanelMode === 'discussion' ? 'is-active' : ''}`} onClick={() => { setTranslationOpen(false); if (sidePanelOpen && sidePanelMode === 'discussion') setSidePanelOpen(false); else { setInlineChatOpen(false); setSidePanelMode('discussion'); setSidePanelOpen(true); } }} aria-label="Toggle agent discussion" title="Agent discussion"><MessagesSquare size={16} /></button>
           <button type="button" className={`shelf-pdf-reader__icon ${inlineChatOpen ? 'is-active' : ''}`} onClick={() => { setTranslationOpen(false); setSidePanelOpen(false); if (inlineChatOpen) closeInlineChat(); else openAIChat(); }} aria-label="Toggle AI reading companion" title="AI reading companion"><MessageCircle size={16} /></button>
@@ -1046,83 +1076,85 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       </div>
     </div>
 
-    <div className={`shelf-pdf-reader__body ${translationOpen ? 'shelf-pdf-reader__body--translation' : sidePanelOpen && sidePanelMode === 'notes' ? '' : sidePanelOpen && sidePanelMode === 'discussion' ? 'shelf-pdf-reader__body--discussion' : 'shelf-pdf-reader__body--wide'}${translationResizing ? ' is-translation-resizing' : ''}`} style={translationOpen ? ({ '--translation-panel-width': `${translationPanelWidth}px`, '--translation-panel-height': `${translationPanelHeight}px` } as CSSProperties) : undefined}>
-      {translationOpen && <button type="button" className="shelf-translation-panel__scrim" aria-label="Close translation panel" onClick={() => setTranslationOpen(false)} />}
-      {translationOpen && <ShelfTranslationPanel
-        pageNumber={pageNumber}
-        translationModel={translationModel}
-        modelOptions={translationModelOptions}
-        modelsLoading={translationModelsLoading}
-        modelError={translationModelError}
-        lastUsedModel={lastUsedTranslationModel}
-        onModelChange={(model) => { onTranslationModelChange(model); setPageTranslationBusy(false); setTranslationProgress({ done: 0, total: 0 }); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
-        targetLanguage={translationTargetLanguage}
-        onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); }}
-        tab={translationTab}
-        onTabChange={setTranslationTab}
-        pageData={pageTranslation ?? partialPageTranslation}
-        selectionData={selectionTranslation}
-        wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
-        activeText={selectedTextForAI || hoveredTextForAI}
-        selectedText={selectedTextForAI}
-        hoveredWord={hoveredTextForAI}
-        pageBusy={pageTranslationBusy}
-        progress={translationProgress}
-        analysisBusy={learningAnalysisBusy}
-        onAnalyzePage={analyzePage}
-        timeoutSeconds={translationTimeoutSeconds}
-        onTimeoutChange={setTranslationTimeoutSeconds}
-        selectionBusy={selectionTranslationBusy}
-        wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}`}
-        error={translationError}
-        onClose={() => setTranslationOpen(false)}
-        onTranslatePage={refreshPageTranslation}
-        onTranslateSelection={() => void translateSelection()}
-        onExplainWord={() => void explainHoveredWord()}
-        onSelectTerm={(term) => { setSelectedTextForAI(''); setHoveredTextForAI(term); }}
-      />}
+    <div className={`shelf-pdf-reader__body ${sidePanelOpen && sidePanelMode === 'discussion' ? 'shelf-pdf-reader__body--discussion' : sidePanelOpen && sidePanelMode === 'notes' ? '' : 'shelf-pdf-reader__body--wide'}`}>
       {translationOpen && <div
-        className="shelf-pdf-reader__translation-resize"
-        role="separator"
-        aria-label="Resize translation panel"
-        aria-orientation={typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches ? 'horizontal' : 'vertical'}
-        aria-valuemin={360}
-        aria-valuemax={Math.min(900, typeof window !== 'undefined' ? Math.round(window.innerWidth * 0.72) : 900)}
-        aria-valuenow={translationPanelWidth}
-        tabIndex={0}
-        onPointerDown={(event) => {
-          const mobile = window.matchMedia('(max-width: 720px)').matches;
-          translationResizeOrigin.current = { x: event.clientX, y: event.clientY, width: translationPanelWidth, height: translationPanelHeight, mobile };
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setTranslationResizing(true);
-          event.preventDefault();
+        className="shelf-pdf-reader__translation-popover"
+        style={{
+          left: translationPanelPosition.left,
+          top: translationPanelPosition.top,
+          width: translationPanelWidth,
+          height: translationPanelHeight,
         }}
-        onPointerMove={(event) => {
-          const origin = translationResizeOrigin.current;
-          if (!origin) return;
-          if (origin.mobile) {
-            setTranslationPanelHeight(Math.max(260, Math.min(window.innerHeight * 0.82, origin.height + origin.y - event.clientY)));
-          } else {
-            setTranslationPanelWidth(Math.max(360, Math.min(900, window.innerWidth * 0.72, origin.width + event.clientX - origin.x)));
-          }
-        }}
-        onPointerUp={(event) => {
-          translationResizeOrigin.current = null;
-          setTranslationResizing(false);
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-        }}
-        onPointerCancel={() => { translationResizeOrigin.current = null; setTranslationResizing(false); }}
-        onKeyDown={(event) => {
-          const mobile = window.matchMedia('(max-width: 720px)').matches;
-          if (mobile && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      >
+        <ShelfTranslationPanel
+          pageNumber={pageNumber}
+          translationModel={translationModel}
+          modelOptions={translationModelOptions}
+          modelsLoading={translationModelsLoading}
+          modelError={translationModelError}
+          lastUsedModel={lastUsedTranslationModel}
+          onModelChange={(model) => { onTranslationModelChange(model); setPageTranslationBusy(false); setTranslationProgress({ done: 0, total: 0 }); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
+          targetLanguage={translationTargetLanguage}
+          onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); }}
+          tab={translationTab}
+          onTabChange={setTranslationTab}
+          pageData={pageTranslation ?? partialPageTranslation}
+          selectionData={selectionTranslation}
+          wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
+          selectedText={selectedTextForAI}
+          hoveredWord={hoveredTextForAI}
+          pageBusy={pageTranslationBusy}
+          progress={translationProgress}
+          analysisBusy={learningAnalysisBusy}
+          onAnalyzePage={analyzePage}
+          timeoutSeconds={translationTimeoutSeconds}
+          onTimeoutChange={setTranslationTimeoutSeconds}
+          selectionBusy={selectionTranslationBusy}
+          wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}`}
+          error={translationError}
+          onClose={() => setTranslationOpen(false)}
+          onRetryTranslation={refreshPageTranslation}
+          onTranslateSelection={() => void translateSelection()}
+          onExplainWord={() => void explainHoveredWord()}
+          onSelectTerm={(term) => { setSelectedTextForAI(''); setHoveredTextForAI(term); }}
+        />
+        <div
+          className="shelf-pdf-reader__translation-resize-handle"
+          role="separator"
+          aria-label="Resize translation window"
+          aria-orientation="vertical"
+          tabIndex={0}
+          onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
+            translationResizeOrigin.current = {
+              x: event.clientX, y: event.clientY,
+              width: translationPanelWidth, height: translationPanelHeight,
+              left: translationPanelPosition.left, top: translationPanelPosition.top,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
             event.preventDefault();
-            setTranslationPanelHeight((height) => Math.max(260, Math.min(window.innerHeight * 0.82, height + (event.key === 'ArrowUp' ? 24 : -24))));
-          } else if (!mobile && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-            event.preventDefault();
-            setTranslationPanelWidth((width) => Math.max(360, Math.min(900, window.innerWidth * 0.72, width + (event.key === 'ArrowRight' ? 24 : -24))));
-          }
-        }}
-      />}
+          }}
+          onPointerMove={(event: ReactPointerEvent<HTMLDivElement>) => {
+            const origin = translationResizeOrigin.current;
+            if (!origin) return;
+            setTranslationPanelWidth(Math.max(360, Math.min(window.innerWidth - origin.left - 12, 900, origin.width + event.clientX - origin.x)));
+            setTranslationPanelHeight(Math.max(300, Math.min(window.innerHeight - origin.top - 12, 850, origin.height + event.clientY - origin.y)));
+          }}
+          onPointerUp={(event: ReactPointerEvent<HTMLDivElement>) => {
+            translationResizeOrigin.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => { translationResizeOrigin.current = null; }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault();
+              setTranslationPanelWidth((width) => Math.max(360, Math.min(window.innerWidth - translationPanelPosition.left - 12, 900, width + (event.key === 'ArrowRight' ? 24 : -24))));
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              setTranslationPanelHeight((height) => Math.max(300, Math.min(window.innerHeight - translationPanelPosition.top - 12, 850, height + (event.key === 'ArrowDown' ? 24 : -24))));
+            }
+          }}
+        />
+      </div>}
       <section className="shelf-pdf-reader__workspace">
         <div className="shelf-pdf-reader__searchbar"><form onSubmit={(event) => { event.preventDefault(); void findText(1); }}><Search size={15} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Find in this book…" aria-label="Find text in PDF" /><button type="submit" disabled={searching || !searchText.trim()}>{searching ? <LoaderCircle size={14} className="spin" /> : 'Find'}</button></form>{searchPages.length > 0 && <div className="shelf-pdf-reader__search-nav"><span>{searchPages.length} matching {searchPages.length === 1 ? 'page' : 'pages'}</span><button type="button" onClick={() => void goToSearchMatch(-1)} aria-label="Previous search match"><ChevronLeft size={14} /></button><button type="button" onClick={() => void goToSearchMatch(1)} aria-label="Next search match"><ChevronRight size={14} /></button></div>}</div>
         {error ? <div className="shelf-pdf-reader__error"><FileText size={22} /><strong>Could not open this PDF</strong><p>{error}</p></div> : loading ? <div className="shelf-pdf-reader__loading" role="status" aria-live="polite"><div className="shelf-pdf-reader__loading-art"><div className="shelf-pdf-reader__loading-ring" /><FileText size={24} /></div><div className="shelf-pdf-reader__loading-copy"><strong>{elapsedSeconds < 3 ? 'Opening your book…' : elapsedSeconds < 10 ? 'Reading the PDF structure…' : 'This is a large PDF — still working…'}</strong><span>Downloading, parsing and preparing the first page</span><div className="shelf-pdf-reader__progress-track"><i /></div><small>{elapsedSeconds}s elapsed · large scans and embedded fonts can take longer</small></div></div> : <>
