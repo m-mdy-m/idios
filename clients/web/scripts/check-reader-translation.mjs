@@ -10,7 +10,7 @@ const valid = parseReaderTranslation(JSON.stringify({
     { source: 'A sentence that is not in the source.', translation: 'متن ساختگی' },
   ],
   terms: [{ source: 'argument', translation: 'استدلال', meaning: 'روند منطقی ارائه‌شده در متن', partOfSpeech: 'noun', example: 'The argument is clear.' }, { source: 'fabricated-term', translation: 'ساختگی', meaning: 'not in source' }],
-  grammar: [{ pattern: 'Present simple', explanation: 'برای بیان واقعیت یا روند کلی استفاده شده است.' }],
+  grammar: [{ pattern: 'is not guaranteed', explanation: 'برای بیان واقعیت یا روند کلی استفاده شده است.' }],
   ielts: [{ expression: 'not guaranteed', academicUse: 'برای بیان محدودیت یا عدم قطعیت در نوشتار رسمی.' }],
 }), source);
 
