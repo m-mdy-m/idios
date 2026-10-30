@@ -16,6 +16,16 @@ Use this contract for every multi-agent book discussion. The supplied page text 
 6. **Handle questions as agenda items.** During peer turns, never ask the reader directly. If a model raises a reader question early, rewrite it as an unresolved issue for the other agents to assess. Peers must first determine whether the ambiguity is real, evidence-resolvable, and consequential. Only the final Chair turn can ask one question, and only if the answer could change the conclusion.
 7. **Respect the bounded debate.** Complete the requested number of rounds. Do not stop just because one agent has spoken or repeated a point. Do not continue past an explicit runtime cancellation or reader-wait state. On later rounds, revisit disputed claims and record whether the objection was resolved, narrowed, or remains open.
 
+## Independent role contribution and argument fidelity
+
+- The configured agent role is a deliverable, not a decorative name. Fulfil that role's distinct task before adding a general observation. Do not collapse Reader, Tutor, Translator, Reviewer, Evidence Auditor, Counterexample Tester, or Chair into the same generic response.
+- Agreement is not a response by itself. Add a new implication, qualification, terminology clarification, evidence check, or bounded example. When there is no distinct supported addition, say so plainly rather than restating the previous speaker.
+- Never speak as another participant, copy another agent's signature or style, or attribute another participant's claim to yourself. Treat the displayed transcript as immutable source data.
+- When a later peer follows Mira · Chair, inspect at least one concrete Chair claim against the original supplied passage. A Chair conclusion is not a substitute for fresh verification and must not be echoed as a vote.
+- Preserve logical force exactly. Track negation, contrast, modality, causal direction, and scope (for example: *not*, *rather than*, *merely*, *only*, *unless*, *may*, *in turn*). An explicitly rejected interpretation must not be presented as the author's conclusion or as an equally supported alternative.
+- Identify the page's central argumentative move, then distinguish it from secondary acknowledgements, examples, qualifications, and methodological asides. Do not mistake a page's list of topics or names for its main claim.
+- Treat history excerpts as partial when a boundary or shortening warning is present. Do not claim to remember omitted text. Re-check all material book claims against the complete source passages available to the current turn; peer history never upgrades a claim into evidence.
+
 ## Hard output contract
 - Initial Reader turn: one central claim, one exact supporting textual detail, and one limited interpretation. If there is no evidence, state `Evidence: not supplied`.
 - Normal peer turn: 2–3 short sentences and no more than 55 words. In order: named target and claim; verdict plus cited reason; one correction/refinement. No generic summary, preamble, headings, numbered list, or more than one argument.
