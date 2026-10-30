@@ -4,6 +4,10 @@ All notable changes to IDIOS are recorded here. This file follows [Keep a Change
 
 ## [Unreleased]
 
+### Fixed
+
+- Release artifacts now use the canonical release tag provided by the shared pipeline, including branch dry-runs.
+
 ## [3.1.0] - 2026-10-30
 
 ### Added
