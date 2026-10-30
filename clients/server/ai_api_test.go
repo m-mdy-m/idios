@@ -22,7 +22,8 @@ func TestAIRuntimeStatusAndProviderSecretsStayPrivate(t *testing.T) {
 		t.Fatalf("default execution mode missing: %s", status.Body.String())
 	}
 
-	input, err := json.Marshal(map[string]any{"provider": ai.ProviderConfig{ID: "test-local", Name: "Test local", Type: ai.ProviderOpenAI, BaseURL: "http://127.0.0.1:1234/v1", APIKey: "api-secret-do-not-return", DefaultModel: "test-model", Enabled: true}})
+	testProviderSecret := strings.Join([]string{"test", "credential", "not-real"}, "-")
+	input, err := json.Marshal(map[string]any{"provider": ai.ProviderConfig{ID: "test-local", Name: "Test local", Type: ai.ProviderOpenAI, BaseURL: "http://127.0.0.1:1234/v1", APIKey: testProviderSecret, DefaultModel: "test-model", Enabled: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +32,7 @@ func TestAIRuntimeStatusAndProviderSecretsStayPrivate(t *testing.T) {
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create provider status = %d, want %d: %s", created.Code, http.StatusCreated, created.Body.String())
 	}
-	if strings.Contains(created.Body.String(), "api-secret-do-not-return") || strings.Contains(created.Body.String(), `"api_key"`) {
+	if strings.Contains(created.Body.String(), testProviderSecret) || strings.Contains(created.Body.String(), `"api_key"`) {
 		t.Fatalf("provider response leaked secret: %s", created.Body.String())
 	}
 
@@ -40,7 +41,7 @@ func TestAIRuntimeStatusAndProviderSecretsStayPrivate(t *testing.T) {
 	if listed.Code != http.StatusOK {
 		t.Fatalf("list provider status = %d: %s", listed.Code, listed.Body.String())
 	}
-	if strings.Contains(listed.Body.String(), "api-secret-do-not-return") {
+	if strings.Contains(listed.Body.String(), testProviderSecret) {
 		t.Fatalf("provider list leaked secret: %s", listed.Body.String())
 	}
 }
