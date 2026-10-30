@@ -31,7 +31,6 @@ Provider model discovery and model inference are separate operations. `Manager.R
 
 Offline-only blocks remote discovery and inference at the server boundary. Local-first allows explicit discovery of remote model metadata but blocks remote inference unless the cloud fallback policy is enabled. The UI must mirror these rules, but the server is authoritative.
 
-
 ## Evidence-led agent discussions
 
 Book discussions use a sequential round-table. Each selected agent receives the original supplied passages plus the completed peer turns that precede it; parallel generation is disabled because it would prevent meaningful peer review.

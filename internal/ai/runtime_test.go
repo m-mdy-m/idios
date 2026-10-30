@@ -1742,8 +1742,8 @@ func TestDiscussionRoleFocusIsDistinctAndInjected(t *testing.T) {
 	}
 	messages := discussionMessages(DiscussionRequest{
 		BookTitle: "Example",
-		Question: "What is this page about?",
-		Context: []ContextPassage{{ID: "page-21", Page: 21, Text: "The author explicitly rejects a reading."}},
+		Question:  "What is this page about?",
+		Context:   []ContextPassage{{ID: "page-21", Page: 21, Text: "The author explicitly rejects a reading."}},
 	}, tutor, false, nil)
 	if len(messages) != 2 {
 		t.Fatalf("discussion prompt has %d messages, want system and source messages", len(messages))
