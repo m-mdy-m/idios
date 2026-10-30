@@ -615,7 +615,6 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }
     setTranslationProgress({ done: chunks.length, total: chunks.length });
     const combined = results.length === 1 ? results[0] : mergeReaderTranslations(results);
-    if (kind === 'page') setPartialPageTranslation(null);
     return combined;
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage]);
 
@@ -687,6 +686,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setPartialPageTranslation(null);
     setSelectionTranslation(null);
     setPageTranslationBusy(true);
+    setTranslationProgress({ done: 0, total: 0 });
     setTranslationError('');
     void requestTranslation(currentPageText, 'page').then((translated) => {
       if (!active || requestID !== translationRequestID.current) return;
@@ -707,7 +707,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (active && requestID === translationRequestID.current) setPageTranslationBusy(false);
     });
     return () => { active = false; if (translationPageInFlight.current === key) translationPageInFlight.current = ''; };
-  }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
+  }, [bookID, currentPageText, pageNumber, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
     if (!translationOpen || !pageTranslation || !hoveredTextForAI.trim()) return;
