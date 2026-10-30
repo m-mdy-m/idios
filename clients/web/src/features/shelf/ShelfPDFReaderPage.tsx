@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, FileWarning, Languages, LoaderCircle, Search, X } from 'lucide-react';
 import { ShelfPDFReader } from '@/features/shelf/components/ShelfPDFReader';
-import type { ReaderTranslationRequest } from './model/reader-translation';
-import { api } from '@/lib/api';
+import type { ReaderTranslationCompletion, ReaderTranslationModelOption, ReaderTranslationRequest } from './model/reader-translation';
+import { api, type AIModel, type AIProvider } from '@/lib/api';
 import type { ShelfAnnotation, Note, ShelfBook } from '@/types/idios';
 import { CORE_RELIABILITY_CONTRACT, CONTEXTUAL_TRANSLATION_SKILL, READING_SKILLS, loadSelectedReadingSkills, selectedReadingSkillInstructions } from '@/features/reading-skills';
 import { newReadingSessionID, queueShelfReadingSession, syncPendingShelfReadingSessions } from '@/lib/reading-sessions';
@@ -46,7 +46,63 @@ export function ShelfPDFReaderPage() {
   const navigate = useNavigate();
   const [book, setBook] = useState<ShelfBook | null>(null);
   const bookRef = useRef<ShelfBook | null>(null);
+  const [translationModelOptions, setTranslationModelOptions] = useState<ReaderTranslationModelOption[]>([]);
+  const [translationModelRef, setTranslationModelRef] = useState(() => readStudyAISettings().model ?? '');
+  const translationModelRefRef = useRef(translationModelRef);
+  const translationModelOptionsRef = useRef<ReaderTranslationModelOption[]>([]);
+  const [translationModelsLoading, setTranslationModelsLoading] = useState(true);
+  const [translationModelError, setTranslationModelError] = useState('');
+  const [lastUsedTranslationModel, setLastUsedTranslationModel] = useState('');
+  const translationBookContextCache = useRef(new Map<string, Promise<{ annotations: ShelfAnnotation[]; notes: Note[] }>>());
   useEffect(() => { bookRef.current = book; }, [book]);
+  useEffect(() => { translationModelRefRef.current = translationModelRef; }, [translationModelRef]);
+  useEffect(() => { translationModelOptionsRef.current = translationModelOptions; }, [translationModelOptions]);
+
+  useEffect(() => {
+    let active = true;
+    setTranslationModelsLoading(true);
+    setTranslationModelError('');
+    void Promise.all([api.aiModels(), api.aiProviders(), api.aiConfig()]).then(([catalogue, providers, config]) => {
+      if (!active) return;
+      const providerByID = new Map<string, AIProvider>(providers.map((provider) => [provider.id, provider]));
+      const options = catalogue.models.flatMap((model: AIModel) => {
+        const provider = providerByID.get(model.provider_id);
+        if (!provider?.enabled || provider.health?.state === 'unavailable' || provider.health?.state === 'unauthorized') return [];
+        if (model.availability !== 'available' && model.availability !== 'unknown') return [];
+        return [{
+          value: model.provider_id + '/' + model.id,
+          label: (provider.name || provider.id) + ' · ' + (model.name || model.id),
+          availability: model.availability,
+          local: provider.local,
+          timeoutSeconds: Math.min(240, Math.max(45, provider.timeout_seconds || 120)),
+        } satisfies ReaderTranslationModelOption];
+      }).sort((left, right) => Number(right.availability === 'available') - Number(left.availability === 'available') || Number(right.local) - Number(left.local) || left.label.localeCompare(right.label));
+      setTranslationModelOptions(options);
+      translationModelOptionsRef.current = options;
+      const stored = readStudyAISettings().model || '';
+      const configured = config.task_models?.translation || config.default_model || '';
+      const initial = stored || configured;
+      const validInitial = options.some((option) => option.value === initial);
+      const selected = validInitial ? initial : (initial || options.length === 1 ? initial || options[0]?.value || '' : '');
+      setTranslationModelRef(selected);
+      translationModelRefRef.current = selected;
+      if (selected && selected !== stored) {
+        try { localStorage.setItem('idios.shelf.study-ai.v2', JSON.stringify({ model: selected })); } catch { /* Keep the runtime-selected model in memory. */ }
+      }
+    }).catch((cause) => {
+      if (active) setTranslationModelError(cause instanceof Error ? cause.message : 'Could not load the AI model catalogue.');
+    }).finally(() => {
+      if (active) setTranslationModelsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const changeTranslationModel = useCallback((value: string) => {
+    translationModelRefRef.current = value;
+    setTranslationModelRef(value);
+    setLastUsedTranslationModel('');
+    try { localStorage.setItem('idios.shelf.study-ai.v2', JSON.stringify({ model: value })); } catch { /* The selection remains active for this reader session. */ }
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
@@ -380,12 +436,13 @@ export function ShelfPDFReaderPage() {
     }
   }, [book, currentPage, readerContext, targetLanguage, tool, toolText]);
 
-  const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<string> => {
+  const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<ReaderTranslationCompletion> => {
     const currentBook = bookRef.current;
     if (!currentBook) throw new Error('Book details are still loading. Please try again.');
-    const settings = readStudyAISettings();
-    const selectedModel = settings.model ? splitRuntimeModel(settings.model) : null;
-    if (!selectedModel) throw new Error('Choose a model in AI Runtime settings before translating.');
+    const selectedModel = splitRuntimeModel(translationModelRefRef.current);
+    if (!selectedModel) throw new Error('Choose the AI model in the Reading Companion panel before translating.');
+    const selectedOption = translationModelOptionsRef.current.find((option) => option.value === translationModelRefRef.current);
+    if (!selectedOption) throw new Error('The selected model is not in the current AI Runtime catalogue. Refresh models in AI Settings.');
 
     const targetLanguageName = targetLanguages.find((item) => item.value === request.targetLanguage)?.label ?? request.targetLanguage;
     const selectedSkills = loadSelectedReadingSkills();
@@ -394,47 +451,50 @@ export function ShelfPDFReaderPage() {
       .map((skill) => skill.id);
     const skillInstructions = selectedReadingSkillInstructions([...new Set([...relevantSkills, 'english-learning'])]);
 
-    const [annotationsResult, notesResult] = await Promise.allSettled([
-      api.shelfAnnotations(currentBook.id),
-      api.shelfBookNotes(currentBook.id),
-    ]);
-    const annotations: ShelfAnnotation[] = annotationsResult.status === 'fulfilled' ? annotationsResult.value : [];
-    const notes: Note[] = notesResult.status === 'fulfilled' ? notesResult.value : [];
-    const nearbyAnnotations = annotations.filter((item) => Math.abs(item.page - request.pageNumber) <= 4).slice(-20);
-
-    const glossaryLines = request.priorGlossary
+    let contextPromise = translationBookContextCache.current.get(currentBook.id);
+    if (!contextPromise) {
+      contextPromise = Promise.allSettled([
+        api.shelfAnnotations(currentBook.id),
+        api.shelfBookNotes(currentBook.id),
+      ]).then(([annotationsResult, notesResult]) => ({
+        annotations: annotationsResult.status === 'fulfilled' ? annotationsResult.value : [],
+        notes: notesResult.status === 'fulfilled' ? notesResult.value : [],
+      }));
+      translationBookContextCache.current.set(currentBook.id, contextPromise);
+    }
+    const { annotations, notes } = await contextPromise;
+    const nearbyAnnotations = annotations.filter((item) => Math.abs(item.page - request.pageNumber) <= 3).slice(-8);
+    const glossaryLines = request.priorGlossary.slice(-20)
       .map((term) => '- ' + term.source + ' = ' + term.translation + ' (' + term.meaning + ')')
       .join('\n')
-      .slice(0, 6000);
+      .slice(0, 2200);
     const annotationLines = nearbyAnnotations
       .map((item) => {
-        const noteText = item.note?.trim() ? ' — ' + item.note.trim().slice(0, 260) : '';
-        return '- Page ' + item.page + ': “' + item.quote.slice(0, 260) + '”' + noteText;
+        const noteText = item.note?.trim() ? ' — ' + item.note.trim().slice(0, 150) : '';
+        return '- Page ' + item.page + ': “' + item.quote.slice(0, 160) + '”' + noteText;
       })
       .join('\n')
-      .slice(0, 5000);
-    const noteLines = notes.slice(-12)
-      .map((item) => '- ' + item.title + ': ' + item.content.slice(0, 420))
+      .slice(0, 1600);
+    const noteLines = notes.slice(-4)
+      .map((item) => '- ' + item.title + ': ' + item.content.slice(0, 200))
       .join('\n')
-      .slice(0, 5000);
+      .slice(0, 900);
     const bookContext = [
       'Book title: ' + currentBook.title,
-      currentBook.summary?.trim() ? 'Book description: ' + currentBook.summary.trim().slice(0, 4000) : '',
-      currentBook.tags?.length ? 'Book subject tags: ' + currentBook.tags.join(', ') : '',
-      currentBook.repository_name ? 'Related technical context: ' + currentBook.repository_name : '',
-      'Requested page: PDF page ' + request.pageNumber,
-      request.documentContext.trim() ? 'Nearby source pages from this book:\n' + request.documentContext.slice(0, 22000) : '',
-      glossaryLines ? 'Previously translated book terminology — preserve these equivalents unless the local sense differs:\n' + glossaryLines : '',
-      annotationLines ? 'Reader highlights and notes (supporting context only):\n' + annotationLines : '',
-      noteLines ? 'Reader book notes (supporting context only):\n' + noteLines : '',
+      currentBook.summary?.trim() ? 'Book subject: ' + currentBook.summary.trim().slice(0, 900) : '',
+      currentBook.tags?.length ? 'Subject tags: ' + currentBook.tags.join(', ') : '',
+      'PDF page: ' + request.pageNumber,
+      request.documentContext.trim() ? 'Adjacent page context (use only to disambiguate meaning):\n' + request.documentContext.slice(0, 4200) : '',
+      glossaryLines ? 'Book glossary; keep terminology consistent unless the local sense differs:\n' + glossaryLines : '',
+      annotationLines ? 'Reader annotations (supporting context only):\n' + annotationLines : '',
+      noteLines ? 'Reader notes (supporting context only):\n' + noteLines : '',
     ].filter(Boolean).join('\n\n');
 
-    const scopeInstruction = request.kind === 'page'
-      ? 'Translate the entire exact current-page source. Preserve original paragraphs. Return one aligned segment per sentence or paragraph. Extract only useful vocabulary, grammar and IELTS expressions actually present on this page.'
+    const scopeInstruction = request.kind === 'page' || request.kind === 'chunk'
+      ? 'Translate the entire exact source passage. Preserve paragraph boundaries and sentence order. Never summarize or omit content. Return aligned segments only when they can be copied exactly from the source.'
       : request.kind === 'selection'
-        ? 'Translate only the exact selected passage, retaining all clauses and sentence order. Do not expand to the whole page.'
+        ? 'Translate only the exact selected passage, retaining every clause and sentence.'
         : 'Explain and translate only this exact word in its sentence and book context. Give its contextual sense, part of speech, a simple explanation and one natural example.';
-
     const systemPrompt = [
       CORE_RELIABILITY_CONTRACT,
       CONTEXTUAL_TRANSLATION_SKILL,
@@ -443,13 +503,13 @@ export function ShelfPDFReaderPage() {
       'Target language: ' + targetLanguageName,
       'Request type: ' + request.kind,
       scopeInstruction,
-      'The exact source in the user message is the only material to translate. Use book metadata and neighboring pages only to interpret meaning and maintain terminology; never insert contextual facts into the translation.',
-      'Preserve the author’s meaning, tone, negation, tense, modality, conditions, quantifiers, comparisons, numbers, units, citations, code, identifiers, formulas and list structure. Do not summarize or omit difficult sentences.',
-      'Source segments must be copied exactly and contiguously from the supplied source, in order. Never invent source text. If sentence alignment is incomplete, return an empty segments array and keep the full translation intact.',
-      'Vocabulary, grammar patterns and IELTS expressions must occur in the exact supplied source. Explain the meaning used in this book. Do not invent band scores or promise IELTS results.',
-      'Check the completed translation against the source for omissions, additions and changed propositions. If extraction is incomplete or ambiguous, describe that briefly in translatorNote instead of guessing.',
-      'Return ONLY JSON with this structure: {"translation":"complete translation","segments":[{"source":"exact source sentence or paragraph","translation":"matching translation"}],"terms":[{"source":"source word","translation":"target equivalent","meaning":"contextual meaning","partOfSpeech":"part of speech","example":"natural example"}],"grammar":[{"pattern":"source structure","explanation":"simple explanation","example":"original example"}],"ielts":[{"expression":"source expression","academicUse":"academic use","example":"original example"}],"translatorNote":""}',
-      'Limits: page = 12 terms, 5 grammar notes, 5 IELTS items; selection = 8, 3, 3; single word = 1 term and at most 2 short notes.',
+      'The exact source in the user message is the only material to translate. Use book metadata, nearby pages, glossary, notes and highlights only to interpret meaning and terminology; never insert contextual facts into the translated passage.',
+      'Preserve author meaning and tone, negation, tense, modality, conditions, quantities, numbers, units, citations, code, identifiers and formulas. No paraphrase or summary in the translation.',
+      'Only return vocabulary, grammar patterns and IELTS expressions that occur verbatim in the supplied source. Explain the sense used in this book. Never invent band scores or promise IELTS results.',
+      'For word/phrase alignment, source fields must be exact text copied from the supplied passage. If alignment is uncertain, return an empty segments array and preserve the complete translation.',
+      'Check the passage for omissions and additions before responding. If extracted text is visibly incomplete, explain this in translatorNote.',
+      'Return ONLY JSON: {"translation":"complete faithful translation","segments":[{"source":"exact source sentence","translation":"matching translation"}],"terms":[{"source":"word in source","translation":"target equivalent","meaning":"contextual meaning in simple language","partOfSpeech":"part of speech","example":"short natural example"}],"grammar":[{"pattern":"source pattern","explanation":"simple explanation","example":"original example"}],"ielts":[{"expression":"source expression","academicUse":"accurate academic use","example":"original example"}],"translatorNote":""}',
+      'Limits for this request: maximum 6 useful terms, 2 grammar notes and 2 IELTS items. Keep the JSON compact.',
     ].join('\n\n');
 
     const response = await api.aiChat({
@@ -457,6 +517,8 @@ export function ShelfPDFReaderPage() {
       model: selectedModel.modelID,
       task: 'translation',
       reasoning_effort: 'low',
+      timeout_seconds: selectedOption.timeoutSeconds,
+      max_tokens: request.kind === 'word' ? 700 : 1500,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE TO TRANSLATE\n' + request.text },
@@ -464,7 +526,11 @@ export function ShelfPDFReaderPage() {
     });
     const content = response.content?.trim();
     if (!content) throw new Error('The selected model returned an empty response. Check provider health or choose another model.');
-    return content;
+    const providerName = selectedOption.label.split(' · ')[0] || response.provider_id;
+    const modelName = translationModelOptionsRef.current.find((option) => option.value === response.provider_id + '/' + response.model)?.label
+      || providerName + ' · ' + response.model;
+    setLastUsedTranslationModel(modelName);
+    return { content, providerID: response.provider_id, model: response.model, durationMS: response.duration_ms };
   }, []);
 
   if (loading) return <main className="shelf-pdf-reader-page shelf-pdf-reader-page--state"><LoaderCircle size={22} className="spin" /><span>Opening your reading room…</span></main>;
