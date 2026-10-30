@@ -6,6 +6,7 @@
 
 - Add an in-reader, translation-first companion for PDF pages and selected passages. The full page translation is the default view; Word, Grammar, and IELTS are available from a compact tool menu and run as focused tasks.
 - Add a compact settings popover for target language, AI model, and per-request timeout, plus a resizable floating translation window anchored above Mimi.
+- Retain the reader's resized translation-window dimensions when the bubble is closed and reopened.
 - Add source-grounded grammar and IELTS analysis on demand, without making either analysis part of the page-translation request.
 
 ### Changed
