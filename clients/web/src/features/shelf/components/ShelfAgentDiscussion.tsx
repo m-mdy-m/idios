@@ -63,7 +63,7 @@ const roleModelCandidates: Record<string, string[]> = {
   'counterexample-tester': ['qwen2.5:7b', 'qwen2.5:3b', 'deepseek-r1:1.5b'],
   'context-keeper': ['qwen2.5:3b', 'qwen3:0.6b', 'qwen2.5:7b'],
   'example-builder': ['qwen2.5:3b', 'qwen2.5:7b'],
-  'discussion-chair': ['qwen2.5:7b', 'qwen2.5:3b'],
+  'discussion-chair': ['qwen2.5:14b', 'qwen3:8b', 'qwen2.5:7b', 'qwen2.5:3b'],
   'evidence-auditor': ['qwen2.5:7b', 'qwen2.5:3b'],
   'ambiguity-scout': ['translategemma:4b', 'qwen2.5:3b', 'qwen2.5:7b'],
   steelman: ['qwen2.5:3b', 'qwen2.5:7b', 'deepseek-r1:1.5b'],
@@ -323,7 +323,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     const localAgents = turnOrder.filter((id) => usableIDs.includes(id));
     if (!localAgents.length) { setError('Choose at least one agent assigned to an available Ollama Local model.'); return; }
     if (!localAgents.includes('discussion-chair')) {
-      setError('Mira · Chair must be selected and assigned to an available Ollama Local model before a discussion can start or continue.');
+      setError('MIMI · Chair must be selected and assigned to an available Ollama Local model before a discussion can start or continue.');
       return;
     }
     const originalTopic = topic.trim();
@@ -360,7 +360,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
       book_title: bookTitle,
       page_start: Math.min(pageNumber, ...sourceEntries.map((item) => item.page)),
       page_end: pageNumber,
-      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}${historyBoundary}\n\nRound-table contract: conduct ${discussionRounds} sequential debate rounds, never parallel. Every agent must perform its configured specialist role and add an independent contribution. Every agent after the first must address one actual earlier claim by the speaker's displayed name, assess it as supported/partly supported/unclear/unsupported, give a source-based reason, and add a new qualification, correction, or implication. Do not imitate another agent, repeat its wording, or paraphrase the latest Chair as a substitute for analysis. Treat peer statements as claims to verify, not as source evidence. The final agent is Mira · Chair: compare actual positions, weigh the supplied text rather than counting agreement, preserve explicit negations and qualifications, identify resolved and unresolved disagreements, and give a refined conclusion. Use only supplied page/highlight/note evidence; never invent citations or claim knowledge of unseen chapters. Separate direct text from inference. Do not ask questions during peer debate. Only Mira on the final turn may ask one consequential "Question for you: ..." line. Explain concise public reasons, not hidden chain-of-thought.`,
+      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}${historyBoundary}\n\nRound-table contract: conduct ${discussionRounds} sequential debate rounds, never parallel. Every agent must perform its configured specialist role and add an independent contribution. Every agent after the first must address one actual earlier claim by the speaker's displayed name, assess it as supported/partly supported/unclear/unsupported, give a source-based reason, and add a new qualification, correction, or implication. Do not imitate another agent, repeat its wording, or paraphrase the latest Chair as a substitute for analysis. Treat peer statements as claims to verify, not as source evidence. The final agent is MIMI · Chair: compare actual positions, weigh the supplied text rather than counting agreement, preserve explicit negations and qualifications, identify resolved and unresolved disagreements, and give a refined conclusion. Use only supplied page/highlight/note evidence; never invent citations or claim knowledge of unseen chapters. Separate direct text from inference. Do not ask questions during peer debate. Only MIMI on the final turn may ask one consequential "Question for you: ..." line. Explain concise public reasons, not hidden chain-of-thought.`,
       context: uniqueContext,
       agent_ids: localAgents.slice(0, maxAgents),
       parallel: false,
@@ -493,7 +493,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
           <label title={hasThinkingSupport ? (nativeThinkingOnly ? 'Enables native thinking for supported Ollama models; unsupported selected models ignore it.' : 'Reasoning effort is sent only to selected models that support it.') : 'The selected models do not advertise native thinking support.'}><span>Thinking</span><select aria-label={nativeThinkingOnly ? 'Native thinking' : 'Thinking effort'} value={effectiveThinking} onChange={(event) => setThinkingEffort(event.target.value as 'off' | 'low' | 'medium' | 'high')} disabled={!hasThinkingSupport || busy || starting}><option value="off">Off</option>{nativeThinkingOnly ? <option value="high">On</option> : <><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></>}</select></label>
           <span className="shelf-agent-room__source-hint" title="Only the current page and saved notes are evidence; web results are not automatically injected into the discussion.">Page {pageNumber} · {annotations.length} notes</span>
         </div>
-        {!chairReady && <p className="shelf-agent-room__source-hint" role="status">Mira · Chair is required. Assign it an available Ollama Local model in Settings → AI Runtime to start or continue this discussion.</p>}
+        {!chairReady && <p className="shelf-agent-room__source-hint" role="status">MIMI · Chair is required. Assign it an available Ollama Local model in Settings → AI Runtime to start or continue this discussion.</p>}
         <div className="shelf-agent-room__composer-bottom">
           <button type="submit" className="shelf-agent-room__send" aria-label={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} title={turns.length ? (readerReply.trim() ? 'Reply and continue' : 'Continue discussion') : 'Start discussion'} disabled={starting || busy || (!turns.length ? !promptCanStart : !agentIDs.length || !usableIDs.some((id) => agentIDs.includes(id)) || !chairReady)}>{starting || busy ? <LoaderCircle size={15} className="shelf-agent-room__spin" /> : <Send size={14} />}</button>
         </div>

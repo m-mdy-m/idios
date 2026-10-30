@@ -488,7 +488,7 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 		if call == 2 {
 			content = "Tutor explains one implication of Reader's claim without changing its scope. [source:page-1]"
 		} else if call == 3 {
-			content = "Mira compares Reader's supported claim with Tutor's scope clarification and preserves the remaining qualification. [source:page-1]"
+			content = "MIMI compares Reader's supported claim with Tutor's scope clarification and preserves the remaining qualification. [source:page-1]"
 		} else if call > 3 {
 			content = "Unexpected extra call."
 		}
@@ -571,20 +571,20 @@ func TestBookDiscussionChairSpeaksLastAndLaterRoundsSeeFullHistory(t *testing.T)
 		mu.Lock()
 		captured = append(captured, request)
 		mu.Unlock()
-		content := "Reader rechecks Mira's earlier qualification and narrows the central claim. [source:page-1]"
+		content := "Reader rechecks MIMI's earlier qualification and narrows the central claim. [source:page-1]"
 		switch call {
 		case 1:
 			content = "Reader's central claim is narrowly supported by the supplied passage. [source:page-1]"
 		case 2:
 			content = "Tutor responds to Reader's central claim and narrows its scope. [source:page-1]"
 		case 3:
-			content = "Mira compares Reader's claim with Tutor's qualification and preserves the remaining disagreement. [source:page-1]"
+			content = "MIMI compares Reader's claim with Tutor's qualification and preserves the remaining disagreement. [source:page-1]"
 		case 4:
-			content = "Reader revisits Mira's qualification and refines the central claim. [source:page-1]"
+			content = "Reader revisits MIMI's qualification and refines the central claim. [source:page-1]"
 		case 5:
 			content = "Tutor develops Reader's refinement without widening its scope. [source:page-1]"
 		case 6:
-			content = "Mira compares Reader's revised claim with Tutor's qualification and states what remains unresolved. [source:page-1]"
+			content = "MIMI compares Reader's revised claim with Tutor's qualification and states what remains unresolved. [source:page-1]"
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
@@ -822,7 +822,7 @@ func TestBookDiscussionDefersReaderQuestionUntilPeersReviewIt(t *testing.T) {
 		} else if call == 2 {
 			content = "Tutor responds to Reader's ambiguity: the passage supports an institutional rule, but does not settle individual scope. [source:page-1]"
 		} else {
-			content = "Mira weighs Reader's question and Tutor's qualification: the institutional reading is supported, while individual scope remains open. [source:page-1]\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"
+			content = "MIMI weighs Reader's question and Tutor's qualification: the institutional reading is supported, while individual scope remains open. [source:page-1]\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
@@ -1028,6 +1028,8 @@ func TestDiscussionModelRoutingUsesRoleAndPreservesExplicitPreference(t *testing
 	}
 	manager.mu.Lock()
 	manager.state.Models = []Model{
+		{ProviderID: "ollama-local", ID: "qwen2.5:14b", Availability: "available"},
+		{ProviderID: "ollama-local", ID: "qwen3:8b", Availability: "available"},
 		{ProviderID: "ollama-local", ID: "qwen2.5:7b", Availability: "available"},
 		{ProviderID: "ollama-local", ID: "qwen2.5:3b", Availability: "available"},
 		{ProviderID: "ollama-local", ID: "translategemma:4b", Availability: "available"},
@@ -1042,7 +1044,7 @@ func TestDiscussionModelRoutingUsesRoleAndPreservesExplicitPreference(t *testing
 		fallback string
 		want     string
 	}{
-		{AgentDefinition{ID: "discussion-chair"}, "global/model", "ollama-local/qwen2.5:7b"},
+		{AgentDefinition{ID: "discussion-chair"}, "global/model", "ollama-local/qwen2.5:14b"},
 		{AgentDefinition{ID: "translator"}, "global/model", "ollama-local/translategemma:4b"},
 		{AgentDefinition{ID: "tutor"}, "global/model", "ollama-local/qwen2.5:3b"},
 		{AgentDefinition{ID: "socratic-questioner"}, "global/model", "ollama-local/deepseek-r1:1.5b"},
@@ -1806,7 +1808,7 @@ func TestDiscussionReviewDoesNotEchoPriorChairConclusion(t *testing.T) {
 	}
 	messages := discussionMessages(req, tutor, false, nil)
 	previous := []AgentContribution{{
-		AgentID: "discussion-chair", AgentName: "Mira · Chair", Status: "completed",
+		AgentID: "discussion-chair", AgentName: "MIMI · Chair", Status: "completed",
 		Content: "The page explicitly rejects the reading that these chapters are merely applications. [source:page-21]",
 	}}
 	messages = discussionReviewMessages(messages, tutor, 2, previous, false)
@@ -1853,7 +1855,7 @@ func TestSkipSynthesisRequiresChairForMultiAgentDiscussion(t *testing.T) {
 		AgentIDs: []string{"reader", "tutor"}, Rounds: 1, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "page-1", Page: 1, Text: "A short source passage."}},
 	}, "")
-	if err == nil || !strings.Contains(err.Error(), "Mira · Chair is required") {
+	if err == nil || !strings.Contains(err.Error(), "MIMI · Chair is required") {
 		t.Fatalf("multi-agent discussion without Chair error = %v, want clear Chair requirement", err)
 	}
 }
@@ -1880,11 +1882,11 @@ func TestFinalChairMustNameActualPositions(t *testing.T) {
 		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "Reader's claim is supported. [source:page-1]"},
 		{AgentID: "tutor", AgentName: "Sage · Tutor", Status: "completed", Content: "Tutor narrows the scope. [source:page-1]"},
 	}
-	oneName := "Mira agrees with Reader and refines the supported reading. [source:page-1]"
+	oneName := "MIMI agrees with Reader and refines the supported reading. [source:page-1]"
 	if problem := discussionPeerResponseProblem(oneName, previous, "discussion-chair", true); problem == "" {
 		t.Fatal("final Chair was allowed to omit a second actual peer position")
 	}
-	bothNames := "Mira compares Reader's claim with Tutor's qualification and states the remaining limit. [source:page-1]"
+	bothNames := "MIMI compares Reader's claim with Tutor's qualification and states the remaining limit. [source:page-1]"
 	if problem := discussionPeerResponseProblem(bothNames, previous, "discussion-chair", true); problem != "" {
 		t.Fatalf("final Chair with both actual positions was rejected: %s", problem)
 	}
@@ -1906,8 +1908,105 @@ func TestFinalChairRequiresTwoDistinctPeersNotTwoTurnsFromOnePeer(t *testing.T) 
 		{AgentID: "reader", AgentName: "Orion · Reader", Round: 1, Status: "completed", Content: "Reader identifies the first supported claim. [source:page-1]"},
 		{AgentID: "reader", AgentName: "Orion · Reader", Round: 2, Status: "completed", Content: "Reader refines that claim after reviewing the qualification. [source:page-1]"},
 	}
-	answer := "Mira compares Reader's first claim with Reader's later refinement and preserves the remaining limit. [source:page-1]"
+	answer := "MIMI compares Reader's first claim with Reader's later refinement and preserves the remaining limit. [source:page-1]"
 	if problem := discussionPeerResponseProblem(answer, previous, "discussion-chair", true); problem != "" {
 		t.Fatalf("one distinct peer with two completed turns should require one named position, got: %s", problem)
+	}
+}
+
+
+func TestBuiltinMimiChairV4MigrationPreservesUserCustomization(t *testing.T) {
+	oldSkill := "You are Mira, final Chair. In non-final rounds, contribute a specific peer critique without premature synthesis. On the final turn, compare the actual named positions, weigh evidence asymmetrically when warranted, state what is resolved/narrowed/still open, and refine the conclusion. Ask at most one final reader question only if the answer could change the interpretation."
+	cases := []struct {
+		name             string
+		description      string
+		role             string
+		instructions     string
+		skillInstructions string
+		wantName         string
+		wantDescription  string
+		wantRole         string
+		wantInstructions string
+		wantSkill        string
+	}{
+		{
+			name: "Mira · Chair",
+			description: "The final moderator: compares positions, reports unresolved conflict, and asks one consequential question only when needed.",
+			role: "round-table chair and synthesis moderator",
+			instructions: "My customized Chair instructions.",
+			skillInstructions: oldSkill,
+			wantName: "MIMI · Chair",
+			wantDescription: "IDIOS's primary reading companion and final moderator; independently checks peer claims and preserves unresolved disagreement.",
+			wantRole: "primary reading companion and evidence-led round-table chair",
+			wantInstructions: "My customized Chair instructions.",
+			wantSkill: "You are MIMI, the primary Shelf companion and final Chair.",
+		},
+		{
+			name: "My Custom Chair",
+			description: "A user-authored Chair description.",
+			role: "user-defined moderation role",
+			instructions: "Keep my custom chair instructions.",
+			skillInstructions: "Keep my custom chair skill.",
+			wantName: "My Custom Chair",
+			wantDescription: "A user-authored Chair description.",
+			wantRole: "user-defined moderation role",
+			wantInstructions: "Keep my custom chair instructions.",
+			wantSkill: "Keep my custom chair skill.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "ai-runtime.json")
+			state := persistedState{
+				Config: RuntimeConfig{
+					Mode: ModeLocalFirst, MaxConcurrent: 2, MaxQueued: 16,
+					WorkflowTimeoutSeconds: 60, MaxAgents: 5, MaxDiscussionRounds: 5,
+					TaskModels: map[string]string{},
+				},
+				Agents: []AgentDefinition{{
+					ID: "discussion-chair", Name: tc.name, Description: tc.description, Role: tc.role,
+					Instructions: tc.instructions, PreferredModel: "ollama-local/custom-model",
+					Tasks: []string{"book_discussion", "reading_analysis", "review"},
+					SkillIDs: []string{"core-reliability"}, SkillInstructions: tc.skillInstructions, Enabled: true,
+				}},
+				AgentSkillsInitialized: true, BuiltinDiscussionAgentsInitialized: true,
+				BuiltinRoundtableV2Initialized: true, BuiltinRoleProfilesV3Initialized: true,
+			}
+			data, err := json.Marshal(state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			manager, err := NewManager(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			var chair *AgentDefinition
+			for _, agent := range manager.Agents() {
+				if agent.ID == "discussion-chair" {
+					copy := agent
+					chair = &copy
+					break
+				}
+			}
+			if chair == nil {
+				t.Fatal("discussion Chair profile was removed by migration")
+			}
+			if chair.Name != tc.wantName || chair.Description != tc.wantDescription || chair.Role != tc.wantRole {
+				t.Errorf("unexpected migrated Chair identity: %#v", chair)
+			}
+			if chair.Instructions != tc.wantInstructions || chair.SkillInstructions != tc.wantSkill {
+				t.Errorf("migration overwrote customized instructions or failed to upgrade the shipped skill: %#v", chair)
+			}
+			if chair.PreferredModel != "ollama-local/custom-model" {
+				t.Errorf("migration overwrote the explicitly selected model: %q", chair.PreferredModel)
+			}
+			if !manager.state.BuiltinMimiChairV4Initialized {
+				t.Fatal("MIMI Chair v4 migration flag was not set")
+			}
+		})
 	}
 }

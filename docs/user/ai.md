@@ -43,7 +43,7 @@ Shelf uses MIMI as its primary reading companion for page-margin notes and conve
 
 A generated response is only a suggestion. For notes and highlights, use the explicit save action and wait for the saved or failed result from IDIOS. Never treat model text alone as proof that a database write happened.
 
-For multi-agent discussions, every non-opening turn must identify an actual peer and add a distinct point; verbatim echoes and anonymous consensus are rejected. Mira · Chair must compare the available named positions and preserve unresolved disagreement. Each response receives one focused repair attempt. A second failure remains visible as a failed contribution and is excluded from later peer evidence. Check the per-turn warnings and source markers before relying on the conclusion.
+For multi-agent discussions, every non-opening turn must identify an actual peer and add a distinct point; verbatim echoes and anonymous consensus are rejected. MIMI · Chair must compare the available named positions and preserve unresolved disagreement. Each response receives one focused repair attempt. A second failure remains visible as a failed contribution and is excluded from later peer evidence. Check the per-turn warnings and source markers before relying on the conclusion.
 
 ## 6. Structured output and custom adapters
 
