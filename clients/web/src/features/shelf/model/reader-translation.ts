@@ -92,7 +92,7 @@ export function splitReaderTranslationText(value: string, maxLength = 1100): str
   }
   return chunks;
 }
-export function mergeReaderTranslations(parts: ReaderTranslationData[]): ReaderTranslationData {
+export function mergeReaderTranslations(parts: ReaderTranslationData[], separators: string[] = []): ReaderTranslationData {
   const uniqueBy = <T,>(items: T[], keyOf: (item: T) => string, limit: number): T[] => {
     const seen = new Set<string>();
     const result: T[] = [];
@@ -107,7 +107,12 @@ export function mergeReaderTranslations(parts: ReaderTranslationData[]): ReaderT
   };
   const notes = uniqueBy(parts.map((part) => part.translatorNote ?? '').filter(Boolean), (item) => item, 6);
   return {
-    translation: parts.map((part) => part.translation.trim()).filter(Boolean).join(' '),
+    translation: parts.reduce((combined, part, index) => {
+      const next = part.translation.trim();
+      if (!next) return combined;
+      if (!combined) return next;
+      return combined + (separators[index - 1] ?? ' ') + next;
+    }, ''),
     segments: parts.flatMap((part) => part.segments),
     terms: uniqueBy(parts.flatMap((part) => part.terms), (item) => item.source, 24),
     grammar: uniqueBy(parts.flatMap((part) => part.grammar), (item) => item.pattern, 10),
