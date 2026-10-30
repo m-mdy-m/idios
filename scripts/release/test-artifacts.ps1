@@ -71,7 +71,7 @@ func main() {
     log, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
     if err != nil { os.Exit(3) }
     defer log.Close()
-    if _, err := log.WriteString(strings.Join(os.Args[1:], "\\n")+"\\n"); err != nil {
+    if _, err := log.WriteString(strings.Join(os.Args[1:], "\n")+"\n"); err != nil {
         os.Exit(4)
     }
 }
