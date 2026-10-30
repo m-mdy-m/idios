@@ -81,8 +81,9 @@ export function ShelfTranslationPanel({
   const pageTerm = pageData?.terms.find((term) => termMatches(term, hoveredWord));
   const wordTerm = wordData?.terms[0];
   const currentTerm = pageTerm || wordTerm;
-  const selectedCovered = !selectedText.trim() || Boolean(pageData?.segments.some((segment) =>
-    normalizeTranslationMatch(segment.source).includes(normalizeTranslationMatch(selectedText)),
+  const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(selectedText.trim());
+  const selectedCovered = !selectedText.trim() || selectedWord || Boolean(pageData?.segments.some((segment) =>
+    normalizeTranslationMatch(segment.source) === normalizeTranslationMatch(selectedText),
   ));
 
   return <aside className="shelf-translation-panel" aria-label="AI translation and language learning">
