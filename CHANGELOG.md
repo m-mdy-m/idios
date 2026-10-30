@@ -2,6 +2,13 @@
 
 All notable changes to IDIOS are recorded here. This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Provision the Go and Node.js toolchains explicitly in the shared release workflow.
+- Prepare native Windows compilers through the MSYS2 setup action and avoid in-script full MSYS2 upgrades that terminate the active shell.
+
 ## [3.0.1] — 2026-10-30
 
 IDIOS 3.0.1 is a maintenance release focused on shared pipeline integration,
@@ -60,7 +67,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - An extensible AI provider-adapter registry, generic model metadata, standard structured-output request formats, local Ollama setup, reading-agent profiles, and bundled reading skills.
 - More focused in-reader discussions with searchable and categorized participants, compact discussion personas, and additional grounded-reading skills.
 - Reading analytics and Focus sessions with saved session history, reading progress, and Activity integration.
-- Pipeline task configuration for the shared [`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) task runner and reusable CI workflows.
+- A feature-rich task and release pipeline setup for the repository and shared reusable workflows.
 
 ### Changed
 
