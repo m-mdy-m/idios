@@ -90,7 +90,7 @@ function createPDFRequest(url: string): PDFRequestEntry {
     abortTimer: null,
   };
   entry.promise = (async () => {
-    let first = '';
+    let first: string;
     try {
       return await downloadPDFBinary(url, controller.signal);
     } catch (cause) {
@@ -102,7 +102,7 @@ function createPDFRequest(url: string): PDFRequestEntry {
     } catch (cause) {
       if (controller.signal.aborted) throw cause;
       const second = cause instanceof Error ? cause.message : String(cause);
-      throw new Error(`Binary download failed: ${first}. JSON fallback failed: ${second}`);
+      throw new Error(`Binary download failed: ${first}. JSON fallback failed: ${second}`, { cause });
     }
   })();
   void entry.promise.then(() => { entry.settled = true; }, () => { entry.settled = true; });
@@ -817,7 +817,7 @@ function normalizeHighlightWord(value: string): string {
 
 type ExactQuoteRectangleResult = { occurrences: number; rectangles: ShelfAnnotationRect[] };
 function findUniqueQuoteRectangles(layer: HTMLDivElement, sheet: HTMLDivElement, quote: string): ExactQuoteRectangleResult {
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const query = toWords(quote);
   if (!query.length || query.length > 32) return { occurrences: 0, rectangles: [] };
   const words: TextWordRange[] = [];
@@ -831,7 +831,7 @@ function findUniqueQuoteRectangles(layer: HTMLDivElement, sheet: HTMLDivElement,
   while ((current = walker.nextNode())) {
     if (current.nodeType !== Node.TEXT_NODE) continue;
     const node = current as Text;
-    for (const match of node.data.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu)) {
+    for (const match of node.data.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)) {
       const start = match.index ?? 0;
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
     }
@@ -874,7 +874,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
   const HighlightConstructor = (window as WindowWithTextHighlight).Highlight;
   if (!registry || !HighlightConstructor) return [];
 
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const words: TextWordRange[] = [];
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -887,7 +887,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
   while ((current = walker.nextNode())) {
     if (current.nodeType !== Node.TEXT_NODE) continue;
     const node = current as Text;
-    const pattern = /[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu;
+    const pattern = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
     for (const match of node.data.matchAll(pattern)) {
       const start = match.index ?? 0;
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
