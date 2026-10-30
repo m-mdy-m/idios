@@ -579,7 +579,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
     const results: ReaderTranslationData[] = [];
     const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
-    setTranslationProgress({ done: 0, total: chunks.length });
+    const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
+    const updateProgress = (done: number, total: number) => {
+      if (kind === 'page' && translationPageInFlight.current === pageRequestKey) {
+        setTranslationProgress({ done, total });
+      }
+    };
+    updateProgress(0, chunks.length);
 
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index];
@@ -592,7 +598,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           const key = normalizeTranslationMatch(term.source);
           if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
         }
-        setTranslationProgress({ done: index + 1, total: chunks.length });
+        updateProgress(index + 1, chunks.length);
         continue;
       }
 
@@ -612,9 +618,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         const key = normalizeTranslationMatch(term.source);
         if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
       }
-      setTranslationProgress({ done: index + 1, total: chunks.length });
+      updateProgress(index + 1, chunks.length);
     }
-    setTranslationProgress({ done: chunks.length, total: chunks.length });
+    updateProgress(chunks.length, chunks.length);
     const combined = results.length === 1 ? results[0] : mergeReaderTranslations(results);
     return combined;
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage]);
@@ -1010,7 +1016,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         modelsLoading={translationModelsLoading}
         modelError={translationModelError}
         lastUsedModel={lastUsedTranslationModel}
-        onModelChange={(model) => { onTranslationModelChange(model); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
+        onModelChange={(model) => { onTranslationModelChange(model); setPageTranslationBusy(false); setTranslationProgress({ done: 0, total: 0 }); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
         targetLanguage={translationTargetLanguage}
         onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); }}
         tab={translationTab}
