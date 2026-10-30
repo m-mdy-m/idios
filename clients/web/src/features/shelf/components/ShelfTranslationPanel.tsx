@@ -52,7 +52,7 @@ export function ShelfTranslationPanel({
   pageNumber, targetLanguage, onTargetLanguageChange, tab, onTabChange,
   pageData, selectionData, wordData, selectedText, hoveredWord,
   pageBusy, analysisBusy, selectionBusy, wordBusy, error,
-  onClose, onTranslateSelection, onExplainWord, onSelectTerm, onAnalyzePage,
+  onClose, onRetryTranslation, onTranslateSelection, onExplainWord, onSelectTerm, onAnalyzePage,
   translationModel, modelOptions, modelsLoading, modelError, lastUsedModel, onModelChange,
   timeoutSeconds, onTimeoutChange, progress,
 }: {
@@ -72,6 +72,7 @@ export function ShelfTranslationPanel({
   wordBusy: boolean;
   error: string;
   onClose: () => void;
+  onRetryTranslation: () => void;
   onTranslateSelection: () => void;
   onExplainWord: () => void;
   onSelectTerm: (term: string) => void;
@@ -88,7 +89,7 @@ export function ShelfTranslationPanel({
 }) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const activeMode = modes.find((mode) => mode.value === tab) ?? modes[0];
+  const activeMode = modes.find((mode) => mode.value === tab) ?? { value: 'translate' as const, label: 'Translate', description: 'Full page translation' };
   const pageTerm = pageData?.terms.find((term) => termMatches(term, hoveredWord));
   const currentTerm = pageTerm || wordData?.terms[0];
   const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(selectedText.trim());
@@ -165,7 +166,7 @@ export function ShelfTranslationPanel({
     <div className="shelf-translation-panel__content">
       {error && <div className="shelf-translation-panel__error" role="alert">
         <p>{error}</p>
-        {tab === 'translate' && <span>Completed parts are kept in this reader session. Change the model or timeout in settings, then retry.</span>}
+        {tab === 'translate' && <><span>Completed parts are kept in this reader session. Change the model or timeout in settings, then retry.</span><button type="button" onClick={onRetryTranslation} disabled={pageBusy}>Resume translation</button></>}
       </div>}
 
       {tab === 'translate' && <>
