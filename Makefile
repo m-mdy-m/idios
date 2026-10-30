@@ -64,6 +64,24 @@ install-user: install ## Install for the current user without administrator priv
 uninstall: ## Remove IDIOS installed by make on Windows.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1 -InstallDir "$(PREFIX)" -Uninstall
 else
+ifeq ($(GOOS),darwin)
+install: build ## Install the IDIOS CLI into $(DESTDIR)$(PREFIX)/bin on macOS.
+	install -d "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 "$(CLI_BIN)" "$(DESTDIR)$(PREFIX)/bin/idios"
+	rm -f "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
+
+install-user: PREFIX = $(HOME)/.local
+install-user: install ## Install the IDIOS CLI for the current macOS user.
+	@for profile in "$(HOME)/.profile" "$(HOME)/.zprofile"; do \
+	  if [ ! -f "$$profile" ] || ! grep -Fq '$$HOME/.local/bin' "$$profile"; then \
+	    printf '\\n# IDIOS user-local executable\\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
+	  fi; \
+	done
+	@echo "Installed IDIOS in $(HOME)/.local/bin; reopen your terminal if PATH is not updated."
+
+uninstall: ## Remove the installed IDIOS CLI from macOS.
+	rm -f "$(DESTDIR)$(PREFIX)/bin/idios" "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
+else
 install: build ## Install IDIOS and its desktop entry into $(DESTDIR)$(PREFIX) (may require sudo).
 	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/share/applications" "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps"
 	install -m 0755 "$(CLI_BIN)" "$(DESTDIR)$(PREFIX)/bin/idios"
@@ -72,17 +90,18 @@ install: build ## Install IDIOS and its desktop entry into $(DESTDIR)$(PREFIX) (
 	rm -f "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
 
 install-user: PREFIX = $(HOME)/.local
-install-user: install ## Install for the current user without administrator privileges.
+install-user: install ## Install for the current Linux user without administrator privileges.
 	@for profile in "$(HOME)/.profile" "$(HOME)/.zprofile"; do \
 	  if [ ! -f "$$profile" ] || ! grep -Fq '$$HOME/.local/bin' "$$profile"; then \
-	    printf '\n# IDIOS user-local executable\nexport PATH="$$HOME/.local/bin:$$PATH"\n' >> "$$profile"; \
+	    printf '\\n# IDIOS user-local executable\\nexport PATH="$$HOME/.local/bin:$$PATH"\\n' >> "$$profile"; \
 	  fi; \
 	done
 	@echo "Installed IDIOS in $(HOME)/.local/bin; reopen your terminal if PATH is not updated."
 
-uninstall: ## Remove the installed IDIOS executable from $(DESTDIR)$(PREFIX)/bin.
+uninstall: ## Remove IDIOS and its desktop entry from Linux.
 	rm -f "$(DESTDIR)$(PREFIX)/bin/idios" "$(DESTDIR)$(PREFIX)/bin/idios-tui" "$(DESTDIR)$(PREFIX)/bin/idios-tui.exe"
 	rm -f "$(DESTDIR)$(PREFIX)/share/applications/idios.desktop" "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/idios.svg"
+endif
 endif
 
 ## Quality
