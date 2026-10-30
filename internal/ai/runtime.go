@@ -1706,7 +1706,7 @@ func discussionRoleFocus(agentID string) string {
 	case "note-writer":
 		return "Extract one concise study insight grounded in the supplied passage. Keep a proposed quotation exact and distinguish a draft from a saved annotation."
 	case "discussion-chair":
-		return "Adjudicate the actual named positions rather than counting votes. Direct textual evidence, explicit negations, and qualifications outweigh repeated agreement; preserve unresolved disagreement and never invent a consensus."
+		return "In non-final rounds, critique one specific peer claim without prematurely summarizing the group. On the final turn, adjudicate the actual named positions rather than counting votes. Direct textual evidence, explicit negations, and qualifications outweigh repeated agreement; preserve unresolved disagreement and never invent a consensus."
 	default:
 		return "Make one distinct contribution that fulfils your configured role. Respond to an actual earlier claim when present, verify it against the supplied source, and add a new reason rather than paraphrasing consensus."
 	}
@@ -2248,8 +2248,12 @@ func discussionPeerResponseProblem(content string, previous []AgentContribution,
 			}
 		}
 	}
+	peerIDs := make(map[string]bool, len(usable))
+	for _, turn := range usable {
+		peerIDs[turn.AgentID] = true
+	}
 	required := 1
-	if finalTurn && len(usable) > 1 {
+	if finalTurn && len(peerIDs) > 1 {
 		required = 2
 	}
 	if len(mentioned) < required {
