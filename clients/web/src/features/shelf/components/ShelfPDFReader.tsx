@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, ExternalLink, FileText, Focus, Highlighter, Languages,
   LoaderCircle, Maximize2, MessageCircle, MessagesSquare, Search, Sparkles, StickyNote, Trash2, X, ZoomIn, ZoomOut,
@@ -1077,7 +1078,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     </div>
 
     <div className={`shelf-pdf-reader__body ${sidePanelOpen && sidePanelMode === 'discussion' ? 'shelf-pdf-reader__body--discussion' : sidePanelOpen && sidePanelMode === 'notes' ? '' : 'shelf-pdf-reader__body--wide'}`}>
-      {translationOpen && <div
+      {translationOpen && createPortal(<div
         className="shelf-pdf-reader__translation-popover"
         style={{
           left: translationPanelPosition.left,
@@ -1154,7 +1155,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
             }
           }}
         />
-      </div>}
+      </div>, document.body)}
       <section className="shelf-pdf-reader__workspace">
         <div className="shelf-pdf-reader__searchbar"><form onSubmit={(event) => { event.preventDefault(); void findText(1); }}><Search size={15} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Find in this book…" aria-label="Find text in PDF" /><button type="submit" disabled={searching || !searchText.trim()}>{searching ? <LoaderCircle size={14} className="spin" /> : 'Find'}</button></form>{searchPages.length > 0 && <div className="shelf-pdf-reader__search-nav"><span>{searchPages.length} matching {searchPages.length === 1 ? 'page' : 'pages'}</span><button type="button" onClick={() => void goToSearchMatch(-1)} aria-label="Previous search match"><ChevronLeft size={14} /></button><button type="button" onClick={() => void goToSearchMatch(1)} aria-label="Next search match"><ChevronRight size={14} /></button></div>}</div>
         {error ? <div className="shelf-pdf-reader__error"><FileText size={22} /><strong>Could not open this PDF</strong><p>{error}</p></div> : loading ? <div className="shelf-pdf-reader__loading" role="status" aria-live="polite"><div className="shelf-pdf-reader__loading-art"><div className="shelf-pdf-reader__loading-ring" /><FileText size={24} /></div><div className="shelf-pdf-reader__loading-copy"><strong>{elapsedSeconds < 3 ? 'Opening your book…' : elapsedSeconds < 10 ? 'Reading the PDF structure…' : 'This is a large PDF — still working…'}</strong><span>Downloading, parsing and preparing the first page</span><div className="shelf-pdf-reader__progress-track"><i /></div><small>{elapsedSeconds}s elapsed · large scans and embedded fonts can take longer</small></div></div> : <>
