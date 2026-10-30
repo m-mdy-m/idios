@@ -736,6 +736,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }).filter((rect) => rect.width > 0.001 && rect.height > 0.001).slice(0, 300);
     if (!rectangles.length) { setPending(null); setSelectedTextForAI(''); return; }
     setSelectionTranslation(null);
+    const selectedWord = /^\\p{L}[\\p{L}\\p{N}_’'-]*$/u.test(quote);
+    setHoveredTextForAI(selectedWord ? quote : '');
     setSelectedTextForAI(quote.slice(0, 10000));
     setPending({ quote: quote.slice(0, 8000), rectangles });
   }, []);
