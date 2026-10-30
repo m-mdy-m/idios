@@ -33,7 +33,7 @@ const (
 )
 
 // Version is overridden in release builds with -ldflags for every executable.
-var Version = "3.0.0"
+var Version = "3.0.1"
 
 type Release struct {
 	Version      string
