@@ -250,7 +250,7 @@ export function AppShell() {
       </div>
 
       {!collapsed && <div className="unix-environment"><span className={`unix-status ${health ? 'is-online' : ''}`} /><span>LOCAL WORKSPACE</span><code>{health?.version ? `v${health.version}` : 'DEV'}</code></div>}
-      <button type="button" className="unix-search-trigger" onClick={() => { setSearchOpen(true); setQuickCreateOpen(false); setProfileMenuOpen(false); }} aria-label="Search IDIOS">
+      <button type="button" className="unix-search-trigger" onClick={() => { setSearchOpen(true); setQuickCreateOpen(false); setProfileMenuOpen(false); }} aria-label="Search IDIOS" title={collapsed ? "Search IDIOS" : "Find anything"}>
         <Search size={15} /><span>{collapsed ? 'Search' : 'Find anything'}</span>{!collapsed && <kbd>⌘ K</kbd>}
       </button>
 
