@@ -72,10 +72,24 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
     const translation = readString(parsed.translation) || fallbackText;
     const sourceNormalized = normalizeTranslationMatch(sourceText);
     const rawSegments = Array.isArray(parsed.segments) ? parsed.segments : [];
-    const segments = rawSegments.map((item) => {
+    const candidateSegments = rawSegments.map((item) => {
       const segment = asRecord(item);
       return { source: readString(segment.source), translation: readString(segment.translation) };
-    }).filter((item) => item.source && item.translation && sourceNormalized.includes(normalizeTranslationMatch(item.source)));
+    }).filter((item) => item.source && item.translation);
+    const segments: ReaderTranslationSegment[] = [];
+    let sourceCursor = 0;
+    let coveredCharacters = 0;
+    for (const segment of candidateSegments) {
+      const normalizedSegment = normalizeTranslationMatch(segment.source);
+      const position = sourceNormalized.indexOf(normalizedSegment, sourceCursor);
+      if (!normalizedSegment || position < 0) continue;
+      segments.push(segment);
+      sourceCursor = position + normalizedSegment.length;
+      coveredCharacters += normalizedSegment.length;
+    }
+    // A partial or out-of-order list must not masquerade as a complete aligned page.
+    // Fall back to the model's complete translation as one block in that case.
+    const segmentCoverage = coveredCharacters / Math.max(1, sourceNormalized.length);
     const terms = (Array.isArray(parsed.terms) ? parsed.terms : []).map((item) => {
       const term = asRecord(item);
       return {
@@ -85,7 +99,7 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
         ...(readString(term.partOfSpeech) ? { partOfSpeech: readString(term.partOfSpeech) } : {}),
         ...(readString(term.example) ? { example: readString(term.example) } : {}),
       };
-    }).filter((item) => item.source && item.translation && item.meaning).slice(0, 24);
+    }).filter((item) => item.source && item.translation && item.meaning && sourceNormalized.includes(normalizeTranslationMatch(item.source))).slice(0, 24);
     const grammar = (Array.isArray(parsed.grammar) ? parsed.grammar : []).map((item) => {
       const note = asRecord(item);
       return {
@@ -93,7 +107,7 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
         explanation: readString(note.explanation),
         ...(readString(note.example) ? { example: readString(note.example) } : {}),
       };
-    }).filter((item) => item.pattern && item.explanation).slice(0, 10);
+    }).filter((item) => item.pattern && item.explanation && sourceNormalized.includes(normalizeTranslationMatch(item.pattern))).slice(0, 10);
     const ielts = (Array.isArray(parsed.ielts) ? parsed.ielts : []).map((item) => {
       const tip = asRecord(item);
       return {
@@ -101,8 +115,8 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
         academicUse: readString(tip.academicUse),
         ...(readString(tip.example) ? { example: readString(tip.example) } : {}),
       };
-    }).filter((item) => item.expression && item.academicUse).slice(0, 10);
-    const validSegments = segments.length ? segments : (translation ? [{ source: sourceText.trim(), translation }] : []);
+    }).filter((item) => item.expression && item.academicUse && sourceNormalized.includes(normalizeTranslationMatch(item.expression))).slice(0, 10);
+    const validSegments = segments.length && segmentCoverage >= 0.72 ? segments : (translation ? [{ source: sourceText.trim(), translation }] : []);
     return {
       translation,
       segments: validSegments,
