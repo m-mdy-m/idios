@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeTranslationMatch, parseReaderTranslation } from '../src/features/shelf/model/reader-translation.ts';
+import { mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
 const valid = parseReaderTranslation(JSON.stringify({
@@ -26,5 +26,22 @@ const fallback = parseReaderTranslation('یک ترجمه ساده بدون JSON'
 assert.equal(fallback.translation, 'یک ترجمه ساده بدون JSON');
 assert.equal(fallback.segments[0]?.source, 'A sentence.');
 assert.equal(fallback.terms.length, 0);
+
+
+const longSource = Array.from({ length: 48 }, (_, index) =>
+  `Sentence ${index + 1} explains a different part of the same chapter and its surrounding argument.`,
+).join(' ');
+const chunks = splitReaderTranslationText(longSource, 380);
+assert.ok(chunks.length > 1, 'long page text must be split into multiple requests');
+assert.ok(chunks.every((chunk) => chunk.length <= 380), 'each request must remain within the configured size');
+assert.equal(chunks.join(' '), longSource, 'splitting must preserve every source character apart from repeated whitespace');
+
+const merged = mergeReaderTranslations([
+  { translation: 'ترجمه یک.', segments: [{ source: 'Sentence one.', translation: 'ترجمه یک.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }], grammar: [], ielts: [] },
+  { translation: 'ترجمه دو.', segments: [{ source: 'Sentence two.', translation: 'ترجمه دو.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }, { source: 'argument', translation: 'استدلال', meaning: 'روند منطقی متن' }], grammar: [], ielts: [] },
+]);
+assert.equal(merged.translation, 'ترجمه یک. ترجمه دو.');
+assert.equal(merged.segments.length, 2);
+assert.equal(merged.terms.length, 2, 'merged glossary entries should be deduplicated');
 
 console.log('Reader translation checks passed.');
