@@ -1866,7 +1866,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			repairFailure := ""
 			var contributionWarnings []string
 			if err == nil {
-				repairReason := validateDiscussionOutput(response.Content, allowedSources, req.Context, finalTurn)
+				repairReason := validateDiscussionContribution(response.Content, allowedSources, req.Context, priorTurns, finalTurn)
 				if repairReason != "" {
 					// One focused repair is useful, but it must have enough output budget and
 					// must not ask an opening speaker to answer a peer who has not spoken.
@@ -1878,10 +1878,10 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					)
 					repaired, repairErr := m.Generate(ctx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 					if repairErr == nil {
-						repairProblem := validateDiscussionOutput(repaired.Content, allowedSources, req.Context, finalTurn)
+						repairProblem := validateDiscussionContribution(repaired.Content, allowedSources, req.Context, priorTurns, finalTurn)
 						if repairProblem == "" {
 							response = repaired
-						} else if repairProblem == missingCitationProblem && validateDiscussionOutputWithoutCitationRequirement(repaired.Content, allowedSources, req.Context, finalTurn) == "" {
+						} else if repairProblem == missingCitationProblem && validateDiscussionContributionWithoutCitationRequirement(repaired.Content, allowedSources, req.Context, priorTurns, finalTurn) == "" {
 							// A compact local model may still omit the citation after the single repair.
 							// Preserve the otherwise complete contribution, but explicitly mark it as unverified
 							// so peers and the UI do not mistake it for source-grounded evidence.
@@ -2200,6 +2200,77 @@ func validateDiscussionOutput(content string, allowedSources map[string]bool, pa
 // validateDiscussionOutputWithoutCitationRequirement is used only after the single repair
 // attempt, and only to determine whether missing citation is the sole remaining defect.
 // It does not forgive unfinished text, invented source markers, or unsupported book sections.
+func validateDiscussionContribution(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, finalTurn bool) string {
+	if problem := validateDiscussionOutput(content, allowedSources, passages, finalTurn); problem != "" {
+		return problem
+	}
+	return discussionPeerResponseProblem(content, previous, finalTurn)
+}
+
+func validateDiscussionContributionWithoutCitationRequirement(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, finalTurn bool) string {
+	if problem := validateDiscussionOutputWithoutCitationRequirement(content, allowedSources, passages, finalTurn); problem != "" {
+		return problem
+	}
+	return discussionPeerResponseProblem(content, previous, finalTurn)
+}
+
+func discussionPeerResponseProblem(content string, previous []AgentContribution, finalTurn bool) string {
+	usable := make([]AgentContribution, 0, len(previous))
+	for _, turn := range previous {
+		if turn.Status == "completed" && strings.TrimSpace(turn.Content) != "" {
+			usable = append(usable, turn)
+		}
+	}
+	if len(usable) == 0 {
+		return ""
+	}
+	normalized := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(content))), " ")
+	for _, turn := range usable {
+		peer := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(turn.Content))), " ")
+		if normalized != "" && normalized == peer {
+			return "the response repeats a completed peer contribution verbatim instead of adding an independent point"
+		}
+	}
+	mentioned := make(map[string]bool)
+	for _, turn := range usable {
+		for _, alias := range discussionSpeakerAliases(turn) {
+			if alias != "" && strings.Contains(strings.ToLower(content), strings.ToLower(alias)) {
+				mentioned[turn.AgentID] = true
+				break
+			}
+		}
+	}
+	required := 1
+	if finalTurn && len(usable) > 1 {
+		required = 2
+	}
+	if len(mentioned) < required {
+		if finalTurn {
+			return fmt.Sprintf("the final Chair does not identify enough actual peer positions by participant name (need %d)", required)
+		}
+		return "the response does not identify an actual completed peer by participant name"
+	}
+	return ""
+}
+
+func discussionSpeakerAliases(turn AgentContribution) []string {
+	name := strings.TrimSpace(turn.AgentName)
+	if turn.AgentID == "reader-input" {
+		return []string{"your reply", "your answer", "your point", "you said"}
+	}
+	aliases := []string{name}
+	if strings.Contains(name, "·") {
+		parts := strings.Split(name, "·")
+		if len(parts) > 0 {
+			aliases = append(aliases, strings.TrimSpace(parts[len(parts)-1]))
+		}
+		if len(parts) > 1 {
+			aliases = append(aliases, strings.TrimSpace(parts[0]))
+		}
+	}
+	return aliases
+}
+
 func validateDiscussionOutputWithoutCitationRequirement(content string, allowedSources map[string]bool, passages []ContextPassage, finalTurn bool) string {
 	trimmed := strings.TrimSpace(content)
 	if incompleteDiscussionResponse(trimmed) {
@@ -2368,7 +2439,7 @@ func discussionRepairInstruction(reason string, allowedSources map[string]bool, 
 	}
 	chairRule := "Do not ask the reader a question."
 	if finalTurn {
-		peerRule = "You are the final Chair: summarize only actual completed contributions; if there are no usable peer contributions, state that the discussion evidence was insufficient instead of inventing positions."
+		peerRule = "You are the final Chair: summarize only actual completed contributions; if there are no usable peer contributions, state that the discussion evidence was insufficient instead of inventing positions. Name at least two actual participants when two or more completed peer positions are available; never substitute an anonymous consensus."
 		chairRule = "Ask at most one final `Question for you:` only if the answer could materially change the conclusion."
 	}
 	markerRule := "No source marker is needed for a pure limitation statement or a peer-logic critique that makes no claim about the book."

@@ -475,7 +475,7 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 		if call == 2 {
 			content = "Tutor explains one implication of Reader's claim without changing its scope. [source:page-1]"
 		} else if call == 3 {
-			content = "Mira checks the actual positions against the supplied page and preserves the remaining qualification. [source:page-1]"
+			content = "Mira compares Reader's supported claim with Tutor's scope clarification and preserves the remaining qualification. [source:page-1]"
 		} else if call > 3 {
 			content = "Unexpected extra call."
 		}
@@ -558,12 +558,20 @@ func TestBookDiscussionChairSpeaksLastAndLaterRoundsSeeFullHistory(t *testing.T)
 		mu.Lock()
 		captured = append(captured, request)
 		mu.Unlock()
-		content := fmt.Sprintf("Agent turn %d refines the supported interpretation. [source:page-1]", call)
-		if call == 1 {
-			content = "Reader round one central claim is narrowly supported. [source:page-1]"
-		}
-		if call == 2 {
+		content := "Reader rechecks Mira's earlier qualification and narrows the central claim. [source:page-1]"
+		switch call {
+		case 1:
+			content = "Reader's central claim is narrowly supported by the supplied passage. [source:page-1]"
+		case 2:
 			content = "Tutor responds to Reader's central claim and narrows its scope. [source:page-1]"
+		case 3:
+			content = "Mira compares Reader's claim with Tutor's qualification and preserves the remaining disagreement. [source:page-1]"
+		case 4:
+			content = "Reader revisits Mira's qualification and refines the central claim. [source:page-1]"
+		case 5:
+			content = "Tutor develops Reader's refinement without widening its scope. [source:page-1]"
+		case 6:
+			content = "Mira compares Reader's revised claim with Tutor's qualification and states what remains unresolved. [source:page-1]"
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
@@ -794,9 +802,17 @@ func TestDiscussionReviewExcludesFailedEmptyTurns(t *testing.T) {
 func TestBookDiscussionDefersReaderQuestionUntilPeersReviewIt(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
+		call := calls.Add(1)
+		content := "Reader identifies one ambiguity about fairness in the supplied passage. [source:page-1]"
+		if call == 1 {
+			content += "\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"
+		} else if call == 2 {
+			content = "Tutor responds to Reader's ambiguity: the passage supports an institutional rule, but does not settle individual scope. [source:page-1]"
+		} else {
+			content = "Mira weighs Reader's question and Tutor's qualification: the institutional reading is supported, while individual scope remains open. [source:page-1]\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": "The passage leaves one ambiguity about fairness. [source:page-1]\nQuestion for you: Do you read this as a rule for institutions or for individual choices?"}}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
 	}))
 	defer server.Close()
 	manager, err := NewManager("")
@@ -1817,5 +1833,37 @@ func TestSkipSynthesisRequiresChairForMultiAgentDiscussion(t *testing.T) {
 	}, "")
 	if err == nil || !strings.Contains(err.Error(), "Mira · Chair is required") {
 		t.Fatalf("multi-agent discussion without Chair error = %v, want clear Chair requirement", err)
+	}
+}
+
+func TestDiscussionPeerResponseRequiresNamesAndRejectsExactEcho(t *testing.T) {
+	previous := []AgentContribution{{
+		AgentID: "reader", AgentName: "Orion · Reader", Status: "completed",
+		Content: "The author prioritizes equal basic liberties. [source:page-1]",
+	}}
+	if problem := discussionPeerResponseProblem("This is supported by the page. [source:page-1]", previous, false); problem == "" {
+		t.Fatal("peer response without a named participant was accepted")
+	}
+	valid := "Reader's claim about basic liberties is supported, but the page also makes their priority explicit. [source:page-1]"
+	if problem := discussionPeerResponseProblem(valid, previous, false); problem != "" {
+		t.Fatalf("named peer response rejected: %s", problem)
+	}
+	if problem := discussionPeerResponseProblem(previous[0].Content, previous, false); problem == "" {
+		t.Fatal("verbatim peer echo was accepted as an independent contribution")
+	}
+}
+
+func TestFinalChairMustNameActualPositions(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "Reader's claim is supported. [source:page-1]"},
+		{AgentID: "tutor", AgentName: "Sage · Tutor", Status: "completed", Content: "Tutor narrows the scope. [source:page-1]"},
+	}
+	oneName := "Mira agrees with Reader and refines the supported reading. [source:page-1]"
+	if problem := discussionPeerResponseProblem(oneName, previous, true); problem == "" {
+		t.Fatal("final Chair was allowed to omit a second actual peer position")
+	}
+	bothNames := "Mira compares Reader's claim with Tutor's qualification and states the remaining limit. [source:page-1]"
+	if problem := discussionPeerResponseProblem(bothNames, previous, true); problem != "" {
+		t.Fatalf("final Chair with both actual positions was rejected: %s", problem)
 	}
 }
