@@ -67,7 +67,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - An extensible AI provider-adapter registry, generic model metadata, standard structured-output request formats, local Ollama setup, reading-agent profiles, and bundled reading skills.
 - More focused in-reader discussions with searchable and categorized participants, compact discussion personas, and additional grounded-reading skills.
 - Reading analytics and Focus sessions with saved session history, reading progress, and Activity integration.
-- A feature-rich task and release pipeline setup for the repository and shared reusable workflows.
+- Pipeline task configuration for the shared [`m-mdy-m/pipeline`](https://github.com/m-mdy-m/pipeline) task runner and reusable CI workflows.
 
 ### Changed
 
