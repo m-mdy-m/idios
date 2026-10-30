@@ -33,7 +33,7 @@ type persistedState struct {
 	BuiltinDiscussionAgentsInitialized bool                    `json:"builtin_discussion_agents_initialized,omitempty"`
 	BuiltinRoundtableV2Initialized     bool                    `json:"builtin_roundtable_v2_initialized,omitempty"`
 	BuiltinRoleProfilesV3Initialized   bool                    `json:"builtin_role_profiles_v3_initialized,omitempty"`
-	BuiltinMimiChairV4Initialized     bool                    `json:"builtin_mimi_chair_v4_initialized,omitempty"`
+	BuiltinMimiChairV4Initialized      bool                    `json:"builtin_mimi_chair_v4_initialized,omitempty"`
 }
 
 type taskJob struct {
