@@ -1,0 +1,67 @@
+name: Desktop shortcut artifact smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/idios/**"
+      - "clients/server/**"
+      - "clients/web/public/favicon.*"
+      - "clients/web/public/brand/idios-mark.svg"
+      - "packaging/**"
+      - "scripts/install.sh"
+      - "scripts/install.ps1"
+      - "scripts/install-local.ps1"
+      - "scripts/package-macos.sh"
+      - "scripts/release/**"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/desktop-shortcut-smoke.yml"
+      - "CHANGELOG.md"
+  pull_request:
+    paths:
+      - "cmd/idios/**"
+      - "clients/server/**"
+      - "clients/web/public/favicon.*"
+      - "clients/web/public/brand/idios-mark.svg"
+      - "packaging/**"
+      - "scripts/install.sh"
+      - "scripts/install.ps1"
+      - "scripts/install-local.ps1"
+      - "scripts/package-macos.sh"
+      - "scripts/release/**"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/desktop-shortcut-smoke.yml"
+      - "CHANGELOG.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idios-desktop-shortcut-smoke-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-downloaded-platform-artifacts:
+    name: Build, download, and run desktop launchers on native OSes
+    uses: m-mdy-m/pipeline/.github/workflows/release.yml@main
+    with:
+      pipeline-ref: main
+      go-version: "1.25.0"
+      setup-node: true
+      node-version: "22"
+      pnpm-version: "9.15.4"
+      test-command: bash scripts/release/verify.sh linux-amd64
+      build-command: bash scripts/release/build.sh linux-amd64
+      artifact-path: dist/release/*
+      artifact-test-command: bash scripts/release/test-artifacts.sh
+      changelog-path: CHANGELOG.md
+      dry-run: true
+      build-matrix-json: >-
+        {"include":[
+          {"id":"linux-amd64","os":"ubuntu-24.04","test_command":"bash scripts/release/verify.sh linux-amd64","build_command":"bash scripts/release/build.sh linux-amd64","artifact_path":"dist/release/*"},
+          {"id":"linux-arm64","os":"ubuntu-24.04-arm","test_command":"bash scripts/release/verify.sh linux-arm64","build_command":"bash scripts/release/build.sh linux-arm64","artifact_path":"dist/release/*"},
+          {"id":"darwin-amd64","os":"macos-15-intel","test_command":"bash scripts/release/verify.sh darwin-amd64","build_command":"bash scripts/release/build.sh darwin-amd64","artifact_path":"dist/release/*"},
+          {"id":"darwin-arm64","os":"macos-15","test_command":"bash scripts/release/verify.sh darwin-arm64","build_command":"bash scripts/release/build.sh darwin-arm64","artifact_path":"dist/release/*"},
+          {"id":"windows-amd64","os":"windows-2025","test_command":"bash scripts/release/verify.sh windows-amd64","build_command":"bash scripts/release/build.sh windows-amd64","artifact_path":"dist/release/*","artifact_test_command":"./scripts/release/test-artifacts.ps1","msys2_msystem":"UCRT64","msys2_packages":"mingw-w64-ucrt-x86_64-gcc"},
+          {"id":"windows-arm64","os":"windows-11-arm","test_command":"bash scripts/release/verify.sh windows-arm64","build_command":"bash scripts/release/build.sh windows-arm64","artifact_path":"dist/release/*","artifact_test_command":"./scripts/release/test-artifacts.ps1","msys2_msystem":"CLANGARM64","msys2_packages":"mingw-w64-clang-aarch64-clang"}
+        ]}
