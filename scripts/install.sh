@@ -31,6 +31,51 @@ HAD_OLD=0
 if [ -e "$INSTALL_DIR/idios" ]; then mv "$INSTALL_DIR/idios" "$BACKUP" || { echo 'Could not back up the installed idios executable.' >&2; exit 1; }; HAD_OLD=1; fi
 if ! mv "$INSTALL_DIR/.idios.new" "$INSTALL_DIR/idios"; then [ "$HAD_OLD" -eq 0 ] || mv "$BACKUP" "$INSTALL_DIR/idios"; echo 'Could not replace idios; previous version restored.' >&2; exit 1; fi
 rm -f "$BACKUP" "$INSTALL_DIR/idios-tui" "$INSTALL_DIR/idios-tui.exe" "$INSTALL_DIR/idios-tui-demo" "$INSTALL_DIR/idios-tui-demo.exe"
+
+if [ "$OS" = linux ]; then
+  DATA_HOME=\${XDG_DATA_HOME:-"$HOME/.local/share"}
+  APPLICATIONS_DIR="$DATA_HOME/applications"
+  ICON_DIR="$DATA_HOME/icons/hicolor/scalable/apps"
+  mkdir -p "$APPLICATIONS_DIR" "$ICON_DIR"
+  if [ -f "$TMP_DIR/unpacked/idios.svg" ]; then
+    install -m 0644 "$TMP_DIR/unpacked/idios.svg" "$ICON_DIR/idios.svg"
+  fi
+  cat > "$APPLICATIONS_DIR/idios.desktop" <<DESKTOP
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IDIOS
+GenericName=Local Workspace
+Comment=Start the IDIOS local server and open the workspace
+Exec="$INSTALL_DIR/idios" serve --open
+Icon=idios
+Terminal=false
+StartupNotify=false
+Categories=Development;Utility;
+Keywords=Workspace;Projects;Planning;Reading;
+DESKTOP
+  chmod 0755 "$APPLICATIONS_DIR/idios.desktop"
+  DESKTOP_DIR=""
+  if command -v xdg-user-dir >/dev/null 2>&1; then DESKTOP_DIR=$(xdg-user-dir DESKTOP 2>/dev/null || true); fi
+  if [ -z "$DESKTOP_DIR" ]; then DESKTOP_DIR="$HOME/Desktop"; fi
+  if [ -d "$DESKTOP_DIR" ]; then
+    cp "$APPLICATIONS_DIR/idios.desktop" "$DESKTOP_DIR/IDIOS.desktop"
+    chmod 0755 "$DESKTOP_DIR/IDIOS.desktop"
+    if command -v gio >/dev/null 2>&1; then gio set "$DESKTOP_DIR/IDIOS.desktop" metadata::trusted true 2>/dev/null || true; fi
+  fi
+elif [ "$OS" = darwin ] && [ -d "$TMP_DIR/unpacked/IDIOS.app" ]; then
+  APP_DIR="$HOME/Applications"
+  mkdir -p "$APP_DIR"
+  APP_TARGET="$APP_DIR/IDIOS.app"
+  APP_BACKUP="$APP_DIR/.IDIOS.app.backup.$"
+  if [ -d "$APP_TARGET" ]; then mv "$APP_TARGET" "$APP_BACKUP"; fi
+  if ! cp -R "$TMP_DIR/unpacked/IDIOS.app" "$APP_TARGET"; then
+    [ ! -d "$APP_BACKUP" ] || mv "$APP_BACKUP" "$APP_TARGET"
+    echo "Could not install the IDIOS.app launcher; the previous app was restored." >&2
+    exit 1
+  fi
+  rm -rf "$APP_BACKUP"
+fi
 if [ "$INSTALL_DIR" = "$HOME/.local/bin" ]; then
   for profile in "$HOME/.profile" "$HOME/.zprofile"; do
     [ -f "$profile" ] && grep -Fq '$HOME/.local/bin' "$profile" && continue
@@ -38,4 +83,7 @@ if [ "$INSTALL_DIR" = "$HOME/.local/bin" ]; then
   done
 fi
 printf 'Installed IDIOS %s to %s\n' "${TAG#v}" "$INSTALL_DIR"
+if [ "$OS" = darwin ] && [ -d "$HOME/Applications/IDIOS.app" ]; then
+  printf 'App launcher: %s/Applications/IDIOS.app\n' "$HOME"
+fi
 case ":$PATH:" in *":$INSTALL_DIR:"*) printf 'Run: idios serve --open\n' ;; *) printf 'Add %s to PATH, then run: idios serve --open\n' "$INSTALL_DIR" ;; esac
