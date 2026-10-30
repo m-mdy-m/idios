@@ -50,7 +50,7 @@ export function ShelfTranslationPanel({
   pageNumber, targetLanguage, onTargetLanguageChange, tab, onTabChange,
   pageData, selectionData, wordData, activeText, selectedText, hoveredWord,
   pageBusy, selectionBusy, wordBusy, error,
-  onClose, onTranslatePage, onTranslateSelection, onExplainWord,
+  onClose, onTranslatePage, onTranslateSelection, onExplainWord, onSelectTerm,
 }: {
   pageNumber: number;
   targetLanguage: string;
@@ -71,6 +71,7 @@ export function ShelfTranslationPanel({
   onTranslatePage: () => void;
   onTranslateSelection: () => void;
   onExplainWord: () => void;
+  onSelectTerm: (term: string) => void;
 }) {
   const activeNeedle = normalizeTranslationMatch(activeText);
   const activeSegment = pageData?.segments.find((segment) => {
@@ -155,7 +156,7 @@ export function ShelfTranslationPanel({
           <p>{currentTerm.meaning}</p>
           {currentTerm.example && <blockquote>{currentTerm.example}</blockquote>}
         </article> : wordData?.translation ? <article className="shelf-translation-panel__word-card"><strong>{hoveredWord}</strong><p>{wordData.translation}</p></article> : wordBusy ? <div className="shelf-translation-panel__loading" role="status"><LoaderCircle size={18} className="is-spinning" /><span>Looking up this word in the book's context…</span></div> : hoveredWord ? <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>{hoveredWord}</strong><p>No contextual note is available yet.</p><button type="button" onClick={onExplainWord}>Explain this word</button></div> : <div className="shelf-translation-panel__empty"><BookOpen size={22} /><strong>Explore words as you read</strong><p>Move over a word in the PDF to see its contextual meaning, translation, and a natural example here.</p></div>}
-        {(pageData?.terms.length ?? 0) > 0 && <div className="shelf-translation-panel__term-list"><small>WORDS FROM THIS PAGE</small>{pageData!.terms.map((term, index) => <button key={index} type="button" onClick={() => onTabChange('vocabulary')}><span>{term.source}</span><strong>{term.translation}</strong></button>)}</div>}
+        {(pageData?.terms.length ?? 0) > 0 && <div className="shelf-translation-panel__term-list"><small>WORDS FROM THIS PAGE</small>{pageData!.terms.map((term, index) => <button key={index} type="button" onClick={() => { onTabChange('vocabulary'); onSelectTerm(term.source); }}><span>{term.source}</span><strong>{term.translation}</strong></button>)}</div>}
       </>}
 
       {tab === 'grammar' && <>
