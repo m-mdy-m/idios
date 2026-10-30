@@ -138,7 +138,12 @@ export function ShelfTranslationPanel({
     </nav>
 
     <div className="shelf-translation-panel__content">
-      {error && <p className="shelf-translation-panel__error" role="alert">{error}</p>}
+      {error && <div className="shelf-translation-panel__error" role="alert">
+        <p>{error}</p>
+        {tab === 'translate' && <button type="button" onClick={onTranslatePage} disabled={!translationModel || pageBusy}>
+          <RefreshCw size={12} /> {pageData ? 'Resume translation' : 'Retry translation'}
+        </button>}
+      </div>}
       {tab === 'translate' && <>
         <div className="shelf-translation-panel__section-title"><span>PAGE {pageNumber} · FULL TRANSLATION</span>{pageData && <span>{pageData.segments.length} aligned parts</span>}</div>
         {selectionData && selectedText.trim() && <section className="shelf-translation-panel__selection-result">
