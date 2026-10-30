@@ -14,9 +14,8 @@ coverage.out
 /clients/web/.vite/
 /clients/web/*.tsbuildinfo
 
-# Pinned shared pipeline checkout (downloaded by scripts/run-pipeline.py).
-/.tools/
-.pipeline-artifacts/
+# Artifacts emitted by the shared pipeline runner.
+/.pipeline-artifacts/
 
 # Temporary platform packaging stage.
 /release/
