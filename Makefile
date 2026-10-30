@@ -12,13 +12,13 @@ RUN_GO = cmd /c set CGO_ENABLED=$(CGO_ENABLED)&& set GOOS=$(GOOS)&&
 PREFIX ?= $(if $(LOCALAPPDATA),$(LOCALAPPDATA)/Programs/IDIOS,$(USERPROFILE)/AppData/Local/Programs/IDIOS)
 GOOS ?= windows
 EXE_EXT ?= .exe
-VERSION ?= $(if $(GITHUB_REF_NAME),$(patsubst v%,%,$(GITHUB_REF_NAME)),$(if $(IDIOS_VERSION),$(IDIOS_VERSION),3.0.0))
+VERSION ?= $(if $(GITHUB_REF_NAME),$(patsubst v%,%,$(GITHUB_REF_NAME)),$(if $(IDIOS_VERSION),$(IDIOS_VERSION),3.0.1))
 else
 RUN_GO = env CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS)
 PREFIX ?= /usr/local
 GOOS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 EXE_EXT ?= $(if $(filter windows,$(GOOS)),.exe,)
-VERSION ?= $(shell tag=$$(git describe --tags --abbrev=0 2>/dev/null); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else printf '3.0.0'; fi)
+VERSION ?= $(shell tag=$$(git describe --tags --abbrev=0 2>/dev/null); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else printf '3.0.1'; fi)
 endif
 
 CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
