@@ -8,6 +8,7 @@ export type ReaderTranslationRequest = {
   pageText: string;
   pageNumber: number;
   targetLanguage: string;
+  modelRef: string;
   kind: ReaderTranslationKind;
   documentContext: string;
   priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
