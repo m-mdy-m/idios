@@ -772,13 +772,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [bookID, currentPageText, pageNumber, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
-    if (!translationOpen || !pageTranslation || !hoveredTextForAI.trim()) return;
+    if (!translationOpen || translationTab !== 'vocabulary' || !pageTranslation || !hoveredTextForAI.trim()) return;
     const normalizedWord = normalizeTranslationMatch(hoveredTextForAI);
     const supplied = pageTranslation.terms.some((term) => normalizeTranslationMatch(term.source) === normalizedWord);
     if (supplied) return;
     const timer = window.setTimeout(() => { void explainHoveredWord(); }, 650);
     return () => window.clearTimeout(timer);
-  }, [explainHoveredWord, hoveredTextForAI, pageTranslation, pageNumber, translationOpen]);
+  }, [explainHoveredWord, hoveredTextForAI, pageTranslation, pageNumber, translationOpen, translationTab]);
 
   const applyAIHighlights = useCallback(async (marks: RequestedBookHighlight[]): Promise<ApplyBookHighlightsResult> => {
     const result: ApplyBookHighlightsResult = { saved: [], failed: [] };
