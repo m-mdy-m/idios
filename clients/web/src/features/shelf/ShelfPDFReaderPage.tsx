@@ -466,64 +466,89 @@ export function ShelfPDFReaderPage() {
     }
     const { annotations, notes } = await contextPromise;
     const nearbyAnnotations = annotations.filter((item) => Math.abs(item.page - request.pageNumber) <= 3).slice(-8);
+    const directTranslation = request.kind === 'page' || request.kind === 'chunk' || request.kind === 'selection';
+    const learningAnalysis = request.kind === 'grammar' || request.kind === 'ielts';
     const glossaryLines = request.priorGlossary.slice(-20)
       .map((term) => '- ' + term.source + ' = ' + term.translation + ' (' + term.meaning + ')')
       .join('\n')
-      .slice(0, 2200);
+      .slice(0, directTranslation ? 700 : 2200);
     const annotationLines = nearbyAnnotations
       .map((item) => {
         const noteText = item.note?.trim() ? ' — ' + item.note.trim().slice(0, 150) : '';
-        return '- Page ' + item.page + ': “' + item.quote.slice(0, 160) + '”' + noteText;
+        return '- Page ' + item.page + ': “' + item.quote.slice(0, directTranslation ? 90 : 160) + '”' + noteText;
       })
       .join('\n')
-      .slice(0, 1600);
+      .slice(0, directTranslation ? 500 : 1600);
     const noteLines = notes.slice(-4)
       .map((item) => '- ' + item.title + ': ' + item.content.slice(0, 200))
       .join('\n')
-      .slice(0, 900);
+      .slice(0, directTranslation ? 300 : 900);
     const bookContext = [
       'Book title: ' + currentBook.title,
-      currentBook.summary?.trim() ? 'Book subject: ' + currentBook.summary.trim().slice(0, 900) : '',
+      currentBook.summary?.trim() ? 'Book subject: ' + currentBook.summary.trim().slice(0, 600) : '',
       currentBook.tags?.length ? 'Subject tags: ' + currentBook.tags.join(', ') : '',
       'PDF page: ' + request.pageNumber,
-      request.documentContext.trim() ? 'Adjacent page context (use only to disambiguate meaning):\n' + request.documentContext.slice(0, 4200) : '',
+      request.documentContext.trim() ? 'Adjacent page context (use only to disambiguate meaning):\n' + request.documentContext.slice(0, directTranslation ? 1800 : 4200) : '',
       glossaryLines ? 'Book glossary; keep terminology consistent unless the local sense differs:\n' + glossaryLines : '',
       annotationLines ? 'Reader annotations (supporting context only):\n' + annotationLines : '',
       noteLines ? 'Reader notes (supporting context only):\n' + noteLines : '',
     ].filter(Boolean).join('\n\n');
 
-    const scopeInstruction = request.kind === 'page' || request.kind === 'chunk'
-      ? 'Translate the entire exact source passage. Preserve paragraph boundaries and sentence order. Never summarize or omit content. Return aligned segments only when they can be copied exactly from the source.'
-      : request.kind === 'selection'
-        ? 'Translate only the exact selected passage, retaining every clause and sentence.'
-        : 'Explain and translate only this exact word in its sentence and book context. Give its contextual sense, part of speech, a simple explanation and one natural example.';
-    const systemPrompt = [
+    const commonRules = [
       CORE_RELIABILITY_CONTRACT,
       CONTEXTUAL_TRANSLATION_SKILL,
       skillInstructions,
-      'READER TRANSLATION',
-      'Target language: ' + targetLanguageName,
-      'Request type: ' + request.kind,
-      scopeInstruction,
-      'The exact source in the user message is the only material to translate. Use book metadata, nearby pages, glossary, notes and highlights only to interpret meaning and terminology; never insert contextual facts into the translated passage.',
-      'Preserve author meaning and tone, negation, tense, modality, conditions, quantities, numbers, units, citations, code, identifiers and formulas. No paraphrase or summary in the translation.',
-      'Only return vocabulary, grammar patterns and IELTS expressions that occur verbatim in the supplied source. Explain the sense used in this book. Never invent band scores or promise IELTS results.',
-      'For word/phrase alignment, source fields must be exact text copied from the supplied passage. If alignment is uncertain, return an empty segments array and preserve the complete translation.',
-      'Check the passage for omissions and additions before responding. If extracted text is visibly incomplete, explain this in translatorNote.',
-      'Return ONLY JSON: {"translation":"complete faithful translation","segments":[{"source":"exact source sentence","translation":"matching translation"}],"terms":[{"source":"word in source","translation":"target equivalent","meaning":"contextual meaning in simple language","partOfSpeech":"part of speech","example":"short natural example"}],"grammar":[{"pattern":"source pattern","explanation":"simple explanation","example":"original example"}],"ielts":[{"expression":"source expression","academicUse":"accurate academic use","example":"original example"}],"translatorNote":""}',
-      'Limits for this request: maximum 6 useful terms, 2 grammar notes and 2 IELTS items. Keep the JSON compact.',
-    ].join('\n\n');
+      'Use book metadata, nearby pages, glossary, notes and highlights only to understand the source. Never add facts that are not in the exact source.',
+      'Preserve names, numbers, units, formulas, code, identifiers, citations, negation, modality and uncertainty. Never summarize or omit source content.',
+    ];
+    let systemPrompt: string;
+    if (directTranslation) {
+      const scope = request.kind === 'selection'
+        ? 'Translate only the exact selected passage, retaining every sentence and clause.'
+        : 'Translate the entire exact passage. Preserve paragraph breaks, sentence order and all details.';
+      systemPrompt = [
+        ...commonRules,
+        'READER TRANSLATION',
+        'Target language: ' + targetLanguageName,
+        scope,
+        'Use the subject and local terminology of this book to choose accurate equivalents. Keep the author’s tone and register.',
+        'Return only the complete translation text. Do not return JSON, headings, explanations, source text, vocabulary lists, grammar notes or IELTS notes.',
+        'Before responding, check that every sentence and clause is translated and that nothing has been added or removed.',
+      ].join('\n\n');
+    } else if (request.kind === 'word') {
+      systemPrompt = [
+        ...commonRules,
+        'WORD IN CONTEXT',
+        'Target language: ' + targetLanguageName,
+        'Explain this exact word in the supplied sentence and book context. Return a concise contextual translation, part of speech, clear meaning and one natural example.',
+        'Return ONLY JSON: {"translation":"brief contextual explanation","segments":[],"terms":[{"source":"exact word","translation":"target equivalent","meaning":"contextual meaning","partOfSpeech":"part of speech","example":"natural example"}],"grammar":[],"ielts":[],"translatorNote":""}',
+      ].join('\n\n');
+    } else if (request.kind === 'grammar') {
+      systemPrompt = [
+        ...commonRules,
+        'GRAMMAR ANALYSIS',
+        'Identify at most 6 useful grammar structures that occur exactly in the source passage. Explain their function and effect in this specific sentence, not as generic textbook rules. Prefer patterns helpful to an advanced English learner.',
+        'Return ONLY JSON: {"translation":"","segments":[],"terms":[],"grammar":[{"pattern":"exact source phrase","explanation":"context-specific explanation","example":"short new example"}],"ielts":[],"translatorNote":""}',
+      ].join('\n\n');
+    } else {
+      systemPrompt = [
+        ...commonRules,
+        'IELTS AND ACADEMIC ENGLISH ANALYSIS',
+        'Find at most 8 genuinely useful academic expressions, collocations or precise vocabulary items that occur exactly in the source. Explain natural academic usage and give a short original example. Do not assign a band score or claim that an expression guarantees a score.',
+        'Return ONLY JSON: {"translation":"","segments":[],"terms":[],"grammar":[],"ielts":[{"expression":"exact source expression","academicUse":"accurate academic usage","example":"short natural example"}],"translatorNote":""}',
+      ].join('\n\n');
+    }
 
     const response = await api.aiChat({
       provider_id: selectedModel.providerID,
       model: selectedModel.modelID,
       task: 'translation',
       reasoning_effort: 'low',
-      timeout_seconds: selectedOption.timeoutSeconds,
-      max_tokens: request.kind === 'word' ? 700 : 1500,
+      timeout_seconds: Math.min(600, Math.max(45, request.timeoutSeconds ?? selectedOption.timeoutSeconds)),
+      max_tokens: directTranslation ? 1800 : learningAnalysis ? 1100 : 700,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE TO TRANSLATE\n' + request.text },
+        { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE\n' + request.text },
       ],
     });
     const content = response.content?.trim();
