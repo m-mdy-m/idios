@@ -21,7 +21,9 @@ case "$target" in
     export TARGET_GOARCH="${target#linux-}"
     sudo apt-get update
     sudo apt-get install -y rpm
-    go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+    # nfpm v2.47.0 requires Go 1.26.4. Allow the Go command to switch toolchains
+    # for this packaging tool without raising IDIOS's own go.mod minimum version.
+    GOTOOLCHAIN=auto go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
     export PATH="$(go env GOPATH)/bin:$PATH"
     nfpm package --config packaging/nfpm.yaml --packager deb --target "idios-${GITHUB_REF_NAME}-${target}.deb"
     nfpm package --config packaging/nfpm.yaml --packager rpm --target "idios-${GITHUB_REF_NAME}-${target}.rpm"
@@ -41,4 +43,11 @@ case "$target" in
     ;;
 esac
 
-find dist/release -maxdepth 1 -type f -printf '%f\n' | sort
+# Keep the asset listing portable: macOS ships BSD find, which has no -printf.
+shopt -s nullglob
+release_assets=(dist/release/*)
+if (("${#release_assets[@]}" == 0)); then
+  echo "No release artifacts were produced in dist/release." >&2
+  exit 1
+fi
+printf '%s\n' "${release_assets[@]##*/}" | LC_ALL=C sort
