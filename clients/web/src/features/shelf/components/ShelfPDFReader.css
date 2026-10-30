@@ -190,3 +190,11 @@
 .shelf-pdf-reader__body--discussion { grid-template-columns:minmax(0,1fr) 310px; }
 @media (max-width:1100px) { .shelf-pdf-reader__body--discussion { grid-template-columns:minmax(0,1fr) 290px; } }
 @media (max-width:720px) { .shelf-pdf-reader__body--discussion { position:relative; grid-template-columns:minmax(0,1fr); } }
+
+
+/* The contextual translation companion lives beside the PDF, on its left. */
+.shelf-pdf-reader__body--translation { grid-template-columns:minmax(285px, 330px) minmax(0, 1fr); }
+.shelf-translation-panel__scrim { display:none; }
+@media (max-width:1000px) {
+  .shelf-pdf-reader__body--translation { grid-template-columns:minmax(260px, 285px) minmax(0, 1fr); }
+}
