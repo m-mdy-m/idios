@@ -572,7 +572,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const parsed = parseReaderTranslation(raw, source);
     if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or choose another model.');
     return parsed;
-  }, [currentPageText, getTranslationContext, onTranslateText, pageNumber, translationTargetLanguage]);
+  }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationTargetLanguage]);
 
   const refreshPageTranslation = useCallback(() => {
     pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}`);
