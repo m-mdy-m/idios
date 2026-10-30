@@ -1866,7 +1866,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			repairFailure := ""
 			var contributionWarnings []string
 			if err == nil {
-				repairReason := validateDiscussionContribution(response.Content, allowedSources, req.Context, priorTurns, finalTurn)
+				repairReason := validateDiscussionContribution(response.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)
 				if repairReason != "" {
 					// One focused repair is useful, but it must have enough output budget and
 					// must not ask an opening speaker to answer a peer who has not spoken.
@@ -1878,10 +1878,10 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					)
 					repaired, repairErr := m.Generate(ctx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 					if repairErr == nil {
-						repairProblem := validateDiscussionContribution(repaired.Content, allowedSources, req.Context, priorTurns, finalTurn)
+						repairProblem := validateDiscussionContribution(repaired.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)
 						if repairProblem == "" {
 							response = repaired
-						} else if repairProblem == missingCitationProblem && validateDiscussionContributionWithoutCitationRequirement(repaired.Content, allowedSources, req.Context, priorTurns, finalTurn) == "" {
+						} else if repairProblem == missingCitationProblem && validateDiscussionContributionWithoutCitationRequirement(repaired.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn) == "" {
 							// A compact local model may still omit the citation after the single repair.
 							// Preserve the otherwise complete contribution, but explicitly mark it as unverified
 							// so peers and the UI do not mistake it for source-grounded evidence.
@@ -2134,7 +2134,7 @@ func compactDiscussionExcerpt(content string, maxRunes int) string {
 		}
 	}
 	suffix := strings.Join(uniqueMarkers, " ")
-	prefixLimit := maxRunes - len([]rune(suffix)) - 2
+	prefixLimit := maxRunes - len([]rune(suffix)) - len([]rune(" … "))
 	if suffix != "" && prefixLimit > 0 {
 		return strings.TrimSpace(string(runes[:prefixLimit])) + " … " + suffix
 	}
@@ -2200,24 +2200,24 @@ func validateDiscussionOutput(content string, allowedSources map[string]bool, pa
 // validateDiscussionOutputWithoutCitationRequirement is used only after the single repair
 // attempt, and only to determine whether missing citation is the sole remaining defect.
 // It does not forgive unfinished text, invented source markers, or unsupported book sections.
-func validateDiscussionContribution(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, finalTurn bool) string {
+func validateDiscussionContribution(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) string {
 	if problem := validateDiscussionOutput(content, allowedSources, passages, finalTurn); problem != "" {
 		return problem
 	}
-	return discussionPeerResponseProblem(content, previous, finalTurn)
+	return discussionPeerResponseProblem(content, previous, agentID, finalTurn)
 }
 
-func validateDiscussionContributionWithoutCitationRequirement(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, finalTurn bool) string {
+func validateDiscussionContributionWithoutCitationRequirement(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) string {
 	if problem := validateDiscussionOutputWithoutCitationRequirement(content, allowedSources, passages, finalTurn); problem != "" {
 		return problem
 	}
-	return discussionPeerResponseProblem(content, previous, finalTurn)
+	return discussionPeerResponseProblem(content, previous, agentID, finalTurn)
 }
 
-func discussionPeerResponseProblem(content string, previous []AgentContribution, finalTurn bool) string {
+func discussionPeerResponseProblem(content string, previous []AgentContribution, agentID string, finalTurn bool) string {
 	usable := make([]AgentContribution, 0, len(previous))
 	for _, turn := range previous {
-		if turn.Status == "completed" && strings.TrimSpace(turn.Content) != "" {
+		if turn.AgentID != agentID && turn.Status == "completed" && strings.TrimSpace(turn.Content) != "" {
 			usable = append(usable, turn)
 		}
 	}

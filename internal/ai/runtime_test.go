@@ -387,9 +387,22 @@ func TestBookDiscussionEnforcesAgentTaskPermissions(t *testing.T) {
 func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
+		call := calls.Add(1)
+		content := ""
+		switch call {
+		case 1:
+			content = "Reader identifies one supported claim in the supplied illustrative passage. [source:page-1]"
+		case 2:
+			content = "Tutor responds to Reader's claim: the example illustrates the principle, but the passage does not establish wider intent. [source:page-1]"
+		case 3:
+			content = "Reader refines Tutor's scope point: the example illustrates the supplied principle without establishing wider intent. [source:page-1]"
+		case 4:
+			content = "Tutor responds to Reader's refinement: the example supports a narrow reading, not the author's wider intent. [source:page-1]"
+		default:
+			content = "## Synthesis\nThe passage supports a cautious reading. [source:page-1]\n\n## Material disagreements\nThe agents differ on whether the example is central or illustrative.\n\n## Evidence gaps and uncertainty\nThe passage does not establish the author's wider intent."
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"model":"test-model","choices":[{"message":{"content":"## Synthesis\nThe passage supports a cautious reading. [source:page-1]\n\n## Material disagreements\nThe agents differ on whether the example is central or illustrative.\n\n## Evidence gaps and uncertainty\nThe passage does not establish the author's wider intent."}}]}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"model":"test-model","choices":[]any{map[string]any{"message":map[string]string{"content":content}}}})
 	}))
 	defer server.Close()
 	manager, err := NewManager("")
@@ -619,7 +632,7 @@ func TestBookDiscussionChairSpeaksLastAndLaterRoundsSeeFullHistory(t *testing.T)
 		roundTwoReaderPrompt.WriteString(message.Content)
 		roundTwoReaderPrompt.WriteByte('\n')
 	}
-	if !strings.Contains(roundTwoReaderPrompt.String(), "Reader round one central claim") || !strings.Contains(roundTwoReaderPrompt.String(), "Tutor responds to Reader's central claim") {
+	if !strings.Contains(roundTwoReaderPrompt.String(), "Reader's central claim is narrowly supported") || !strings.Contains(roundTwoReaderPrompt.String(), "Tutor responds to Reader's central claim") {
 		t.Fatalf("round two did not receive the complete prior-round history: %s", roundTwoReaderPrompt.String())
 	}
 }
@@ -1841,14 +1854,14 @@ func TestDiscussionPeerResponseRequiresNamesAndRejectsExactEcho(t *testing.T) {
 		AgentID: "reader", AgentName: "Orion · Reader", Status: "completed",
 		Content: "The author prioritizes equal basic liberties. [source:page-1]",
 	}}
-	if problem := discussionPeerResponseProblem("This is supported by the page. [source:page-1]", previous, false); problem == "" {
+	if problem := discussionPeerResponseProblem("This is supported by the page. [source:page-1]", previous, "tutor", false); problem == "" {
 		t.Fatal("peer response without a named participant was accepted")
 	}
 	valid := "Reader's claim about basic liberties is supported, but the page also makes their priority explicit. [source:page-1]"
-	if problem := discussionPeerResponseProblem(valid, previous, false); problem != "" {
+	if problem := discussionPeerResponseProblem(valid, previous, "tutor", false); problem != "" {
 		t.Fatalf("named peer response rejected: %s", problem)
 	}
-	if problem := discussionPeerResponseProblem(previous[0].Content, previous, false); problem == "" {
+	if problem := discussionPeerResponseProblem(previous[0].Content, previous, "tutor", false); problem == "" {
 		t.Fatal("verbatim peer echo was accepted as an independent contribution")
 	}
 }
@@ -1859,11 +1872,22 @@ func TestFinalChairMustNameActualPositions(t *testing.T) {
 		{AgentID: "tutor", AgentName: "Sage · Tutor", Status: "completed", Content: "Tutor narrows the scope. [source:page-1]"},
 	}
 	oneName := "Mira agrees with Reader and refines the supported reading. [source:page-1]"
-	if problem := discussionPeerResponseProblem(oneName, previous, true); problem == "" {
+	if problem := discussionPeerResponseProblem(oneName, previous, "discussion-chair", true); problem == "" {
 		t.Fatal("final Chair was allowed to omit a second actual peer position")
 	}
 	bothNames := "Mira compares Reader's claim with Tutor's qualification and states the remaining limit. [source:page-1]"
-	if problem := discussionPeerResponseProblem(bothNames, previous, true); problem != "" {
+	if problem := discussionPeerResponseProblem(bothNames, previous, "discussion-chair", true); problem != "" {
 		t.Fatalf("final Chair with both actual positions was rejected: %s", problem)
+	}
+}
+
+func TestDiscussionPeerResponseCannotPassByNamingItself(t *testing.T) {
+	previous := []AgentContribution{{
+		AgentID: "reader", AgentName: "Orion · Reader", Status: "completed",
+		Content: "The page supports a narrow interpretation. [source:page-1]",
+	}}
+	answer := "Reader confirms the page supports a narrow interpretation. [source:page-1]"
+	if problem := discussionPeerResponseProblem(answer, previous, "reader", false); problem == "" {
+		t.Fatal("an agent was allowed to satisfy peer attribution by naming its own prior turn")
 	}
 }

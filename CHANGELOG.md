@@ -16,8 +16,8 @@
 - Strengthen Mimi's page-reading contract to preserve explicit negations, qualifications, and the distinction between a page's main argument and secondary acknowledgements.
 
 ### Fixed
-- Reject verbatim peer echoes, unnamed peer responses, and final Chair summaries that omit available participant positions; require one focused repair and keep repeat failures out of subsequent peer evidence.
 
+- Reject verbatim peer echoes, unnamed peer responses, and final Chair summaries that omit available participant positions; require one focused repair and keep repeat failures out of subsequent peer evidence.
 - Correctly recognize inclusive chapter ranges such as `Chapters IV–VIII` when validating chapter references, preventing valid references to range endpoints from being rejected.
 - Prevent failed agent turns from being passed forward as if they were completed peer arguments.
 
