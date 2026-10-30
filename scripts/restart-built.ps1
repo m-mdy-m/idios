@@ -1,4 +1,4 @@
-param([string]$Version = "3.0.2")
+param([string]$Version = "3.1.0")
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
