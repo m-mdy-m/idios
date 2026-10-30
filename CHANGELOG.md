@@ -4,10 +4,24 @@ All notable changes to IDIOS are recorded here. This file follows [Keep a Change
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-10-30
+
+IDIOS 3.0.2 is a maintenance release focused on making native release builds
+reproducible across the supported Linux, macOS, and Windows targets.
+
 ### Fixed
 
-- Provision the Go and Node.js toolchains explicitly in the shared release workflow.
-- Prepare native Windows compilers through the MSYS2 setup action and avoid in-script full MSYS2 upgrades that terminate the active shell.
+- Provision Go 1.25.0 explicitly in the shared release workflow so macOS
+  runners and all other targets have the toolchain required by go.mod.
+- Provision Node.js 22 and pnpm 9.15.4 for the embedded Web frontend build
+  instead of relying on tools already present on hosted runners.
+- Configure Windows AMD64 with the MSYS2 UCRT64 GCC toolchain and Windows
+  ARM64 with the CLANGARM64 Clang toolchain.
+- Stop running a full MSYS2 runtime upgrade from inside the active release
+  shell; compiler packages are installed by the reusable workflow before
+  the test and build steps.
+- Preserve CC and CGO_ENABLED for subsequent release steps and report
+  actionable errors when a Windows compiler environment is not active.
 
 ## [3.0.1] — 2026-10-30
 
@@ -112,6 +126,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
+[3.0.2]: https://github.com/m-mdy-m/idios/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.1
 [3.0.0]: https://github.com/m-mdy-m/idios/compare/v3.0.0...v3.0.1
 [2.0.0]: https://github.com/m-mdy-m/idios/compare/v2.0.0...v3.0.0
