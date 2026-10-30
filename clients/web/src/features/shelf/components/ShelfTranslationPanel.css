@@ -167,3 +167,18 @@
   .shelf-translation-panel__translation-document p { font-size:14px; line-height:1.9; }
   .shelf-translation-panel__empty { margin-top:18px; }
 }
+
+.shelf-translation-panel__error button {
+  display:inline-flex;
+  align-self:flex-start;
+  align-items:center;
+  padding:6px 9px;
+  border:1px solid #5a5b52;
+  border-radius:7px;
+  color:#eeeae0;
+  background:#3a3932;
+  font-size:10px;
+  cursor:pointer;
+}
+.shelf-translation-panel__error button:hover { background:#47463e; }
+.shelf-translation-panel__error button:disabled { opacity:.5; cursor:wait; }
