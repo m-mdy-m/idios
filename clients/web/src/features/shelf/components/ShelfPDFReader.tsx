@@ -546,7 +546,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     if (!source) throw new Error('Select some readable text first.');
     const documentContext = await getTranslationContext(pageNumber);
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
-    for (const [cacheKey, data] of pageTranslationCache.current.entries()) {
+    const cachedPages = Array.from(pageTranslationCache.current.entries()).sort((left, right) => Number(left[0].split(':')[1]) - Number(right[0].split(':')[1]));
+    for (const [cacheKey, data] of cachedPages) {
       const [cachedBook, cachedPage, cachedLanguage] = cacheKey.split(':');
       if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || Number(cachedPage) >= pageNumber) continue;
       for (const term of data.terms) {
@@ -763,7 +764,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }).filter((rect) => rect.width > 0.001 && rect.height > 0.001).slice(0, 300);
     if (!rectangles.length) { setPending(null); setSelectedTextForAI(''); return; }
     setSelectionTranslation(null);
-    const selectedWord = /^\\p{L}[\\p{L}\\p{N}_’'-]*$/u.test(quote);
+    const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(quote);
     setHoveredTextForAI(selectedWord ? quote : '');
     setSelectedTextForAI(quote.slice(0, 10000));
     setPending({ quote: quote.slice(0, 8000), rectangles });
