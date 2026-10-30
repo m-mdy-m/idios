@@ -350,69 +350,32 @@ export function ShelfPDFReaderPage() {
       ]);
       const annotations: ShelfAnnotation[] = annotationsResult.status === 'fulfilled' ? annotationsResult.value : [];
       const notes: Note[] = notesResult.status === 'fulfilled' ? notesResult.value : [];
-      const bookContext = [
-        `Book title: ${currentBook.title}`,
-        currentBook.summary?.trim() ? `Book summary / description:\n${currentBook.summary.trim().slice(0, 4500)}` : '',
-        currentBook.tags?.length ? `Book subject tags: ${currentBook.tags.join(', ')}` : '',
-        currentBook.repository_name ? `Related repository / technical context: ${currentBook.repository_name}` : '',
-        `Current page: ${readerContext?.pageNumber ?? currentPage}`,
-        readerContext?.pageText?.trim() ? `Current page text for context (not all of this text needs translating):\n${readerContext.pageText.trim().slice(0, 10000)}` : '',
-        annotations.length ? `Reader's saved highlights and margin notes (use only to disambiguate terms; never translate these instead of the supplied passage):\n${annotations.slice(-12).map((item) => `Page ${item.page}: “${item.quote.slice(0, 280)}”${item.note?.trim() ? ` — ${item.note.trim().slice(0, 280)}` : ''}`).join('\n').slice(0, 4500)}` : '',
-        notes.length ? `Reader's saved book notes (fallible supporting context):\n${notes.slice(-8).map((item) => `- ${item.title}: ${item.content.slice(0, 400)}`).join('\n').slice(0, 2500)}` : '',
-      ].filter(Boolean).join('\n\n');
-      const response = await api.aiChat({
-        provider_id: selectedModel.providerID,
-        model: selectedModel.modelID,
-        task: 'translation',
-        reasoning_effort: 'low',
-        messages: [
-          { role: 'system', content: `${CORE_RELIABILITY_CONTRACT}\n\n${CONTEXTUAL_TRANSLATION_SKILL}\n\n${skillInstructions}\n\n## Task for this request\nTranslate the source passage into ${target}. The source passage supplied in the user message is the only text to translate. Use book/page context to interpret terminology and maintain consistency; never insert contextual facts into the translation. Preserve structure, formulas, identifiers, code, citations, numbers, negation, uncertainty, and the author's tone. Do not summarize or replace translation with explanation. Return the full translation first. Add a short translator note only if a genuine ambiguity materially affects meaning. If context is insufficient, choose the most likely meaning without pretending certainty.` },
-          { role: 'user', content: `## Book and reading context\n${bookContext || 'No additional book context is available.'}\n\n## Exact passage to translate\n${text}` },
-        ],
-      });
-      const translated = response.content?.trim();
-      if (!translated) throw new Error('The selected model returned an empty translation. Check provider health and try again.');
-      setToolResult(translated);
-    } catch (cause) {
-      setToolError(cause instanceof Error ? cause.message : 'Translation failed. Check your AI provider and retry.');
-    } finally {
-      setToolBusy(false);
-    }
-  }, [book, currentPage, readerContext, targetLanguage, tool, toolText]);
-
-  const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<string> => {
-    const currentBook = bookRef.current;
-    if (!currentBook) throw new Error('Book details are still loading. Please try again.');
-    const settings = readStudyAISettings();
-    const selectedModel = settings.model ? splitRuntimeModel(settings.model) : null;
-    if (!selectedModel) throw new Error('Choose a model in AI Runtime settings before translating.');
-    const language = targetLanguages.find((item) => item.value === request.targetLanguage)?.label ?? request.targetLanguage;
-    const selectedSkills = loadSelectedReadingSkills();
-    const relevantSkills = READING_SKILLS
-      .filter((skill) => selectedSkills.includes(skill.id) && (skill.category === 'subject' || skill.id === 'english-learning'))
-      .map((skill) => skill.id);
-    // English-learning guidance is deliberately active for this reader feature, even when
-    // the user has not manually enabled the optional skill in settings.
-    const skillInstructions = selectedReadingSkillInstructions([...new Set([...relevantSkills, 'english-learning'])]);
-    const [annotationsResult, notesResult] = await Promise.allSettled([
-      api.shelfAnnotations(currentBook.id),
-      api.shelfBookNotes(currentBook.id),
-    ]);
-    const annotations: ShelfAnnotation[] = annotationsResult.status === 'fulfilled' ? annotationsResult.value : [];
-    const notes: Note[] = notesResult.status === 'fulfilled' ? notesResult.value : [];
-    const nearbyAnnotations = annotations
-      .filter((item) => Math.abs(item.page - request.pageNumber) <= 4)
-      .slice(-20);
+      const glossaryLines = request.priorGlossary
+      .map((term) => '- ' + term.source + ' = ' + term.translation + ' (' + term.meaning + ')')
+      .join('\n')
+      .slice(0, 6000);
+    const annotationLines = nearbyAnnotations
+      .map((item) => {
+        const noteText = item.note?.trim() ? ' — ' + item.note.trim().slice(0, 260) : '';
+        return '- Page ' + item.page + ': “' + item.quote.slice(0, 260) + '”' + noteText;
+      })
+      .join('\n')
+      .slice(0, 5000);
+    const noteLines = notes
+      .slice(-12)
+      .map((item) => '- ' + item.title + ': ' + item.content.slice(0, 420))
+      .join('\n')
+      .slice(0, 5000);
     const bookContext = [
-      `Book title: ${currentBook.title}`,
-      currentBook.summary?.trim() ? `Book description: ${currentBook.summary.trim().slice(0, 4000)}` : '',
-      currentBook.tags?.length ? `Book subject tags: ${currentBook.tags.join(', ')}` : '',
-      currentBook.repository_name ? `Related technical context: ${currentBook.repository_name}` : '',
-      `Requested page: PDF page ${request.pageNumber}`,
-      request.documentContext.trim() ? `Neighbouring pages actually extracted from this same book:\n${request.documentContext.slice(0, 22000)}` : '',
-      request.priorGlossary.length ? `Previously used terminology from translated pages — preserve these equivalents unless this passage clearly uses a different sense:\n${request.priorGlossary.map((term) => `- ${term.source} = ${term.translation} (${term.meaning})`).join('\n').slice(0, 6000)}` : '',
-      nearbyAnnotations.length ? `Reader's saved highlights and notes near this page (fallible context only):\n${nearbyAnnotations.map((item) => `- Page ${item.page}: “${item.quote.slice(0, 260)}”${item.note?.trim() ? ` — ${item.note.trim().slice(0, 260)}` : ''}`).join('\n').slice(0, 5000)` : '',
-      notes.length ? `Reader's saved book notes (supporting context only):\n${notes.slice(-12).map((item) => `- ${item.title}: ${item.content.slice(0, 420)}`).join('\n').slice(0, 5000)}` : '',
+      'Book title: ' + currentBook.title,
+      currentBook.summary?.trim() ? 'Book description: ' + currentBook.summary.trim().slice(0, 4000) : '',
+      currentBook.tags?.length ? 'Book subject tags: ' + currentBook.tags.join(', ') : '',
+      currentBook.repository_name ? 'Related technical context: ' + currentBook.repository_name : '',
+      'Requested page: PDF page ' + request.pageNumber,
+      request.documentContext.trim() ? 'Neighbouring pages actually extracted from this same book:\n' + request.documentContext.slice(0, 22000) : '',
+      glossaryLines ? 'Previously used terminology from translated pages — preserve these equivalents unless this passage clearly uses a different sense:\n' + glossaryLines : '',
+      annotationLines ? 'Reader saved highlights and notes near this page (fallible context only):\n' + annotationLines : '',
+      noteLines ? 'Reader saved book notes (supporting context only):\n' + noteLines : '',
     ].filter(Boolean).join('\n\n');
 
     const kindInstructions = request.kind === 'page'
