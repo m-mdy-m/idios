@@ -32,7 +32,7 @@ const highlightFunctionWords = new Set((
 ))
 
 export function quoteWords(value: string): string[] {
-  return value.normalize('NFKC').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) ?? [];
+  return value.normalize('NFKC').match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
 }
 
 function normalizeQuoteWord(value: string): string {
