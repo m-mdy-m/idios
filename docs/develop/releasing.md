@@ -6,7 +6,7 @@ Releases are built from version tags. The CLI and updater version must match the
 
 1. Update `CHANGELOG.md` with a section matching the intended version, for example `## [3.0.0] — 2026-10-30`.
 2. Update the default CLI/updater version when preparing a new release line.
-3. Run `make ci` or `python scripts/run-pipeline.py run ci`.
+3. Run `make ci` or `pipeline run ci` when the shared CLI is installed.
 4. Confirm that native toolchains are available for the target platforms.
 5. Check installer scripts, checksums, and release notes.
 
