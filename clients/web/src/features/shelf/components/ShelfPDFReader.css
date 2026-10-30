@@ -284,3 +284,6 @@
 @media (prefers-reduced-motion:reduce) {
   .shelf-pdf-reader__translation-popover { animation:none; }
 }
+
+/* The mascot stays visible as the translation bubble's anchor; its own thought is tucked away. */
+body.idios-shelf-translation-open .shelf-study-mascot__bubble { display:none!important; }
