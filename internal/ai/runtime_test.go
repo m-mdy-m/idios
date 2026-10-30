@@ -1916,61 +1916,21 @@ func TestFinalChairRequiresTwoDistinctPeersNotTwoTurnsFromOnePeer(t *testing.T) 
 
 func TestBuiltinMimiChairV4MigrationPreservesUserCustomization(t *testing.T) {
 	oldSkill := "You are Mira, final Chair. In non-final rounds, contribute a specific peer critique without premature synthesis. On the final turn, compare the actual named positions, weigh evidence asymmetrically when warranted, state what is resolved/narrowed/still open, and refine the conclusion. Ask at most one final reader question only if the answer could change the interpretation."
-	cases := []struct {
-		name             string
-		description      string
-		role             string
-		instructions     string
-		skillInstructions string
-		wantName         string
-		wantDescription  string
-		wantRole         string
-		wantInstructions string
-		wantSkill        string
-	}{
-		{
-			name: "Mira · Chair",
-			description: "The final moderator: compares positions, reports unresolved conflict, and asks one consequential question only when needed.",
-			role: "round-table chair and synthesis moderator",
-			instructions: "My customized Chair instructions.",
-			skillInstructions: oldSkill,
-			wantName: "MIMI · Chair",
-			wantDescription: "IDIOS's primary reading companion and final moderator; independently checks peer claims and preserves unresolved disagreement.",
-			wantRole: "primary reading companion and evidence-led round-table chair",
-			wantInstructions: "My customized Chair instructions.",
-			wantSkill: "You are MIMI, the primary Shelf companion and final Chair.",
-		},
-		{
-			name: "My Custom Chair",
-			description: "A user-authored Chair description.",
-			role: "user-defined moderation role",
-			instructions: "Keep my custom chair instructions.",
-			skillInstructions: "Keep my custom chair skill.",
-			wantName: "My Custom Chair",
-			wantDescription: "A user-authored Chair description.",
-			wantRole: "user-defined moderation role",
-			wantInstructions: "Keep my custom chair instructions.",
-			wantSkill: "Keep my custom chair skill.",
-		},
+	type migrationCase struct { name, description, role, instructions, skillInstructions, wantName, wantDescription, wantRole, wantInstructions, wantSkill string }
+	cases := []migrationCase{
+		{name: "Mira · Chair", description: "The final moderator: compares positions, reports unresolved conflict, and asks one consequential question only when needed.", role: "round-table chair and synthesis moderator", instructions: "My customized Chair instructions.", skillInstructions: oldSkill, wantName: "MIMI · Chair", wantDescription: "IDIOS's primary reading companion and final moderator; independently checks peer claims and preserves unresolved disagreement.", wantRole: "primary reading companion and evidence-led round-table chair", wantInstructions: "My customized Chair instructions.", wantSkill: "You are MIMI, the primary Shelf companion and final Chair."},
+		{name: "My Custom Chair", description: "A user-authored Chair description.", role: "user-defined moderation role", instructions: "Keep my custom chair instructions.", skillInstructions: "Keep my custom chair skill.", wantName: "My Custom Chair", wantDescription: "A user-authored Chair description.", wantRole: "user-defined moderation role", wantInstructions: "Keep my custom chair instructions.", wantSkill: "Keep my custom chair skill."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "ai-runtime.json")
-			state := persistedState{
-				Config: RuntimeConfig{
-					Mode: ModeLocalFirst, MaxConcurrent: 2, MaxQueued: 16,
-					WorkflowTimeoutSeconds: 60, MaxAgents: 5, MaxDiscussionRounds: 5,
-					TaskModels: map[string]string{},
-				},
-				Agents: []AgentDefinition{{
-					ID: "discussion-chair", Name: tc.name, Description: tc.description, Role: tc.role,
-					Instructions: tc.instructions, PreferredModel: "ollama-local/custom-model",
-					Tasks: []string{"book_discussion", "reading_analysis", "review"},
-					SkillIDs: []string{"core-reliability"}, SkillInstructions: tc.skillInstructions, Enabled: true,
-				}},
-				AgentSkillsInitialized: true, BuiltinDiscussionAgentsInitialized: true,
-				BuiltinRoundtableV2Initialized: true, BuiltinRoleProfilesV3Initialized: true,
-			}
+			state := persistedState{}
+			state.Config = RuntimeConfig{Mode: ModeLocalFirst, MaxConcurrent: 2, MaxQueued: 16, WorkflowTimeoutSeconds: 60, MaxAgents: 5, MaxDiscussionRounds: 5, TaskModels: map[string]string{}}
+			state.Agents = []AgentDefinition{{ID: "discussion-chair", Name: tc.name, Description: tc.description, Role: tc.role, Instructions: tc.instructions, PreferredModel: "ollama-local/custom-model", Tasks: []string{"book_discussion", "reading_analysis", "review"}, SkillIDs: []string{"core-reliability"}, SkillInstructions: tc.skillInstructions, Enabled: true}}
+			state.AgentSkillsInitialized = true
+			state.BuiltinDiscussionAgentsInitialized = true
+			state.BuiltinRoundtableV2Initialized = true
+			state.BuiltinRoleProfilesV3Initialized = true
 			data, err := json.Marshal(state)
 			if err != nil {
 				t.Fatal(err)
@@ -1983,6 +1943,7 @@ func TestBuiltinMimiChairV4MigrationPreservesUserCustomization(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer manager.Close()
+
 			var chair *AgentDefinition
 			for _, agent := range manager.Agents() {
 				if agent.ID == "discussion-chair" {

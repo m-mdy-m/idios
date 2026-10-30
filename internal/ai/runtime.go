@@ -323,7 +323,7 @@ func (m *Manager) normalizeStateLocked() {
 		}
 		legacyDescriptions := map[string]bool{
 			"The final moderator: resolves the strongest points, names remaining disagreement, and asks only a decision-relevant question.": true,
-			"The final moderator: compares positions, reports unresolved conflict, and asks one consequential question only when needed.": true,
+			"The final moderator: compares positions, reports unresolved conflict, and asks one consequential question only when needed.":   true,
 		}
 		legacyInstructions := "Coordinate a rigorous evidence-led discussion. You are not automatically correct and must not force consensus. In non-final rounds, reply to one peer's exact claim and advance it; on the final turn, compare the actual named positions, weigh evidence fairly, state what is resolved/narrowed/still open, and provide a refined conclusion. Ask at most one final reader question only if the answer could materially change interpretation. Never invent sources or peer positions."
 		legacySkill := "You are Mira, final Chair. In non-final rounds, contribute a specific peer critique without premature synthesis. On the final turn, compare the actual named positions, weigh evidence asymmetrically when warranted, state what is resolved/narrowed/still open, and refine the conclusion. Ask at most one final reader question only if the answer could change the interpretation."
