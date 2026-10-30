@@ -1,6 +1,10 @@
 package ai
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+	"time"
+)
 
 func TestOllamaPayloadEnablesNativeThinkingOnlyWhenRequested(t *testing.T) {
 	base := GenerateRequest{Model: "qwen3:1.7b", Messages: []Message{{Role: "user", Content: "Analyze this passage."}}}
@@ -25,5 +29,19 @@ func TestOllamaPayloadCanExplicitlyDisableNativeThinking(t *testing.T) {
 	payload = ollamaPayload(base, false)
 	if got, ok := payload["think"].(bool); !ok || !got {
 		t.Fatalf("think option = %#v, want true when Thinking is enabled", payload["think"])
+	}
+}
+
+func TestProviderHTTPClientAllowsRuntimeBoundedLongRequests(t *testing.T) {
+	client := providerHTTPClient(ProviderConfig{TimeoutSeconds: 120})
+	if client.Timeout != 10*time.Minute {
+		t.Fatalf("HTTP client timeout = %s, want the Runtime safety ceiling of 10m", client.Timeout)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("HTTP transport type = %T, want *http.Transport", client.Transport)
+	}
+	if transport.ResponseHeaderTimeout != 10*time.Minute {
+		t.Fatalf("response header timeout = %s, want 10m", transport.ResponseHeaderTimeout)
 	}
 }
