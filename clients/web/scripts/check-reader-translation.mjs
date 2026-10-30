@@ -9,13 +9,14 @@ const valid = parseReaderTranslation(JSON.stringify({
     { source: 'The result is not guaranteed.', translation: 'نتیجه تضمین‌شده نیست.' },
     { source: 'A sentence that is not in the source.', translation: 'متن ساختگی' },
   ],
-  terms: [{ source: 'argument', translation: 'استدلال', meaning: 'روند منطقی ارائه‌شده در متن', partOfSpeech: 'noun', example: 'The argument is clear.' }],
+  terms: [{ source: 'argument', translation: 'استدلال', meaning: 'روند منطقی ارائه‌شده در متن', partOfSpeech: 'noun', example: 'The argument is clear.' }, { source: 'fabricated-term', translation: 'ساختگی', meaning: 'not in source' }],
   grammar: [{ pattern: 'Present simple', explanation: 'برای بیان واقعیت یا روند کلی استفاده شده است.' }],
   ielts: [{ expression: 'not guaranteed', academicUse: 'برای بیان محدودیت یا عدم قطعیت در نوشتار رسمی.' }],
 }), source);
 
 assert.equal(valid.translation, 'یک خواننده دقیق استدلال را دنبال می‌کند. نتیجه تضمین‌شده نیست.');
 assert.equal(valid.segments.length, 2, 'only source-aligned segments should be kept');
+assert.equal(valid.terms.length, 1, 'terms must come from the exact source text');
 assert.equal(valid.terms[0]?.translation, 'استدلال');
 assert.equal(valid.grammar.length, 1);
 assert.equal(valid.ielts.length, 1);
