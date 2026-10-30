@@ -19,12 +19,8 @@ jobs:
     with:
       language: go
       go-version: "1.25.0"
-      # The shared workflow owns the runner/toolchain setup. Bootstrap the
-      # frontend package manager and validate the project task graph here;
-      # the complete build/test/race/smoke sequence is defined in pipeline.toml.
-      build-command: |
-        corepack enable
-        corepack prepare pnpm@9.15.4 --activate
-        python scripts/run-pipeline.py validate
-      test-command: python scripts/run-pipeline.py run ci
-      lint-command: git diff --check
+      setup-node: true
+      node-version: "22"
+      pnpm-version: "9.15.4"
+      pipeline-task: ci
+      pipeline-ref: main
