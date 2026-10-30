@@ -271,6 +271,12 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
 
   useEffect(() => {
     if (!translationOpen) return;
+    document.body.classList.add('idios-shelf-translation-open');
+    return () => document.body.classList.remove('idios-shelf-translation-open');
+  }, [translationOpen]);
+
+  useEffect(() => {
+    if (!translationOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setTranslationOpen(false);
     };
