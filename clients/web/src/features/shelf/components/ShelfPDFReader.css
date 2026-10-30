@@ -193,8 +193,8 @@
 
 
 /* The contextual translation companion lives beside the PDF, on its left. */
-.shelf-pdf-reader__body--translation { grid-template-columns:minmax(285px, 330px) minmax(0, 1fr); }
+.shelf-pdf-reader__body--translation { grid-template-columns:minmax(280px, 320px) minmax(0, 1fr); }
 .shelf-translation-panel__scrim { display:none; }
 @media (max-width:1000px) {
-  .shelf-pdf-reader__body--translation { grid-template-columns:minmax(260px, 285px) minmax(0, 1fr); }
+  .shelf-pdf-reader__body--translation { grid-template-columns:minmax(270px, 31vw) minmax(0, 1fr); }
 }
