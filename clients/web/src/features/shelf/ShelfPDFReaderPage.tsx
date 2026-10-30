@@ -350,7 +350,59 @@ export function ShelfPDFReaderPage() {
       ]);
       const annotations: ShelfAnnotation[] = annotationsResult.status === 'fulfilled' ? annotationsResult.value : [];
       const notes: Note[] = notesResult.status === 'fulfilled' ? notesResult.value : [];
-      const glossaryLines = request.priorGlossary
+      const bookContext = [
+        `Book title: ${currentBook.title}`,
+        currentBook.summary?.trim() ? `Book summary / description:\n${currentBook.summary.trim().slice(0, 4500)}` : '',
+        currentBook.tags?.length ? `Book subject tags: ${currentBook.tags.join(', ')}` : '',
+        currentBook.repository_name ? `Related repository / technical context: ${currentBook.repository_name}` : '',
+        `Current page: ${readerContext?.pageNumber ?? currentPage}`,
+        readerContext?.pageText?.trim() ? `Current page text for context (not all of this text needs translating):\n${readerContext.pageText.trim().slice(0, 10000)}` : '',
+        annotations.length ? `Reader's saved highlights and margin notes (use only to disambiguate terms; never translate these instead of the supplied passage):\n${annotations.slice(-12).map((item) => `Page ${item.page}: “${item.quote.slice(0, 280)}”${item.note?.trim() ? ` — ${item.note.trim().slice(0, 280)}` : ''}`).join('\n').slice(0, 4500)}` : '',
+        notes.length ? `Reader's saved book notes (fallible supporting context):\n${notes.slice(-8).map((item) => `- ${item.title}: ${item.content.slice(0, 400)}`).join('\n').slice(0, 2500)}` : '',
+      ].filter(Boolean).join('\n\n');
+      const response = await api.aiChat({
+        provider_id: selectedModel.providerID,
+        model: selectedModel.modelID,
+        task: 'translation',
+        reasoning_effort: 'low',
+        messages: [
+          { role: 'system', content: `${CORE_RELIABILITY_CONTRACT}\n\n${CONTEXTUAL_TRANSLATION_SKILL}\n\n${skillInstructions}\n\n## Task for this request\nTranslate the source passage into ${target}. The source passage supplied in the user message is the only text to translate. Use book/page context to interpret terminology and maintain consistency; never insert contextual facts into the translation. Preserve structure, formulas, identifiers, code, citations, numbers, negation, uncertainty, and the author's tone. Do not summarize or replace translation with explanation. Return the full translation first. Add a short translator note only if a genuine ambiguity materially affects meaning. If context is insufficient, choose the most likely meaning without pretending certainty.` },
+          { role: 'user', content: `## Book and reading context\n${bookContext || 'No additional book context is available.'}\n\n## Exact passage to translate\n${text}` },
+        ],
+      });
+      const translated = response.content?.trim();
+      if (!translated) throw new Error('The selected model returned an empty translation. Check provider health and try again.');
+      setToolResult(translated);
+    } catch (cause) {
+      setToolError(cause instanceof Error ? cause.message : 'Translation failed. Check your AI provider and retry.');
+    } finally {
+      setToolBusy(false);
+    }
+  }, [book, currentPage, readerContext, targetLanguage, tool, toolText]);
+
+  const translateReaderText = useCallback(async (request: ReaderTranslationRequest): Promise<string> => {
+    const currentBook = bookRef.current;
+    if (!currentBook) throw new Error('Book details are still loading. Please try again.');
+    const settings = readStudyAISettings();
+    const selectedModel = settings.model ? splitRuntimeModel(settings.model) : null;
+    if (!selectedModel) throw new Error('Choose a model in AI Runtime settings before translating.');
+
+    const targetLanguageName = targetLanguages.find((item) => item.value === request.targetLanguage)?.label ?? request.targetLanguage;
+    const selectedSkills = loadSelectedReadingSkills();
+    const relevantSkills = READING_SKILLS
+      .filter((skill) => selectedSkills.includes(skill.id) && (skill.category === 'subject' || skill.id === 'english-learning'))
+      .map((skill) => skill.id);
+    const skillInstructions = selectedReadingSkillInstructions([...new Set([...relevantSkills, 'english-learning'])]);
+
+    const [annotationsResult, notesResult] = await Promise.allSettled([
+      api.shelfAnnotations(currentBook.id),
+      api.shelfBookNotes(currentBook.id),
+    ]);
+    const annotations: ShelfAnnotation[] = annotationsResult.status === 'fulfilled' ? annotationsResult.value : [];
+    const notes: Note[] = notesResult.status === 'fulfilled' ? notesResult.value : [];
+    const nearbyAnnotations = annotations.filter((item) => Math.abs(item.page - request.pageNumber) <= 4).slice(-20);
+
+    const glossaryLines = request.priorGlossary
       .map((term) => '- ' + term.source + ' = ' + term.translation + ' (' + term.meaning + ')')
       .join('\n')
       .slice(0, 6000);
@@ -361,8 +413,7 @@ export function ShelfPDFReaderPage() {
       })
       .join('\n')
       .slice(0, 5000);
-    const noteLines = notes
-      .slice(-12)
+    const noteLines = notes.slice(-12)
       .map((item) => '- ' + item.title + ': ' + item.content.slice(0, 420))
       .join('\n')
       .slice(0, 5000);
@@ -372,35 +423,35 @@ export function ShelfPDFReaderPage() {
       currentBook.tags?.length ? 'Book subject tags: ' + currentBook.tags.join(', ') : '',
       currentBook.repository_name ? 'Related technical context: ' + currentBook.repository_name : '',
       'Requested page: PDF page ' + request.pageNumber,
-      request.documentContext.trim() ? 'Neighbouring pages actually extracted from this same book:\n' + request.documentContext.slice(0, 22000) : '',
-      glossaryLines ? 'Previously used terminology from translated pages — preserve these equivalents unless this passage clearly uses a different sense:\n' + glossaryLines : '',
-      annotationLines ? 'Reader saved highlights and notes near this page (fallible context only):\n' + annotationLines : '',
-      noteLines ? 'Reader saved book notes (supporting context only):\n' + noteLines : '',
+      request.documentContext.trim() ? 'Nearby source pages from this book:\n' + request.documentContext.slice(0, 22000) : '',
+      glossaryLines ? 'Previously translated book terminology — preserve these equivalents unless the local sense differs:\n' + glossaryLines : '',
+      annotationLines ? 'Reader highlights and notes (supporting context only):\n' + annotationLines : '',
+      noteLines ? 'Reader book notes (supporting context only):\n' + noteLines : '',
     ].filter(Boolean).join('\n\n');
 
-    const kindInstructions = request.kind === 'page'
-      ? 'Translate the entire exact current-page source, preserving paragraph boundaries. Split segments by sentence or original paragraph so the source and translation align closely. Extract only useful words, grammar, and academic expressions actually present on this page.'
+    const scopeInstruction = request.kind === 'page'
+      ? 'Translate the entire exact current-page source. Preserve original paragraphs. Return one aligned segment per sentence or paragraph. Extract only useful vocabulary, grammar and IELTS expressions actually present on this page.'
       : request.kind === 'selection'
-        ? 'Translate only the exact selected passage. Keep all selected sentences and clauses; do not silently expand to the full page. Align segments to the selected passage.'
-        : 'Explain and translate only this exact word in its sentence and book context. Give its part of speech, contextual sense, a concise explanation in the reader’s language, and one original natural example. Do not return a made-up full-page translation.';
+        ? 'Translate only the exact selected passage, retaining all clauses and sentence order. Do not expand to the whole page.'
+        : 'Explain and translate only this exact word in its sentence and book context. Give its contextual sense, part of speech, a simple explanation and one natural example.';
+
     const systemPrompt = [
       CORE_RELIABILITY_CONTRACT,
       CONTEXTUAL_TRANSLATION_SKILL,
       skillInstructions,
-      '## Reader translation task',
-      `Target language: ${language}.`,
-      `Passage type: ${request.kind}.`,
-      kindInstructions,
-      'The exact source text in the user message is the only material to translate. Use prior/current/following pages, book metadata, saved highlights and notes only to resolve references, domain sense and consistent terminology; never insert contextual facts into the translated passage.',
-      'Use the author’s subject, tone and terminology. Preserve negation, tense, modality, conditions, quantifiers, comparisons, numbers, units, citations, code, identifiers, formulas and list structure. Do not summarize. Do not omit difficult sentences.',
-      'For the page task, create a source/translation segment for every sentence or original paragraph in order. The source field must be copied exactly and contiguously from the supplied exact text. Do not invent source text.',
-      'Vocabulary terms must be taken from the supplied page/selection, with the meaning of the word in this book—not a generic dictionary dump. Explain part of speech and one natural example where useful.',
-      'Grammar notes must explain real structures appearing in this source, in simple learner-friendly language. IELTS items must use expressions actually present in the source and explain a legitimate academic use; never invent IELTS band scores or guarantee a score. Keep teaching brief and relevant.',
-      'Before responding, compare every translated segment against the source. Make sure every proposition is translated once, with no additions or omissions. If OCR/text extraction appears incomplete or materially ambiguous, mention it in translatorNote instead of guessing.',
-      'Return ONLY a valid JSON object, with no Markdown fences, in this exact shape:',
-      '{"translation":"complete faithful translation or contextual word explanation","segments":[{"source":"exact source sentence or paragraph","translation":"corresponding target text"}],"terms":[{"source":"source word or phrase","translation":"target equivalent","meaning":"contextual meaning explained simply in the reader language","partOfSpeech":"grammatical role","example":"one original natural example"}],"grammar":[{"pattern":"exact grammar pattern from source","explanation":"simple explanation in reader language","example":"one original example"}],"ielts":[{"expression":"expression actually present in source","academicUse":"accurate academic/IELTS use","example":"one original example"}],"translatorNote":"only a material ambiguity or extraction warning, otherwise an empty string"}',
-      'For page requests return no more than 12 useful terms, 5 grammar notes and 5 IELTS items. For selected passages return at most 8 terms, 3 grammar notes and 3 IELTS items. For a single word return one term and no more than 2 concise notes in the other arrays.',
+      'READER TRANSLATION',
+      'Target language: ' + targetLanguageName,
+      'Request type: ' + request.kind,
+      scopeInstruction,
+      'The exact source in the user message is the only material to translate. Use book metadata and neighboring pages only to interpret meaning and maintain terminology; never insert contextual facts into the translation.',
+      'Preserve the author’s meaning, tone, negation, tense, modality, conditions, quantifiers, comparisons, numbers, units, citations, code, identifiers, formulas and list structure. Do not summarize or omit difficult sentences.',
+      'Source segments must be copied exactly and contiguously from the supplied source, in order. Never invent source text. If sentence alignment is incomplete, return an empty segments array and keep the full translation intact.',
+      'Vocabulary, grammar patterns and IELTS expressions must occur in the exact supplied source. Explain the meaning used in this book. Do not invent band scores or promise IELTS results.',
+      'Check the completed translation against the source for omissions, additions and changed propositions. If extraction is incomplete or ambiguous, describe that briefly in translatorNote instead of guessing.',
+      'Return ONLY JSON with this structure: {"translation":"complete translation","segments":[{"source":"exact source sentence or paragraph","translation":"matching translation"}],"terms":[{"source":"source word","translation":"target equivalent","meaning":"contextual meaning","partOfSpeech":"part of speech","example":"natural example"}],"grammar":[{"pattern":"source structure","explanation":"simple explanation","example":"original example"}],"ielts":[{"expression":"source expression","academicUse":"academic use","example":"original example"}],"translatorNote":""}',
+      'Limits: page = 12 terms, 5 grammar notes, 5 IELTS items; selection = 8, 3, 3; single word = 1 term and at most 2 short notes.',
     ].join('\n\n');
+
     const response = await api.aiChat({
       provider_id: selectedModel.providerID,
       model: selectedModel.modelID,
@@ -408,7 +459,7 @@ export function ShelfPDFReaderPage() {
       reasoning_effort: 'low',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `## Book and reading context\n${bookContext || 'No additional book context is available.'}\n\n## Exact source text — translate only this text\n${request.text}` },
+        { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE TO TRANSLATE\n' + request.text },
       ],
     });
     const content = response.content?.trim();
