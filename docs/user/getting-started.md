@@ -8,13 +8,13 @@ Download the installer for your operating system from [GitHub Releases](https://
 
 You can also use the small installer scripts:
 
-**Linux or macOS**
+### Linux or macOS
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.sh | sh
 ```
 
-**Windows PowerShell**
+### Windows PowerShell
 
 ```powershell
 irm https://raw.githubusercontent.com/m-mdy-m/idios/main/scripts/install.ps1 | iex
