@@ -1682,7 +1682,6 @@ func TestRefreshProviderModelsContactsOnlySelectedProviderAndPreservesOtherCache
 	}
 }
 
-
 func TestDiscussionChapterRangesAreValidatedAsInclusiveRanges(t *testing.T) {
 	passages := []ContextPassage{{
 		ID: "page-21", Page: 21,
