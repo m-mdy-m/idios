@@ -64,7 +64,10 @@
 .shelf-translation-panel__empty button:hover,.shelf-translation-panel__action:hover { background:#2b4362; }
 .shelf-translation-panel__action { margin:0 0 10px; }
 .shelf-translation-panel__action:disabled { opacity:.6; cursor:wait; }
-.shelf-translation-panel__error { margin:0 0 10px; padding:9px; border:1px solid #754a4a; border-radius:6px; color:#ffc7c7; background:#352225; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__error { display:flex; flex-direction:column; gap:8px; margin:0 0 10px; padding:10px; border:1px solid #754a4a; border-radius:8px; color:#ffc7c7; background:#352225; font-size:10px; line-height:1.55; }
+.shelf-translation-panel__error p { margin:0; }
+.shelf-translation-panel__error button { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; padding:6px 8px; border:1px solid #8d6060; border-radius:6px; color:#ffe0e0; background:#492d31; font:inherit; font-weight:650; cursor:pointer; }
+.shelf-translation-panel__error button:disabled { opacity:.5; cursor:not-allowed; }
 .shelf-translation-panel__note { padding:9px; border:1px solid #35445a; border-radius:6px; color:#adbbce; font-size:10px; line-height:1.5; }
 .shelf-translation-panel__note strong { display:block; margin-bottom:4px; color:#e3ebf7; }
 .shelf-translation-panel__footer { display:flex; justify-content:space-between; gap:8px; padding:10px 14px; border-top:1px solid #2b3544; color:#8495aa; font-size:9px; }
@@ -84,7 +87,7 @@
 .shelf-translation-panel__model-card { display:flex; flex-direction:column; gap:7px; padding:11px 13px 10px; border-bottom:1px solid #2b3544; background:rgb(10 17 27 / 26%); }
 .shelf-translation-panel__model-label { color:#8fa3bd; font:700 9px/1.2 'JetBrains Mono Variable',ui-monospace,monospace; letter-spacing:.12em; }
 .shelf-translation-panel__model-select { display:flex; align-items:center; gap:8px; }
-.shelf-translation-panel__model-select select { width:100%; min-width:0; min-height:36px; padding:0 10px; border:1px solid #3d5069; border-radius:8px; color:#eef3fb; background:#101a27; font:600 11px/1.2 inherit; outline:none; }
+.shelf-translation-panel__model-select select { width:100%; min-width:0; min-height:36px; padding:0 10px; border:1px solid #3d5069; border-radius:8px; color:#eef3fb; background:#101a27; font:inherit; font-size:11px; font-weight:600; outline:none; }
 .shelf-translation-panel__model-select select:focus { border-color:#8aa9d8; box-shadow:0 0 0 2px rgb(138 169 216 / 15%); }
 .shelf-translation-panel__model-select select:disabled { opacity:.65; }
 .shelf-translation-panel__model-dot { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:#79c6a2; box-shadow:0 0 0 3px rgb(121 198 162 / 12%); }
