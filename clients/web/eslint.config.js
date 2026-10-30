@@ -18,6 +18,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.flat.recommended.rules,
+      // Async page loaders intentionally publish loading state from effects.
+      // Keep this guidance visible while those loaders are migrated incrementally.
+      'react-hooks/set-state-in-effect': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
