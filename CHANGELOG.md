@@ -30,8 +30,10 @@ workflow capability.
 - Corrected Markdown validation failures from repository templates, links,
   headings, fenced blocks, and changelog references.
 - Replaced secret-looking test fixture literals with runtime-generated
-  non-secret value so Gitleaks can scan the repository without a broad
+  non-secret values so Gitleaks can scan the repository without a broad
   allowlist or disabling the check.
+- Improved shared Gitleaks failure diagnostics to report the rule, file, and
+  line while keeping secret values redacted.
 
 ## [3.0.0] — 2026-10-30
 
