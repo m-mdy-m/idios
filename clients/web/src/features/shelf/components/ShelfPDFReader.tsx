@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import type { ShelfAnnotation, ShelfAnnotationRect } from '@/types/idios';
 import { ShelfStudyAssistant } from './ShelfStudyAssistant';
 import type { ApplyBookHighlightsResult, RequestedBookHighlight } from '../model/study-types';
-import { parseReaderTranslation, normalizeTranslationMatch, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationRequest } from '../model/reader-translation';
+import { mergeReaderTranslations, parseReaderTranslation, splitReaderTranslationText, normalizeTranslationMatch, type ReaderTranslationCompletion, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationModelOption, type ReaderTranslationRequest } from '../model/reader-translation';
 import { ShelfTranslationPanel, type ShelfTranslationTab } from './ShelfTranslationPanel';
 import { ShelfAgentDiscussion } from './ShelfAgentDiscussion';
 import './ShelfPDFReader.css';
@@ -184,8 +184,10 @@ function startPageRender(doc: PDFDocumentProxy, pageNumber: number, scale: numbe
   return { promise, cancel: () => { cancelled = true; task?.cancel(); }, get ready() { return ready; } };
 }
 
-export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose, onProgress, focusMode = false, focusElapsedSeconds = 0, focusBusy = false, onToggleFocus, onOpenFocusTool, onTranslateText }: {
-  bookID: string; bookTitle: string; initialPage: number; pdfURL: string; onClose: () => void; onProgress: (page: number, total: number) => void; focusMode?: boolean; focusElapsedSeconds?: number; focusBusy?: boolean; onToggleFocus: () => void; onOpenFocusTool: (tool: 'search', initialText?: string) => void; onTranslateText: (request: ReaderTranslationRequest) => Promise<string>;
+export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose, onProgress, focusMode = false, focusElapsedSeconds = 0, focusBusy = false, onToggleFocus, onOpenFocusTool, onTranslateText, translationModel, translationModelOptions, translationModelsLoading, translationModelError, lastUsedTranslationModel, onTranslationModelChange }: {
+  bookID: string; bookTitle: string; initialPage: number; pdfURL: string; onClose: () => void; onProgress: (page: number, total: number) => void; focusMode?: boolean; focusElapsedSeconds?: number; focusBusy?: boolean; onToggleFocus: () => void; onOpenFocusTool: (tool: 'search', initialText?: string) => void;
+  onTranslateText: (request: ReaderTranslationRequest) => Promise<ReaderTranslationCompletion>;
+  translationModel: string; translationModelOptions: ReaderTranslationModelOption[]; translationModelsLoading: boolean; translationModelError: string; lastUsedTranslationModel: string; onTranslationModelChange: (model: string) => void;
 }) {
   const readerRef = useRef<HTMLDivElement>(null);
   const pageSheetRef = useRef<HTMLDivElement>(null);
@@ -239,10 +241,12 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [translationPageKey, setTranslationPageKey] = useState('');
   const [translationRevision, setTranslationRevision] = useState(0);
   const [pageTranslationBusy, setPageTranslationBusy] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0 });
   const [selectionTranslationBusy, setSelectionTranslationBusy] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const wordTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const pageTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
+  const translationChunkCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const wordTranslationInFlight = useRef<Set<string>>(new Set());
   const translationPageInFlight = useRef('');
   const translationRequestID = useRef(0);
@@ -513,14 +517,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }).join('\n\n');
   }, [pdf, pageNumber]);
 
-  // Give translation models a bounded, explicit reading window: three preceding pages,
-  // the current page, and one following page. This keeps real book context available
-  // without flooding small/local models with the complete PDF.
+  // Keep the context window small enough for compact/local models while still
+  // carrying one page on either side for references and terminology.
   const getTranslationContext = useCallback(async (targetPage: number): Promise<string> => {
     const document = pdf;
     if (!document) throw new Error('The PDF is still loading. Wait for the page to finish opening.');
     const current = Math.min(Math.max(1, Math.floor(targetPage || pageNumber)), document.numPages);
-    const firstPage = Math.max(1, current - 3);
+    const firstPage = Math.max(1, current - 1);
     const lastPage = Math.min(document.numPages, current + 1);
     const pageNumbers = Array.from({ length: lastPage - firstPage + 1 }, (_, index) => firstPage + index);
     const entries = await Promise.all(pageNumbers.map(async (pageNo) => {
@@ -537,20 +540,21 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       }
     }));
     return entries.map(({ pageNo, text }) => {
-      const label = pageNo < current ? 'PREVIOUS PAGE — CONTEXT' : pageNo === current ? 'CURRENT PAGE — PRIMARY SOURCE' : 'FOLLOWING PAGE — CONTEXT';
-      return `===== PDF PAGE ${pageNo} · ${label} =====\n${text || '[No extractable text on this page.]'}`;
-    }).join('\n\n');
+      const label = pageNo < current ? 'PREVIOUS PAGE' : pageNo === current ? 'CURRENT PAGE — PRIMARY SOURCE' : 'FOLLOWING PAGE';
+      return `===== PDF PAGE ${pageNo} · ${label} =====\n${(text || '[No extractable text on this PDF page.]').slice(0, 1400)}`;
+    }).join('\n\n').slice(0, 4700);
   }, [pdf, pageNumber]);
 
   const requestTranslation = useCallback(async (text: string, kind: ReaderTranslationKind): Promise<ReaderTranslationData> => {
     const source = text.trim();
     if (!source) throw new Error('Select some readable text first.');
+    if (!translationModel) throw new Error('Choose an AI model in the Reading Companion panel before translating.');
     const documentContext = await getTranslationContext(pageNumber);
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
     const cachedPages = Array.from(pageTranslationCache.current.entries()).sort((left, right) => Number(left[0].split(':')[1]) - Number(right[0].split(':')[1]));
     for (const [cacheKey, data] of cachedPages) {
-      const [cachedBook, cachedPage, cachedLanguage] = cacheKey.split(':');
-      if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || Number(cachedPage) >= pageNumber) continue;
+      const [cachedBook, cachedPage, cachedLanguage, cachedModel] = cacheKey.split(':');
+      if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || cachedModel !== translationModel || Number(cachedPage) >= pageNumber) continue;
       for (const term of data.terms) {
         const termKey = normalizeTranslationMatch(term.source);
         if (!termKey) continue;
@@ -558,8 +562,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         glossary.set(termKey, { source: term.source, translation: term.translation, meaning: term.meaning });
       }
     }
-    const priorGlossary = Array.from(glossary.values()).slice(-60);
-    const request: ReaderTranslationRequest = {
+    const priorGlossary = Array.from(glossary.values()).slice(-30);
+    const contextRequest: ReaderTranslationRequest = {
       text: source,
       pageText: currentPageText,
       pageNumber,
@@ -568,21 +572,58 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       documentContext,
       priorGlossary,
     };
-    const raw = await onTranslateText(request);
-    const parsed = parseReaderTranslation(raw, source);
-    if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or choose another model.');
-    return parsed;
-  }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationTargetLanguage]);
+    const chunks = kind === 'word' ? [source] : splitReaderTranslationText(source, 1050);
+    if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
+    const results: ReaderTranslationData[] = [];
+    const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
+    setTranslationProgress({ done: 0, total: chunks.length });
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      const cacheKey = `${cachePrefix}:${index}:${chunk}`;
+      const cached = translationChunkCache.current.get(cacheKey);
+      if (cached) {
+        results.push(cached);
+        for (const term of cached.terms) {
+          const key = normalizeTranslationMatch(term.source);
+          if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
+        }
+        setTranslationProgress({ done: index + 1, total: chunks.length });
+        continue;
+      }
+
+      const chunkRequest: ReaderTranslationRequest = {
+        ...contextRequest,
+        text: chunk,
+        kind: chunks.length > 1 ? 'chunk' : kind,
+        priorGlossary: Array.from(glossary.values()).slice(-30),
+      };
+      const completion = await onTranslateText(chunkRequest);
+      const parsed = parseReaderTranslation(completion.content, chunk);
+      if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
+      translationChunkCache.current.set(cacheKey, parsed);
+      results.push(parsed);
+      for (const term of parsed.terms) {
+        const key = normalizeTranslationMatch(term.source);
+        if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
+      }
+      setTranslationProgress({ done: index + 1, total: chunks.length });
+    }
+    setTranslationProgress({ done: chunks.length, total: chunks.length });
+    return results.length === 1 ? results[0] : mergeReaderTranslations(results);
+  }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage]);
 
   const refreshPageTranslation = useCallback(() => {
-    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}`);
+    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`);
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
+    const chunkPrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:page:`;
+    for (const key of translationChunkCache.current.keys()) if (key.startsWith(chunkPrefix)) translationChunkCache.current.delete(key);
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
-  }, [bookID, pageNumber, translationTargetLanguage]);
+  }, [bookID, pageNumber, translationModel, translationTargetLanguage]);
 
   const translateSelection = useCallback(async () => {
     const selected = selectedTextForAI.trim();
@@ -603,7 +644,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const explainHoveredWord = useCallback(async () => {
     const word = hoveredTextForAI.trim();
     if (!word || !translationOpen || !currentPageText.trim()) return;
-    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(word)}`;
+    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(word)}`;
     const cached = wordTranslationCache.current.get(key);
     if (cached) { setWordTranslation(cached); setWordTranslationKey(key); return; }
     if (wordTranslationInFlight.current.has(key)) return;
@@ -621,11 +662,11 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       wordTranslationInFlight.current.delete(key);
       setWordTranslationLoadingKey((current) => current === key ? '' : current);
     }
-  }, [bookID, currentPageText, hoveredTextForAI, pageNumber, requestTranslation, translationOpen, translationTargetLanguage]);
+  }, [bookID, currentPageText, hoveredTextForAI, pageNumber, requestTranslation, translationModel, translationOpen, translationTargetLanguage]);
 
   useEffect(() => {
-    if (!translationOpen || !currentPageText.trim() || !pdf) return;
-    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}`;
+    if (!translationOpen || !currentPageText.trim() || !pdf || !translationModel) return;
+    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
     if ((translationPageKey === key && pageTranslation) || translationPageInFlight.current === key) return;
     const cachedTranslation = pageTranslationCache.current.get(key);
     if (cachedTranslation) {
@@ -659,7 +700,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (active && requestID === translationRequestID.current) setPageTranslationBusy(false);
     });
     return () => { active = false; if (translationPageInFlight.current === key) translationPageInFlight.current = ''; };
-  }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
+  }, [bookID, currentPageText, pageNumber, pageTranslation, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
     if (!translationOpen || !pageTranslation || !hoveredTextForAI.trim()) return;
@@ -956,19 +997,26 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       {translationOpen && <button type="button" className="shelf-translation-panel__scrim" aria-label="Close translation panel" onClick={() => setTranslationOpen(false)} />}
       {translationOpen && <ShelfTranslationPanel
         pageNumber={pageNumber}
+        translationModel={translationModel}
+        modelOptions={translationModelOptions}
+        modelsLoading={translationModelsLoading}
+        modelError={translationModelError}
+        lastUsedModel={lastUsedTranslationModel}
+        onModelChange={(model) => { onTranslationModelChange(model); setTranslationPageKey(''); setPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
         targetLanguage={translationTargetLanguage}
         onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setSelectionTranslation(null); }}
         tab={translationTab}
         onTabChange={setTranslationTab}
         pageData={pageTranslation}
         selectionData={selectionTranslation}
-        wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
+        wordData={wordTranslationKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}` ? wordTranslation : null}
         activeText={selectedTextForAI || hoveredTextForAI}
         selectedText={selectedTextForAI}
         hoveredWord={hoveredTextForAI}
         pageBusy={pageTranslationBusy}
+        progress={translationProgress}
         selectionBusy={selectionTranslationBusy}
-        wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${normalizeTranslationMatch(hoveredTextForAI)}`}
+        wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}`}
         error={translationError}
         onClose={() => setTranslationOpen(false)}
         onTranslatePage={refreshPageTranslation}
