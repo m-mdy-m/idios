@@ -418,18 +418,20 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
   const runContributions = array(activeRun?.workflow?.contributions);
   const runCompletedCount = runContributions.filter((item) => item.status === 'completed').length;
   const runFailedCount = runContributions.filter((item) => item.status === 'failed').length;
-  const runNotStartedCount = runContributions.filter((item) => item.status === 'not_run' || item.status === 'waiting').length;
+  const runNotStartedCount = runContributions.filter((item) => item.status === 'not_run').length;
+  const runWaitingCount = runContributions.filter((item) => item.status === 'waiting').length;
   const runWarningAgents = runContributions.filter((item) => array(item.warnings).length > 0);
   const showExecutionCheck = Boolean(activeRun && runContributions.length > 0);
-  const executionTone = runFailedCount > 0 || runNotStartedCount > 0 || activeRun?.status === 'failed' ? 'problem' : runWarningAgents.length > 0 || activeRun?.status === 'partially_completed' ? 'review' : activeRun?.status === 'completed' ? 'passed' : 'running';
-  const incompleteHeadline = runNotStartedCount > 0 ? ` · ${runNotStartedCount} not run` : '';
+  const executionTone = runFailedCount > 0 || runNotStartedCount > 0 || activeRun?.status === 'failed' ? 'problem' : runWarningAgents.length > 0 || runWaitingCount > 0 || activeRun?.status === 'partially_completed' ? 'review' : activeRun?.status === 'completed' ? 'passed' : 'running';
+  const incompleteDetails = [runNotStartedCount > 0 ? `${runNotStartedCount} not run` : '', runWaitingCount > 0 ? `${runWaitingCount} waiting for you` : ''].filter(Boolean).join(' · ');
+  const incompleteHeadline = incompleteDetails ? ` · ${incompleteDetails}` : '';
   const executionHeadline = runFailedCount > 0
     ? `${runCompletedCount}/${runContributions.length} completed · ${runFailedCount} failed${incompleteHeadline}`
     : runWarningAgents.length > 0
       ? `${runCompletedCount}/${runContributions.length} completed · ${runWarningAgents.length} need review${incompleteHeadline}`
-      : activeRun?.status === 'completed'
+      : activeRun?.status === 'completed' && !incompleteDetails
         ? `${runCompletedCount}/${runContributions.length} completed · no runtime warnings`
-        : activeRun?.status === 'partially_completed' || activeRun?.status === 'failed' || activeRun?.status === 'cancelled'
+        : activeRun?.status === 'partially_completed' || activeRun?.status === 'failed' || activeRun?.status === 'cancelled' || incompleteDetails
           ? `${runCompletedCount}/${runContributions.length} completed${incompleteHeadline}`
           : `${runCompletedCount}/${runContributions.length} completed · discussion running`;
 
