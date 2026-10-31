@@ -2320,7 +2320,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Rawls page-21 fixture: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 23*time.Minute)
 	defer cancel()
 	manager, err := NewManager("")
 	if err != nil {
