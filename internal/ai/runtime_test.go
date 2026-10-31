@@ -476,9 +476,15 @@ func (p *discussionDeadlineTestProvider) ListModels(context.Context) ([]Model, e
 }
 func (p *discussionDeadlineTestProvider) Generate(ctx context.Context, _ GenerateRequest) (GenerateResponse, error) {
 	if deadline, ok := ctx.Deadline(); ok {
-		p.deadlineCh <- deadline
+		select {
+		case p.deadlineCh <- deadline:
+		default:
+		}
 	} else {
-		p.deadlineCh <- time.Time{}
+		select {
+		case p.deadlineCh <- time.Time{}:
+		default:
+		}
 	}
 	return GenerateResponse{
 		ProviderID: "local",
@@ -494,7 +500,7 @@ func (p *discussionDeadlineTestProvider) Health(context.Context) HealthStatus {
 }
 
 func TestBookDiscussionBoundsEachAgentTurnIndependentlyOfWorkflowTimeout(t *testing.T) {
-	deadlineCh := make(chan time.Time, 1)
+	deadlineCh := make(chan time.Time, 4)
 	manager, err := NewManager("")
 	if err != nil {
 		t.Fatal(err)
