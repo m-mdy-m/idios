@@ -35,7 +35,9 @@ Offline-only blocks remote discovery and inference at the server boundary. Local
 
 ## Evidence-led agent discussions
 
-Book discussions use a sequential round-table. Each selected agent receives the original supplied passages plus the completed peer turns that precede it; parallel generation is disabled because it would prevent meaningful peer review.
+Book discussions use a sequential, staged round-table. In a fresh discussion, Round 1 Reader and specialist turns are independent: each sees the supplied passages and saved annotations, but not another specialist's same-round answer. MIMI speaks last and compares those opening positions. In Round 2 and later, specialists receive bounded completed peer history and must examine a real claim from a role-relevant participant. A resumed discussion starts with its supplied history available immediately. Parallel generation is disabled because it would prevent meaningful peer review.
+
+The Shelf Agent Discussion UI mirrors this protocol: it explains the independent opening versus later peer-review rounds, offers a guided page-analysis prompt, shows the model/provider for each completed turn, and displays a run-level completion/failure/warning summary. “Runtime checks passed” means the response passed structural/evidence-marker validation; it is not a semantic truth score. Readers must still compare each claim with the displayed source text, and any warning keeps the contribution visibly marked for review.
 
 - Built-in agents receive a mandatory role-specific deliverable in addition to their editable profile instructions. They must not impersonate peers, treat a peer statement as source evidence, or paraphrase agreement without adding a new qualification or reason.
 - Source passages remain authoritative. Agent outputs are claims to check, not facts to inherit. Exact `[source:ID]` markers are validated against the request's supplied source IDs.
