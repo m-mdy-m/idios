@@ -464,11 +464,23 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
-func TestDiscussionAgentContextHasIndependentDeadline(t *testing.T) {
+func TestDiscussionAgentContextUsesProviderAwareDeadline(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "ollama-timeout", Name: "Ollama timeout", Type: ProviderOllama,
+		BaseURL: "http://127.0.0.1:11434", DefaultModel: "qwen2.5:3b",
+		Enabled: true, TimeoutSeconds: 60, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+
 	workflowCtx, cancelWorkflow := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancelWorkflow()
-
-	agentCtx, cancelAgent := newDiscussionAgentContext(workflowCtx)
+	agentCtx, cancelAgent := manager.newDiscussionAgentContext(workflowCtx, "ollama-timeout")
 	defer cancelAgent()
 
 	agentDeadline, ok := agentCtx.Deadline()
@@ -480,8 +492,8 @@ func TestDiscussionAgentContextHasIndependentDeadline(t *testing.T) {
 	if !agentDeadline.Before(workflowDeadline) {
 		t.Fatalf("agent deadline %v must be earlier than workflow deadline %v", agentDeadline, workflowDeadline)
 	}
-	if remaining <= 0 || remaining > discussionAgentTurnTimeout {
-		t.Fatalf("agent deadline remaining = %s, want a positive duration no greater than %s", remaining, discussionAgentTurnTimeout)
+	if remaining <= 0 || remaining > 4*time.Minute {
+		t.Fatalf("agent deadline remaining = %s, want a positive duration no greater than the local cold-start floor", remaining)
 	}
 }
 
@@ -1896,6 +1908,254 @@ func TestDiscussionPeerResponseRequiresNamesAndRejectsExactEcho(t *testing.T) {
 	if problem := discussionPeerResponseProblem(previous[0].Content, previous, "tutor", false); problem == "" {
 		t.Fatal("verbatim peer echo was accepted as an independent contribution")
 	}
+}
+
+func TestDiscussionRepairPromptIncludesOnlyCompletedPeerInventory(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "concept-connector", AgentName: "Concept Connector", Status: "completed", Content: "Chapters IV–VIII matter because the theory must organize considered judgments. [source:rawls-page-21]"},
+		{AgentID: "lex", AgentName: "Lex · Ambiguity Scout", Status: "failed", Error: &Error{Code: "provider_unavailable", Message: "timeout"}},
+	}
+	prompt := discussionRepairInstructionWithPeers("the response does not identify an actual completed peer", map[string]bool{"rawls-page-21": true}, false, true, previous, "steelman")
+	if !strings.Contains(prompt, "Concept Connector") || !strings.Contains(prompt, "organize considered judgments") {
+		t.Fatalf("repair prompt omitted the exact completed peer and its claim: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Regarding Concept Connector's point,") {
+		t.Fatalf("repair prompt did not require the exact named peer opening: %s", prompt)
+	}
+	if strings.Contains(prompt, "Ambiguity Scout") {
+		t.Fatalf("repair prompt included a failed/non-peer contribution: %s", prompt)
+	}
+}
+
+func TestDiscussionQualityDefectsAreWarningsButUntrustedChapterClaimsRemainHardFailures(t *testing.T) {
+	allowed := map[string]bool{"rawls-page-21": true}
+	passages := []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: "Chapters IV–VIII are not peripheral; they test how a theory orders considered judgments."}}
+	previous := []AgentContribution{{
+		AgentID: "concept-connector", AgentName: "Concept Connector", Status: "completed",
+		Content: "The chapters test a theory across many questions. [source:rawls-page-21]",
+	}}
+	answer := "The passage says the theory should introduce order and system into considered judgments."
+	if problem := discussionHardResponseProblem(answer, allowed, passages); problem != "" {
+		t.Fatalf("a complete answer with a soft citation/attribution defect was treated as hard-invalid: %s", problem)
+	}
+	warnings := discussionQualityWarnings(answer, allowed, passages, previous, "steelman", false)
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, "lacks an exact source marker") {
+		t.Fatalf("missing citation was not surfaced as a warning: %#v", warnings)
+	}
+	if !strings.Contains(joined, "participant name") {
+		t.Fatalf("missing peer attribution was not surfaced as a warning: %#v", warnings)
+	}
+	unseen := "Later Chapter IX resolves the argument. [source:rawls-page-21]"
+	if problem := discussionHardResponseProblem(unseen, allowed, passages); !strings.Contains(problem, "chapter") {
+		t.Fatalf("an unsupported chapter reference was not rejected: %q", problem)
+	}
+}
+
+func TestDiscussionTimeoutUsesProviderSettingsWithLocalWarmupFloor(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "ollama-short", Name: "Ollama short", Type: ProviderOllama,
+		BaseURL: "http://127.0.0.1:11434", DefaultModel: "qwen2.5:3b",
+		Enabled: true, TimeoutSeconds: 60, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "cloud", Name: "Cloud", Type: ProviderOpenAI,
+		BaseURL: "https://example.invalid", DefaultModel: "test",
+		Enabled: true, TimeoutSeconds: 90, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.discussionTimeoutForProvider("ollama-short"); got != 240*time.Second {
+		t.Fatalf("local discussion timeout = %s, want 4-minute cold-start floor", got)
+	}
+	if got := manager.discussionTimeoutForProvider("cloud"); got != 90*time.Second {
+		t.Fatalf("cloud discussion timeout = %s, want provider-configured 90s", got)
+	}
+}
+
+func TestOllamaBookDiscussionIntegration(t *testing.T) {
+	if os.Getenv("IDIOS_OLLAMA_INTEGRATION") != "1" {
+		t.Skip("set IDIOS_OLLAMA_INTEGRATION=1 to run the downloaded local-model integration test")
+	}
+	model := strings.TrimSpace(os.Getenv("IDIOS_OLLAMA_MODEL"))
+	if model == "" {
+		model = "qwen2.5:3b"
+	}
+	baseURL := strings.TrimSpace(os.Getenv("IDIOS_OLLAMA_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:11434"
+	}
+	page, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "rawls-a-theory-of-justice-page-21.txt"))
+	if err != nil {
+		t.Fatalf("read Rawls page-21 fixture: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	const providerID = "ollama-ci"
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: providerID, Name: "Ollama CI", Type: ProviderOllama, BaseURL: baseURL,
+		DefaultModel: model, Enabled: true, TimeoutSeconds: 240, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatalf("configure local Ollama provider: %v", err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.AllowCloudFallback = false
+	config.MaxConcurrent = 1
+	config.MaxQueued = 4
+	config.WorkflowTimeoutSeconds = 900
+	config.MaxAgents = 5
+	config.MaxDiscussionRounds = 1
+	config.DefaultModel = providerID + "/" + model
+	config.TaskModels["book_discussion"] = providerID + "/" + model
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatalf("configure local-only discussion runtime: %v", err)
+	}
+	agentIDs := []string{"reader", "tutor", "steelman", "discussion-chair"}
+	assigned := map[string]bool{}
+	for _, agent := range manager.Agents() {
+		if !containsString(agentIDs, agent.ID) {
+			continue
+		}
+		agent.PreferredModel = providerID + "/" + model
+		if _, err := manager.UpsertAgent(agent); err != nil {
+			t.Fatalf("assign %s to %s: %v", agent.Name, model, err)
+		}
+		assigned[agent.ID] = true
+	}
+	for _, id := range agentIDs {
+		if !assigned[id] {
+			t.Fatalf("required integration-test agent %q was not configured", id)
+		}
+	}
+	result, err := manager.runDiscussion(ctx, DiscussionRequest{
+		BookID:    "rawls-a-theory-of-justice",
+		BookTitle: "A Theory of Justice: Revised Edition",
+		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, respond to the preceding agents, and preserve the qualification that readers may follow their preferences.",
+		PageStart: 21, PageEnd: 21,
+		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
+	}, "")
+	if err != nil {
+		t.Fatalf("Qwen discussion failed: %v; contributions: %#v", err, result.Contributions)
+	}
+	if len(result.Contributions) != len(agentIDs) {
+		t.Fatalf("discussion returned %d turns, want %d: %#v", len(result.Contributions), len(agentIDs), result.Contributions)
+	}
+	for i, contribution := range result.Contributions {
+		if contribution.Status != "completed" || strings.TrimSpace(contribution.Content) == "" {
+			t.Errorf("agent %s did not return a usable contribution: status=%s error=%#v", contribution.AgentName, contribution.Status, contribution.Error)
+		}
+		t.Logf("round=%d agent=%s model=%s/%s status=%s warnings=%v\n%s",
+			contribution.Round, contribution.AgentName, contribution.ProviderID, contribution.Model,
+			contribution.Status, contribution.Warnings, contribution.Content)
+		if i > 0 && contribution.Status == "completed" {
+			prior := result.Contributions[:i]
+			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, i == len(agentIDs)-1)
+			if peerProblem != "" {
+				t.Errorf("agent %s did not address the required actual peer by name: %s; output=%q warnings=%v", contribution.AgentName, peerProblem, contribution.Content, contribution.Warnings)
+			}
+		}
+	}
+	last := result.Contributions[len(result.Contributions)-1]
+	if last.AgentID != "discussion-chair" || last.Status != "completed" {
+		t.Fatalf("MIMI did not complete the final moderation turn: %#v", last)
+	}
+
+	// Exercise MIMI's separate Shelf-note proposal with the same downloaded model.
+	// The selected highlight phrase is reader-provided and remains the exact anchor;
+	// the model is responsible for writing a useful, standalone note.
+	const selectedQuote = "order and system"
+	type actionItem struct {
+		Type    string
+		Page    int
+		Quote   string
+		Title   string
+		Content string
+		Labels  []string
+	}
+	var noteEnvelope struct {
+		Actions []actionItem
+	}
+	actionSystem := "You are MIMI, the careful reading companion for A Theory of Justice. Write one useful standalone book note grounded only in the supplied page. Return only a JSON object with an actions array containing exactly one note action: {\"actions\":[{\"type\":\"note\",\"title\":\"...\",\"content\":\"...\",\"labels\":[\"reading-companion\"]}]}. Do not invent chapters, claims, quotations, or page references. The application will create the highlight separately from the reader's exact selected phrase."
+	actionUser := "The reader asks: “Please write a concise standalone note about the central argument on this page, and highlight the selected phrase ‘order and system’. Add a short margin explanation to the highlight. Save both the highlight and the separate note to this book.”\n\nReader-selected exact highlight phrase (do not alter): “" + selectedQuote + "”\n\nPage 21 source text:\n" + string(page)
+	noteRequest := GenerateRequest{
+		ProviderID: providerID, Model: model, Task: "book_discussion",
+		Messages:  []Message{{Role: "system", Content: actionSystem}, {Role: "user", Content: actionUser}},
+		MaxTokens: 520, TimeoutSeconds: 240, PrivacySensitive: false,
+		ResponseFormat: &ResponseFormat{Type: "json_object"},
+	}
+	noteResponse, noteErr := manager.Generate(ctx, noteRequest)
+	if noteErr != nil {
+		t.Fatalf("MIMI local note generation failed: %v", noteErr)
+	}
+	decodeNote := func(raw string) error {
+		raw = strings.TrimSpace(raw)
+		raw = strings.TrimPrefix(raw, "\x60\x60\x60json")
+		raw = strings.TrimSuffix(raw, "\x60\x60\x60")
+		raw = strings.TrimSpace(raw)
+		if start := strings.Index(raw, "<idios_book_actions>"); start >= 0 {
+			raw = raw[start+len("<idios_book_actions>"):]
+			if end := strings.Index(raw, "</idios_book_actions>"); end >= 0 {
+				raw = raw[:end]
+			}
+		}
+		return json.Unmarshal([]byte(strings.TrimSpace(raw)), &noteEnvelope)
+	}
+	noteProblem := func() string {
+		if len(noteEnvelope.Actions) != 1 {
+			return fmt.Sprintf("got %d actions, want exactly one separate note action", len(noteEnvelope.Actions))
+		}
+		action := noteEnvelope.Actions[0]
+		if action.Type != "note" || strings.TrimSpace(action.Title) == "" || len(strings.Fields(action.Content)) < 20 {
+			return "note action must have type=note, a title, and at least 20 useful content words"
+		}
+		if !strings.Contains(strings.ToLower(action.Content), "judgment") && !strings.Contains(strings.ToLower(action.Content), "judgement") {
+			return "note does not preserve the page's central idea of considered judgments"
+		}
+		return ""
+	}
+	parseErr := decodeNote(noteResponse.Content)
+	problem := "invalid JSON: " + fmt.Sprint(parseErr)
+	if parseErr == nil {
+		problem = noteProblem()
+	}
+	if problem != "" {
+		repairRequest := noteRequest
+		repairRequest.Messages = append(append([]Message(nil), noteRequest.Messages...),
+			Message{Role: "assistant", Content: noteResponse.Content},
+			Message{Role: "user", Content: "Repair the action output. " + problem + ". Return only valid JSON with exactly one standalone note action, title, and at least 20 words in content. Ground the note in the supplied page, explicitly explain the idea of bringing order/system to considered judgments, and do not include a highlight action because the application adds the reader-selected exact phrase separately."},
+		)
+		repaired, repairErr := manager.Generate(ctx, repairRequest)
+		if repairErr != nil {
+			t.Fatalf("MIMI note repair failed after %s: %v", problem, repairErr)
+		}
+		noteEnvelope = struct{ Actions []actionItem }{}
+		if err := decodeNote(repaired.Content); err != nil {
+			t.Fatalf("MIMI repaired note is not valid JSON: %v; response=%s", err, repaired.Content)
+		}
+		if problem := noteProblem(); problem != "" {
+			t.Fatalf("MIMI did not produce a usable standalone note after one repair: %s; response=%s", problem, repaired.Content)
+		}
+		noteResponse = repaired
+	}
+	if !strings.Contains(string(page), selectedQuote) || strings.Count(string(page), selectedQuote) != 1 {
+		t.Fatal("reader-selected highlight anchor must occur exactly once on the supplied page")
+	}
+	t.Logf("MIMI shelf note model=%s/%s title=%q content=%s", noteResponse.ProviderID, noteResponse.Model, noteEnvelope.Actions[0].Title, noteEnvelope.Actions[0].Content)
+	t.Logf("MIMI exact separate highlight anchor: page=21 quote=%q; client contract tests verify independent highlight and Shelf-note persistence paths.", selectedQuote)
 }
 
 func TestFinalChairMustNameActualPositions(t *testing.T) {

@@ -63,8 +63,10 @@ const (
 	maxPreviousDiscussionTurns      = 40
 	maxPreviousDiscussionTurnBytes  = 5000
 	maxPreviousDiscussionTotalBytes = 48000
-	// Keep one stalled discussion model from monopolizing the entire workflow timeout.
-	discussionAgentTurnTimeout = 120 * time.Second
+	// Small local models may need a cold-start/warm-up window before generating.
+	// The overall workflow timeout remains the upper bound for the complete discussion.
+	minimumLocalDiscussionTimeoutSeconds = 240
+	maximumDiscussionTurnTimeoutSeconds  = 600
 )
 
 var sourceMarker = regexp.MustCompile(`\[source:([^\]\s]+)\]`)
@@ -1760,8 +1762,29 @@ func discussionRoleFocus(agentID string) string {
 	}
 }
 
-func newDiscussionAgentContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, discussionAgentTurnTimeout)
+func (m *Manager) newDiscussionAgentContext(parent context.Context, providerID string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, m.discussionTimeoutForProvider(providerID))
+}
+
+func (m *Manager) discussionTimeoutForProvider(providerID string) time.Duration {
+	seconds := 120
+	local := false
+	m.mu.RLock()
+	for _, cfg := range m.state.Providers {
+		if cfg.ID == providerID {
+			seconds = normalizedTimeout(cfg.TimeoutSeconds)
+			local = isConfigLocal(cfg)
+			break
+		}
+	}
+	m.mu.RUnlock()
+	if local && seconds < minimumLocalDiscussionTimeoutSeconds {
+		seconds = minimumLocalDiscussionTimeoutSeconds
+	}
+	if seconds > maximumDiscussionTurnTimeoutSeconds {
+		seconds = maximumDiscussionTurnTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func discussionAgentPriority(id string) int {
@@ -1865,11 +1888,6 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 		pauseForReader := false
 		currentRound := make([]AgentContribution, len(chosen))
 		runAgent := func(index int, agent AgentDefinition, finalTurn bool) {
-			// The provider's configured timeout may be as long as ten minutes. Bound
-			// one discussion turn (including its single repair attempt) separately so
-			// a stalled model cannot leave every later agent waiting indefinitely.
-			agentCtx, cancelAgent := newDiscussionAgentContext(ctx)
-			defer cancelAgent()
 			contribution := AgentContribution{Round: round, AgentID: agent.ID, AgentName: agent.Name, Status: "running"}
 			runtimeConfig := m.RuntimeConfig()
 			fallbackModel := runtimeConfig.TaskModels["book_discussion"]
@@ -1878,6 +1896,10 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			}
 			modelRef := m.discussionModelForAgent(agent, fallbackModel)
 			providerID, model := splitModelRef(modelRef)
+			turnTimeout := m.discussionTimeoutForProvider(providerID)
+			agentCtx, cancelAgent := m.newDiscussionAgentContext(ctx, providerID)
+			defer cancelAgent()
+			turnTimeoutSeconds := int(turnTimeout / time.Second)
 			messages := discussionMessages(req, agent, false, nil)
 			// Every later round receives the full bounded debate history, not just the
 			// immediately preceding round. Current-round replies are appended below.
@@ -1919,37 +1941,41 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					disableThinking = true
 				}
 			}
-			response, err := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: messages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+			response, err := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: messages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 			repairFailure := ""
 			var contributionWarnings []string
 			if err == nil {
 				repairReason := validateDiscussionContribution(response.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)
 				if repairReason != "" {
-					// One focused repair is useful, but it must have enough output budget and
-					// must not ask an opening speaker to answer a peer who has not spoken.
+					// Repair receives the exact completed peer names and the concrete claims
+					// they made. Generic "name a peer" instructions caused repeated repair loops.
 					hasPeer := hasCompletedDiscussionPeer(priorTurns)
 					repairMessages := append([]Message(nil), messages...)
 					repairMessages = append(repairMessages,
 						Message{Role: "assistant", Content: response.Content},
-						Message{Role: "user", Content: discussionRepairInstruction(repairReason, allowedSources, finalTurn, hasPeer)},
+						Message{Role: "user", Content: discussionRepairInstructionWithPeers(repairReason, allowedSources, finalTurn, hasPeer, priorTurns, agent.ID)},
 					)
-					repaired, repairErr := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+					repaired, repairErr := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+					originalHardProblem := discussionHardResponseProblem(response.Content, allowedSources, req.Context)
 					if repairErr == nil {
-						repairProblem := validateDiscussionContribution(repaired.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)
-						if repairProblem == "" {
+						repairedHardProblem := discussionHardResponseProblem(repaired.Content, allowedSources, req.Context)
+						if repairedHardProblem == "" {
 							response = repaired
-						} else if repairProblem == missingCitationProblem && validateDiscussionContributionWithoutCitationRequirement(repaired.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn) == "" {
-							// A compact local model may still omit the citation after the single repair.
-							// Preserve the otherwise complete contribution, but explicitly mark it as unverified
-							// so peers and the UI do not mistake it for source-grounded evidence.
-							response = repaired
-							contributionWarnings = append(contributionWarnings, "This contribution was retained after repair, but it lacks an exact source marker. Treat claims about the supplied text as unverified until another agent grounds them.")
+						} else if originalHardProblem != "" {
+							repairFailure = repairReason + "; correction still invalid: " + repairedHardProblem
 						} else {
-							repairFailure = repairReason + "; correction still invalid: " + repairProblem
+							// A poor repair must not destroy an otherwise complete, grounded answer.
+							contributionWarnings = append(contributionWarnings, "The correction attempt introduced a hard validation error; the original complete response was retained.")
 						}
+					} else if originalHardProblem == "" {
+						// A repair timeout is a quality warning, not a reason to discard a usable turn.
+						contributionWarnings = append(contributionWarnings, "The correction attempt did not finish ("+safeMessage(repairErr)+"); the original complete response was retained for peer review.")
 					} else {
 						repairFailure = repairReason + "; correction attempt failed: " + safeMessage(repairErr)
 					}
+				}
+				if repairFailure == "" {
+					contributionWarnings = append(contributionWarnings, discussionQualityWarnings(response.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)...)
 				}
 			}
 			if err != nil {
@@ -2134,6 +2160,24 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	} else {
 		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 55 words in 2–3 short sentences. Cite only supplied source IDs.\n", round)
 	}
+	targetLimit := 1
+	if finalTurn {
+		targetLimit = 2
+	}
+	targets := recentDiscussionPeers(usable, agent.ID, targetLimit)
+	if finalTurn {
+		if len(targets) > 0 {
+			review.WriteString("\n\nREQUIRED CHAIR ATTRIBUTIONS — use both exact displayed names and compare their positions; your first sentence must mention both:")
+			for _, target := range targets {
+				fmt.Fprintf(&review, "\n- %q: %s", strings.TrimSpace(target.AgentName), compactDiscussionExcerpt(target.Content, 220))
+			}
+		}
+	} else if len(targets) > 0 {
+		target := targets[len(targets)-1]
+		name := strings.TrimSpace(target.AgentName)
+		fmt.Fprintf(&review, "\n\nREQUIRED PEER TARGET: %q. Actual claim: %s\nYour first sentence MUST begin exactly with %q. Assess this named claim; do not write a generic summary.",
+			name, compactDiscussionExcerpt(target.Content, 300), "Regarding "+name+"'s point,")
+	}
 	if !finalTurn && agent.ID != "discussion-chair" && len(previous) > 0 && previous[len(previous)-1].AgentID == "discussion-chair" {
 		review.WriteString("\nCHAIR-REVIEW RULE: MIMI's prior Chair turn is a conclusion to verify, not wording to echo. Independently test one concrete claim or qualification against the supplied source and earlier peer reasoning. Add your own role-specific point, or state that no additional supported point is available.")
 	}
@@ -2208,29 +2252,50 @@ func compactDiscussionExcerpt(content string, maxRunes int) string {
 
 const missingCitationProblem = "the answer makes a claim about the supplied text without citing an exact supplied source marker"
 
-func discussionResponseProblem(content string, allowedSources map[string]bool, hasContext bool, finalTurn bool) string {
+func discussionHardResponseProblem(content string, allowedSources map[string]bool, passages []ContextPassage) string {
 	trimmed := strings.TrimSpace(content)
 	if incompleteDiscussionResponse(trimmed) {
 		return "the answer is empty or visibly unfinished"
-	}
-	wordCount := len(strings.Fields(trimmed))
-	maxWords := 55
-	if finalTurn {
-		maxWords = 75
-	}
-	if wordCount > maxWords {
-		return fmt.Sprintf("the answer exceeds the %d-word budget", maxWords)
 	}
 	for _, marker := range sourceMarker.FindAllStringSubmatch(trimmed, -1) {
 		if len(marker) > 1 && !allowedSources[marker[1]] {
 			return "the answer contains a source marker that was not supplied"
 		}
 	}
-	// Not every turn makes a claim about the book. A peer may correctly say that
-	// a connection is unavailable or critique another agent's reasoning without
-	// citing the book. Require a marker only when the visible answer makes a
-	// source-specific assertion, not merely because a page was supplied.
-	if hasContext && len(allowedSources) > 0 && !sourceMarker.MatchString(trimmed) && discussionAnswerNeedsCitation(trimmed) {
+	return unsupportedSectionReference(trimmed, passages)
+}
+
+func discussionQualityWarnings(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) []string {
+	trimmed := strings.TrimSpace(content)
+	warnings := make([]string, 0, 3)
+	maxWords := 55
+	if finalTurn {
+		maxWords = 75
+	}
+	if words := len(strings.Fields(trimmed)); words > maxWords {
+		warnings = append(warnings, fmt.Sprintf("This contribution is complete but exceeds the %d-word style budget (%d words); the text was preserved rather than discarded.", maxWords, words))
+	}
+	if len(passages) > 0 && len(allowedSources) > 0 && !sourceMarker.MatchString(trimmed) && discussionAnswerNeedsCitation(trimmed) {
+		warnings = append(warnings, "This contribution was retained after repair, but it lacks an exact source marker. Treat claims about the supplied text as unverified until another agent grounds them.")
+	}
+	if peerProblem := discussionPeerResponseProblem(trimmed, previous, agentID, finalTurn); peerProblem != "" {
+		warnings = append(warnings, "Peer-attribution quality warning: "+peerProblem+". The contribution was retained, but it should not be treated as a verified response to that peer.")
+	}
+	return warnings
+}
+
+func discussionResponseProblem(content string, allowedSources map[string]bool, hasContext bool, finalTurn bool) string {
+	if problem := discussionHardResponseProblem(content, allowedSources, nil); problem != "" {
+		return problem
+	}
+	maxWords := 55
+	if finalTurn {
+		maxWords = 75
+	}
+	if words := len(strings.Fields(strings.TrimSpace(content))); words > maxWords {
+		return fmt.Sprintf("the answer exceeds the %d-word budget", maxWords)
+	}
+	if hasContext && len(allowedSources) > 0 && !sourceMarker.MatchString(content) && discussionAnswerNeedsCitation(content) {
 		return missingCitationProblem
 	}
 	return ""
@@ -2496,6 +2561,57 @@ func hasCompletedDiscussionPeer(turns []AgentContribution) bool {
 	return false
 }
 
+func recentDiscussionPeers(previous []AgentContribution, agentID string, limit int) []AgentContribution {
+	if limit < 1 {
+		return nil
+	}
+	seen := make(map[string]bool, limit)
+	selected := make([]AgentContribution, 0, limit)
+	for index := len(previous) - 1; index >= 0 && len(selected) < limit; index-- {
+		turn := previous[index]
+		if turn.Status != "completed" || strings.TrimSpace(turn.Content) == "" || turn.AgentID == agentID || seen[turn.AgentID] {
+			continue
+		}
+		seen[turn.AgentID] = true
+		selected = append(selected, turn)
+	}
+	for left, right := 0, len(selected)-1; left < right; left, right = left+1, right-1 {
+		selected[left], selected[right] = selected[right], selected[left]
+	}
+	return selected
+}
+
+func discussionRepairInstructionWithPeers(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool, previous []AgentContribution, agentID string) string {
+	instruction := discussionRepairInstruction(reason, allowedSources, finalTurn, hasPeer)
+	if !hasPeer {
+		return instruction
+	}
+	limit := 1
+	if finalTurn {
+		limit = 2
+	}
+	targets := recentDiscussionPeers(previous, agentID, limit)
+	if len(targets) == 0 {
+		return instruction
+	}
+	var peers strings.Builder
+	for _, turn := range targets {
+		claim := compactDiscussionExcerpt(turn.Content, 220)
+		if claim == "" {
+			continue
+		}
+		fmt.Fprintf(&peers, "\n- Exact displayed participant name: %q\n  Actual completed claim: %s\n", strings.TrimSpace(turn.AgentName), claim)
+	}
+	if peers.Len() == 0 {
+		return instruction
+	}
+	if finalTurn {
+		return instruction + "\n\nREQUIRED FINAL CHAIR POSITIONS — mention both distinct participant names exactly, compare their actual claims, and state agreement/disagreement:" + peers.String() + "\nYour first sentence must name both positions; do not write an anonymous consensus."
+	}
+	name := strings.TrimSpace(targets[0].AgentName)
+	return instruction + "\n\nREQUIRED PEER TARGET — address this exact participant and claim; do not choose another speaker:" + peers.String() + fmt.Sprintf("\nYour first sentence MUST begin with %q, then assess this claim. Do not start with a generic summary.", "Regarding "+name+"'s point,")
+}
+
 func discussionRepairInstruction(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool) string {
 	markers := make([]string, 0, len(allowedSources))
 	for id := range allowedSources {
@@ -2523,7 +2639,7 @@ func discussionRepairInstruction(reason string, allowedSources map[string]bool, 
 	if finalTurn {
 		words = 75
 	}
-	return fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
+	return fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Copy one exact [source:ID] marker only when making a claim about the supplied text. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
 }
 
 var incompleteDiscussionTail = regexp.MustCompile(`(?m)^\s*(?:[0-9]+\.|[-*])\s*$`)

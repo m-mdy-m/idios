@@ -1,16 +1,14 @@
 import type { RequestedBookAction, RequestedBookHighlight } from './study-types';
 
 export function isBookMutationRequest(prompt: string): boolean {
-  const text = prompt.normalize('NFKC').toLocaleLowerCase();
+  const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
   const explicitHighlight = /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
     || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
     || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
     || /\b(?:highlight|mark|annotate|underline|flag)\s+(?:it|them|these|those)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,22}[“"'`]/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,22}[“"' \x60]/i.test(text)
     || /\b(?:add|create|save|make|put|leave|write)\b.{0,70}\b(?:highlight|highlights|annotation|annotations|marked passage)\b/i.test(text);
-  const explicitNoteAction = /^\s*(?:please\s+)?(?:write|add|create|save|make|put|leave)\s+(?:me\s+)?(?:a\s+)?(?:book\s+|margin\s+|marginal\s+)?notes?\b/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:write|add|create|save|make|put|leave)\b.{0,60}\b(?:notes?|marginalia)\b/i.test(text)
-    || /\b(?:add|create|save|write|leave|put)\s+(?:a\s+)?(?:margin\s+|marginal\s+)?note\b.{0,70}\b(?:on|about|for|next to|beside|in|this|that|the)\b/i.test(text);
+  const explicitNoteAction = isExplicitBookNoteRequest(prompt);
   const farsiIntent = /(?:هایلایت|علامت\s*(?:گذاری)?).{0,70}(?:کن|بزن|بنویس|بذار|بزار|ثبت|اضافه|روی|برا)/u.test(text)
     || /(?:یادداشت|نوت).{0,70}(?:بنویس|بذار|بزار|ثبت|اضافه|کن|روی|برا)/u.test(text)
     || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت|هایلایت)/u.test(text);
@@ -19,9 +17,8 @@ export function isBookMutationRequest(prompt: string): boolean {
   if (beginsAsQuestion && !explicitHighlight && !explicitNoteAction && !farsiIntent) return false;
   return explicitHighlight || explicitNoteAction || farsiIntent || isBroadPageAnnotationRequest(prompt);
 }
-
 export function isExplicitHighlightRequest(prompt: string): boolean {
-  const text = prompt.normalize('NFKC').toLocaleLowerCase();
+  const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
   return /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
     || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
     || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
@@ -30,14 +27,14 @@ export function isExplicitHighlightRequest(prompt: string): boolean {
 }
 
 export function isExplicitBookNoteRequest(prompt: string): boolean {
-  const text = prompt.normalize('NFKC').toLocaleLowerCase();
-  return /^\s*(?:please\s+)?(?:write|add|create|save|make|put|leave)\s+(?:me\s+)?(?:a\s+)?(?:book\s+|margin\s+|marginal\s+)?notes?\b/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:write|add|create|save|make|put|leave)\b.{0,60}\b(?:notes?|marginalia)\b/i.test(text)
+  // A leading assistant/persona address is still an explicit reader instruction.
+  const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
+  return /^\s*(?:please\s+)?(?:write|add|create|save|make|put|leave)\s+(?:me\s+)?(?:a\s+)?(?:(?:short|brief|concise|useful|quick|standalone|personal|study)\s+)*(?:book\s+|margin\s+|marginal\s+)?notes?\b/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:write|add|create|save|make|put|leave)\b.{0,80}\b(?:notes?|marginalia)\b/i.test(text)
     || /\b(?:add|create|save|write|leave|put)\s+(?:a\s+)?(?:margin\s+|marginal\s+)?note\b.{0,70}\b(?:on|about|for|next to|beside|in|this|that|the)\b/i.test(text)
     || /(?:یادداشت|نوت).{0,70}(?:بنویس|بذار|بزار|ثبت|اضافه|کن|روی|برا)/u.test(text)
     || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت)/u.test(text);
 }
-
 export function isBroadPageAnnotationRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase();
   const action = /\b(?:highlight|mark|annotate|underline|note|notes|write|add|save)\b/i.test(text)
