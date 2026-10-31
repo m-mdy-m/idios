@@ -464,6 +464,67 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
+func TestBookDiscussionBoundsEachAgentTurnIndependentlyOfWorkflowTimeout(t *testing.T) {
+	deadlineCh := make(chan time.Time, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deadline, ok := r.Context().Deadline()
+		if !ok {
+			t.Error("discussion provider request has no context deadline")
+		} else {
+			deadlineCh <- deadline
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "test-model",
+			"choices": []any{map[string]any{"message": map[string]string{
+				"content": "Tutor explains the page's central idea in plain language and gives a concrete example. [source:page-1]",
+			}}},
+		})
+	}))
+	defer server.Close()
+
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL,
+		DefaultModel: "test-model", Enabled: true, TimeoutSeconds: 600,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.DefaultModel = "local/test-model"
+	config.MaxAgents = 1
+	config.MaxDiscussionRounds = 1
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
+		BookID: "book-1", BookTitle: "Example", Question: "What is this page about?",
+		AgentIDs: []string{"tutor"}, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "The passage explains a central principle through a concrete example."}},
+	}, "")
+	if err != nil {
+		t.Fatalf("discussion failed: %v", err)
+	}
+	if len(result.Contributions) != 1 || result.Contributions[0].Status != "completed" {
+		t.Fatalf("unexpected discussion result: %#v", result.Contributions)
+	}
+	select {
+	case deadline := <-deadlineCh:
+		remaining := time.Until(deadline)
+		if remaining <= 0 || remaining > discussionAgentTurnTimeout {
+			t.Fatalf("provider deadline remaining = %s, want a positive duration no greater than %s", remaining, discussionAgentTurnTimeout)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider request did not observe the bounded turn context")
+	}
+}
+
 func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *testing.T) {
 	var calls atomic.Int32
 	var mu sync.Mutex
