@@ -560,7 +560,6 @@ export function ShelfPDFReaderPage() {
       provider_id: selectedModel.providerID,
       model: selectedModel.modelID,
       task: 'translation',
-      reasoning_effort: 'low',
       temperature: directTranslation ? 0.15 : 0.2,
       timeout_seconds: Math.min(600, Math.max(45, request.timeoutSeconds ?? selectedOption.timeoutSeconds)),
       max_tokens: maxOutputTokens,
