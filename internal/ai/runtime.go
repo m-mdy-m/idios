@@ -2350,7 +2350,8 @@ func discussionQualityWarnings(content string, allowedSources map[string]bool, p
 	if words := len(strings.Fields(trimmed)); words > maxWords {
 		warnings = append(warnings, fmt.Sprintf("This contribution is complete but exceeds the %d-word style budget (%d words); the text was preserved rather than discarded.", maxWords, words))
 	}
-	if len(passages) > 0 && len(allowedSources) > 0 && !sourceMarker.MatchString(trimmed) && discussionAnswerNeedsCitation(trimmed) {
+	needsCitation := discussionAnswerNeedsCitation(trimmed) || agentID == "reader"
+	if len(passages) > 0 && len(allowedSources) > 0 && !sourceMarker.MatchString(trimmed) && needsCitation && !evidenceLimitationCue.MatchString(trimmed) {
 		warnings = append(warnings, "This contribution was retained after repair, but it lacks an exact source marker. Treat claims about the supplied text as unverified until another agent grounds them.")
 	}
 	if peerProblem := discussionPeerResponseProblem(trimmed, previous, agentID, finalTurn); peerProblem != "" {
@@ -2456,6 +2457,9 @@ func validateDiscussionOutput(content string, allowedSources map[string]bool, pa
 func validateDiscussionContribution(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) string {
 	if problem := validateDiscussionOutput(content, allowedSources, passages, finalTurn); problem != "" {
 		return problem
+	}
+	if agentID == "reader" && len(passages) > 0 && !sourceMarker.MatchString(content) && !evidenceLimitationCue.MatchString(content) {
+		return missingCitationProblem
 	}
 	return discussionPeerResponseProblem(content, previous, agentID, finalTurn)
 }
