@@ -2320,7 +2320,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Rawls page-21 fixture: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Minute)
 	defer cancel()
 	manager, err := NewManager("")
 	if err != nil {
@@ -2339,15 +2339,15 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	config.AllowCloudFallback = false
 	config.MaxConcurrent = 1
 	config.MaxQueued = 4
-	config.WorkflowTimeoutSeconds = 900
-	config.MaxAgents = 5
-	config.MaxDiscussionRounds = 1
+	config.WorkflowTimeoutSeconds = 600 // Deliberately retain the normal default; the dispatcher must budget the full round table.
+	config.MaxAgents = 6
+	config.MaxDiscussionRounds = 2
 	config.DefaultModel = providerID + "/" + model
 	config.TaskModels["book_discussion"] = providerID + "/" + model
 	if err := manager.UpdateRuntimeConfig(config); err != nil {
 		t.Fatalf("configure local-only discussion runtime: %v", err)
 	}
-	agentIDs := []string{"reader", "tutor", "steelman", "evidence-auditor", "discussion-chair"}
+	agentIDs := []string{"reader", "tutor", "steelman", "concept-connector", "evidence-auditor", "discussion-chair"}
 	assigned := map[string]bool{}
 	for _, agent := range manager.Agents() {
 		if !containsString(agentIDs, agent.ID) {
@@ -2364,20 +2364,44 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 			t.Fatalf("required integration-test agent %q was not configured", id)
 		}
 	}
-	result, err := manager.runDiscussion(ctx, DiscussionRequest{
+	discussionTask, err := manager.StartDiscussion(DiscussionRequest{
 		BookID:    "rawls-a-theory-of-justice",
 		BookTitle: "A Theory of Justice: Revised Edition",
-		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, and preserve the qualification that readers may follow their preferences without treating reading choice as a judgement of importance. Each specialist should provide an independent role-specific opening analysis; Reader and Evidence Auditor must cite the exact supplied source marker; MIMI must check every position against the decisive wording.",
+		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, and preserve the qualification that readers may follow their preferences without treating reading choice as a judgement of importance. Each specialist should provide an independent role-specific opening analysis; Reader and Evidence Auditor must cite the exact supplied source marker; MIMI must check every position against the decisive wording. In Round 2, every specialist must review a real peer claim by name, and Concept Connector must complete its cross-concept analysis.",
 		PageStart: 21, PageEnd: 21,
-		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		AgentIDs: agentIDs, Parallel: false, Rounds: 2, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
-	}, "")
+	})
 	if err != nil {
-		t.Fatalf("Qwen discussion failed: %v; contributions: %#v", err, result.Contributions)
+		t.Fatalf("start Qwen discussion: %v", err)
 	}
-	if len(result.Contributions) != len(agentIDs) {
-		t.Fatalf("discussion returned %d turns, want %d: %#v", len(result.Contributions), len(agentIDs), result.Contributions)
+	// Poll the real task dispatcher, not runDiscussion directly, so this integration
+	// exercises the adaptive workflow deadline that prevents later-round speakers
+	// from being cut off by the generic ten-minute task timeout.
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	task := discussionTask
+	for task.Status == TaskPending || task.Status == TaskRunning {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Qwen two-round task exceeded the integration test deadline: status=%s workflow=%#v", task.Status, task.Workflow)
+		case <-ticker.C:
+			current, ok := manager.Task(discussionTask.ID)
+			if !ok {
+				t.Fatal("Qwen discussion task disappeared before completion")
+			}
+			task = current
+		}
 	}
+	if task.Status != TaskCompleted || task.Workflow == nil {
+		t.Fatalf("Qwen two-round discussion task finished with status=%s error=%#v workflow=%#v", task.Status, task.Error, task.Workflow)
+	}
+	result := *task.Workflow
+	wantTurns := len(agentIDs) * 2
+	if len(result.Contributions) != wantTurns {
+		t.Fatalf("discussion returned %d turns, want %d: %#v", len(result.Contributions), wantTurns, result.Contributions)
+	}
+	conceptRoundTwoCompleted := false
 	for i, contribution := range result.Contributions {
 		if contribution.Status != "completed" || strings.TrimSpace(contribution.Content) == "" {
 			t.Errorf("agent %s did not return a usable contribution: status=%s error=%#v", contribution.AgentName, contribution.Status, contribution.Error)
@@ -2391,23 +2415,29 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		if (contribution.AgentID == "reader" || contribution.AgentID == "evidence-auditor") && !sourceMarker.MatchString(contribution.Content) {
 			t.Errorf("%s did not ground the page claim with an exact supplied source marker: %q warnings=%v", contribution.AgentName, contribution.Content, contribution.Warnings)
 		}
-		if contribution.AgentID == "discussion-chair" && !sourceMarker.MatchString(contribution.Content) {
+		finalChairTurn := contribution.Round == 2 && contribution.AgentID == "discussion-chair"
+		if finalChairTurn && !sourceMarker.MatchString(contribution.Content) {
 			t.Errorf("MIMI did not cite the source while adjudicating the page claims: %q warnings=%v", contribution.Content, contribution.Warnings)
 		}
-		// The fresh first-round specialist pass is deliberately independent; only
-		// MIMI receives those positions in a one-round discussion. Later rounds and
-		// resumed sessions are peer-facing, so keep the name/position check there.
-		needsPeerReview := !discussionIsIndependentOpening(contribution.Round, false, i == len(agentIDs)-1)
+		if contribution.AgentID == "concept-connector" && contribution.Round == 2 && contribution.Status == "completed" {
+			conceptRoundTwoCompleted = true
+		}
+		// Fresh Round 1 specialists work independently; Round 2 must review real
+		// completed peers. The final MIMI turn must compare the actual positions.
+		needsPeerReview := !discussionIsIndependentOpening(contribution.Round, false, finalChairTurn)
 		if needsPeerReview && contribution.Status == "completed" {
 			prior := result.Contributions[:i]
-			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, i == len(agentIDs)-1)
+			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, finalChairTurn)
 			if peerProblem != "" {
 				t.Errorf("agent %s did not address the required actual peer by name: %s; output=%q warnings=%v", contribution.AgentName, peerProblem, contribution.Content, contribution.Warnings)
 			}
 		}
 	}
+	if !conceptRoundTwoCompleted {
+		t.Fatal("Concept Connector did not complete its second-round peer review; the round-table must not stop at this speaker")
+	}
 	last := result.Contributions[len(result.Contributions)-1]
-	if last.AgentID != "discussion-chair" || last.Status != "completed" {
+	if last.AgentID != "discussion-chair" || last.Round != 2 || last.Status != "completed" {
 		t.Fatalf("MIMI did not complete the final moderation turn: %#v", last)
 	}
 
