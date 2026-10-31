@@ -39,5 +39,5 @@ jobs:
       language: go
       go-version: "1.25.0"
       setup-node: false
-      pipeline-task: ai-agent-format-preview
+      pipeline-task: ai-agent-model-integration
       pipeline-ref: main
