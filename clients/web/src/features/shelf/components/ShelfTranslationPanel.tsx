@@ -230,7 +230,7 @@ export function ShelfTranslationPanel({
                 title={segment.source}
               >{segment.translation}</span></span>;
             })}{pageData.translation.slice(renderCursor)}</p>;
-          })()} : <TranslationMarkdown value={pageData.translation} />}
+          })() : <TranslationMarkdown value={pageData.translation} />}
         </article> : !pageBusy && <div className="shelf-translation-panel__empty">
           <Languages size={21} />
           <strong>{translationModel ? 'No translation available' : 'Choose an AI model'}</strong>
