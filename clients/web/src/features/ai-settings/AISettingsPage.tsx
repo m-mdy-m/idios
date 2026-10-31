@@ -5,12 +5,12 @@ import { READING_SKILLS, type ReadingSkill } from '@/features/reading-skills';
 import { Badge, Button, Card, ErrorNotice, Field, LoadingState, Modal, PageHeading } from '@/design-system';
 import './AISettingsPage.css';
 
-const defaultConfig: AIRuntimeConfig = { mode: 'local-first', allow_local_fallback: false, allow_cloud_fallback: false, default_model: '', task_models: {}, max_concurrent: 2, max_queued: 16, workflow_timeout_seconds: 600, max_agents: 5, max_discussion_rounds: 5 };
+const defaultConfig: AIRuntimeConfig = { mode: 'local-first', allow_local_fallback: false, allow_cloud_fallback: false, default_model: '', task_models: {}, max_concurrent: 2, max_queued: 16, workflow_timeout_seconds: 600, max_agents: 6, max_discussion_rounds: 5 };
 const blankProvider: AIProviderInput = { name: '', type: 'openai-compatible', base_url: 'http://127.0.0.1:1234/v1', api_key: '', default_model: '', enabled: true, timeout_seconds: 120, max_concurrent: 2, trusted_local: false, adapter_config: {} };
 const taskTypes = ['chat', 'translation', 'explanation', 'reading_analysis', 'highlight_proposal', 'note_draft', 'semantic_search', 'book_discussion', 'review'];
 const isTerminal = (status?: string) => ['completed', 'partially_completed', 'failed', 'cancelled'].includes(status ?? '');
 const asArray = <T,>(value: T[] | null | undefined): T[] => Array.isArray(value) ? value : [];
-const defaultDiscussionRoster = ['reader', 'tutor', 'steelman', 'evidence-auditor', 'discussion-chair'];
+const defaultDiscussionRoster = ['reader', 'tutor', 'steelman', 'concept-connector', 'evidence-auditor', 'discussion-chair'];
 function normalizeDiscussionRoster(agents: AIAgent[], current: string[], maxAgents: number): string[] {
   const eligible = agents.filter((agent) => agent.enabled && asArray(agent.tasks).includes('book_discussion'));
   const eligibleIDs = new Set(eligible.map((agent) => agent.id));
