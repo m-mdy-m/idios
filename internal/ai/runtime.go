@@ -2407,7 +2407,7 @@ var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|follo
 // explicitly rejects a downgrade in importance while separately granting reader
 // preference; a model must not turn that preference into optionality. This is a
 // source-triggered guard, not a general semantic truth classifier.
-var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|chapters?|topics?|sections?)|(?:chapters?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant)|(?:peripheral|dispensable|unimportant)\s+(?:chapters?|topics?|sections?|material)|(?:merely|only)\s+applications?|not\s+central|(?:can|may|could)\s+be\s+skipped)\b`)
+var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|to\s+read|chapters?|topics?|sections?)|(?:chapters?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant|not\s+important|less\s+important)|(?:peripheral|dispensable|unimportant)\s+(?:chapters?|topics?|sections?|material)|(?:merely|only)\s+applications?|not\s+central|(?:can|may|could)\s+be\s+skipped)\b`)
 
 func discussionDowngradeIsNegated(content string, claimStart int) bool {
 	clauseStart := 0
