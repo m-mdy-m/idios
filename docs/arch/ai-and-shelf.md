@@ -27,7 +27,7 @@ A highlight is a saved annotation. A note may be attached to the selected passag
 
 ## Model discovery versus inference
 
-Translation is a no-thinking task. Both the client and the server omit reasoning requests for the `translation` task, and the shared runtime strips unsupported reasoning parameters for every selected model before dispatch. A model that does not advertise reasoning support must still perform ordinary generation; an unsupported `think` or `reasoning_effort` parameter must never turn translation into a provider failure.
+Translation is a no-thinking task. Both the client and server omit positive reasoning requests for the `translation` task. The shared runtime strips unsupported reasoning parameters for every selected model; when a model advertises native Ollama thinking, it explicitly disables that capability for translation, while models that do not advertise it receive no `think` field. An unsupported `think` or `reasoning_effort` parameter must never turn translation into a provider failure.
 
 Provider model discovery and model inference are separate operations. `Manager.RefreshProviderModels` refreshes one configured provider. The caller must provide a `provider_id`; cached models from unselected providers are not changed.
 
