@@ -2554,7 +2554,7 @@ func discussionDowngradeIsNegated(content string, claimStart int) bool {
 			prefix = prefix[index+len(pivot):]
 		}
 	}
-	return regexp.MustCompile(`(?i)\b(?:not|never|no)\b`).MatchString(prefix)
+	return regexp.MustCompile(`(?i)\b(?:not|never|no|reject(?:s|ed|ing)?|deny|denies|denied|rule(?:s|d)?\s+out)\b`).MatchString(prefix)
 }
 
 func discussionLogicalForceProblem(content string, passages []ContextPassage) string {
