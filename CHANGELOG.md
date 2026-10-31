@@ -16,6 +16,8 @@
 
 ### Changed
 
+- Run the complete Linux, macOS, Windows, PWA, Android ABI, and iOS device/simulator build matrix as a non-publishing dry-run on every branch push; publish a GitHub Release only for `v*` tag pushes.
+- Use a reserved `.invalid` HTTPS endpoint for mobile dry-runs so branch builds do not require production deployment credentials; real tag releases continue to require `IDIOS_MOBILE_SERVER_URL`.
 - Stream Shelf page translations from AI Runtime into the reader as tokens arrive, with explicit context-loading, first-token, active-part, elapsed-time, and received-text progress.
 - Translate pages in bounded 1,800-character chunks and resume completed chunks from the reader-session cache.
 - Use earlier pages and a compact book glossary for terminology continuity without fetching unrelated notes or annotations for direct page translation.
