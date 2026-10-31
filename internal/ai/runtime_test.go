@@ -565,8 +565,8 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 	if len(captured) != 3 {
 		t.Fatalf("captured requests = %d, want 3", len(captured))
 	}
-	if captured[1].MaxTokens > 220 || captured[1].MaxTokens <= 0 {
-		t.Fatalf("discussion max_tokens = %d, want 1..220", captured[1].MaxTokens)
+	if captured[1].MaxTokens > 360 || captured[1].MaxTokens < 280 {
+		t.Fatalf("discussion max_tokens = %d, want 280..360", captured[1].MaxTokens)
 	}
 	secondPrompt := ""
 	for _, message := range captured[1].Messages {
