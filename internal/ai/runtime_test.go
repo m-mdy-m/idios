@@ -1915,6 +1915,10 @@ func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinctio
 	if problem := discussionLogicalForceProblem(contradictory, passages); problem == "" {
 		t.Fatal("a contrast that reverses the source's explicit qualification was accepted")
 	}
+	alsoBad := "Reader freedom means these topics are not important to the theory, even though the reader may choose which issues to study. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(alsoBad, passages); problem == "" {
+		t.Fatal("an importance downgrade expressed as 'not important' was accepted")
+	}
 	faithful := "Rawls says Chapters IV–VIII are not peripheral, or merely applications; the reader's freedom concerns which problems to approach first, not the chapters' importance. [source:rawls-page-21]"
 	if problem := discussionLogicalForceProblem(faithful, passages); problem != "" {
 		t.Fatalf("the source's own negated alternatives were incorrectly flagged: %s", problem)
@@ -1975,6 +1979,27 @@ func TestDiscussionOpeningIndependenceBoundary(t *testing.T) {
 				t.Fatalf("discussionIsIndependentOpening(%d, %t, %t) = %t, want %t", test.round, test.hasPriorDebate, test.finalTurn, got, test.wantIndependent)
 			}
 		})
+	}
+}
+
+func TestRawlsDiscussionRolesPreserveNegationAndAuditEvidence(t *testing.T) {
+	steelman := discussionRoleFocus("steelman")
+	auditor := discussionRoleFocus("evidence-auditor")
+	chair := discussionRoleFocus("discussion-chair")
+	for _, required := range []struct {
+		role string
+		text string
+		want []string
+	}{
+		{role: "Steelman", text: steelman, want: []string{"do not infer that the material is optional", "Preserve explicit negations"}},
+		{role: "Evidence Auditor", text: auditor, want: []string{"On an opening turn with no peer positions", "against the supplied passage"}},
+		{role: "MIMI Chair", text: chair, want: []string{"decisive source sentences", "reading discretion is not evidence", "optional, peripheral, or unimportant"}},
+	} {
+		for _, phrase := range required.want {
+			if !strings.Contains(required.text, phrase) {
+				t.Errorf("%s role contract is missing %q: %s", required.role, phrase, required.text)
+			}
+		}
 	}
 }
 
