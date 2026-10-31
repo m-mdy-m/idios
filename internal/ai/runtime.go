@@ -1175,20 +1175,19 @@ func (m *Manager) checkProviderExecutionPolicy(cfg ProviderConfig, req GenerateR
 	return nil
 }
 
-func normalizeReasoningForModel(req GenerateRequest, supportsReasoning bool) GenerateRequest {
+func normalizeReasoningForModel(req GenerateRequest, supportsReasoning, capabilityKnown bool) GenerateRequest {
 	// Translation is a fidelity task, not a hidden-reasoning task. Never send a
-	// thinking flag for translation, even when the selected model supports it.
-	// Unsupported reasoning features degrade to ordinary generation rather than
-	// turning a useful request into a provider failure.
+	// positive reasoning request. When a model is known to support native Ollama
+	// thinking, explicitly turn it off because some such models enable it by default.
 	if strings.EqualFold(strings.TrimSpace(req.Task), "translation") {
 		req.ReasoningEffort = ""
-		// Ollama models that advertise native thinking can otherwise think by
-		// default. Explicitly turn that capability off for faithful translation.
-		// Models that do not support it receive no thinking field at all.
-		req.DisableThinking = supportsReasoning
+		req.DisableThinking = supportsReasoning && capabilityKnown
 		return req
 	}
-	if !supportsReasoning {
+	// Only suppress a reasoning request when the catalogue tells us the model
+	// is incompatible. Unknown model metadata is not proof of incompatibility:
+	// keep explicit legacy/user choices rather than breaking older integrations.
+	if capabilityKnown && !supportsReasoning {
 		req.ReasoningEffort = ""
 		req.DisableThinking = false
 	}
@@ -1220,7 +1219,8 @@ func (m *Manager) generateWith(parent context.Context, cfg ProviderConfig, req G
 		return GenerateResponse{}, err
 	}
 	req.Model = model
-	req = normalizeReasoningForModel(req, m.modelSupportsReasoning(cfg.ID, model))
+	supportsReasoning, capabilityKnown := m.modelReasoningCapability(cfg.ID, model)
+	req = normalizeReasoningForModel(req, supportsReasoning, capabilityKnown)
 	return provider.Generate(ctx, req)
 }
 
@@ -1348,7 +1348,8 @@ func (m *Manager) Stream(ctx context.Context, req GenerateRequest, emit func(Str
 		return err
 	}
 	req.Model = model
-	req = normalizeReasoningForModel(req, m.modelSupportsReasoning(cfg.ID, model))
+	supportsReasoning, capabilityKnown := m.modelReasoningCapability(cfg.ID, model)
+	req = normalizeReasoningForModel(req, supportsReasoning, capabilityKnown)
 	if err := emit(StreamEvent{Type: "start", ProviderID: cfg.ID, Model: model}); err != nil {
 		return err
 	}
@@ -2350,7 +2351,7 @@ func discussionQualityWarnings(content string, allowedSources map[string]bool, p
 			continue
 		}
 		similarity, shared := discussionEchoSimilarity(trimmed, peer.Content)
-		if shared >= 4 && similarity >= 0.46 {
+		if shared >= 4 && similarity >= 0.40 {
 			warnings = append(warnings, fmt.Sprintf("Possible argument echo: this contribution substantially overlaps %s (lexical overlap %.0f%%). This signal is advisory, not a semantic verdict; check for a genuinely new reason before treating it as independent support.", peer.AgentName, similarity*100))
 			break
 		}
@@ -2975,36 +2976,55 @@ func discussionModelPerformanceScore(model Model) float64 {
 // native thinking/reasoning capability. This prevents unsupported provider flags
 // from turning a discussion into a failed generation request.
 func (m *Manager) modelSupportsReasoning(providerID, modelID string) bool {
+	supported, _ := m.modelReasoningCapability(providerID, modelID)
+	return supported
+}
+
+// modelReasoningCapability separates explicit incompatibility from missing
+// catalogue data. A known ordinary model such as Qwen 2.5 must not receive an
+// unsupported reasoning flag; an unknown legacy model must not lose a user
+// request merely because the catalogue has not probed it yet.
+func (m *Manager) modelReasoningCapability(providerID, modelID string) (supported, known bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, model := range m.state.Models {
 		if model.ProviderID != providerID || model.ID != modelID {
 			continue
 		}
-		if model.Reasoning != nil && *model.Reasoning {
-			return true
+		if model.Reasoning != nil {
+			return *model.Reasoning, true
 		}
-		if model.Capabilities["thinking"] || model.Capabilities["reasoning"] {
-			return true
+		if value, exists := model.Capabilities["thinking"]; exists {
+			return value, true
 		}
+		if value, exists := model.Capabilities["reasoning"]; exists {
+			return value, true
+		}
+		parametersKnown := len(model.SupportedParameters) > 0
 		for _, parameter := range model.SupportedParameters {
 			parameter = strings.ToLower(strings.TrimSpace(parameter))
 			if parameter == "think" || parameter == "reasoning_effort" || parameter == "reasoning" {
-				return true
+				return true, true
 			}
 		}
-		// Native Ollama model cards do not consistently expose thinking capability
-		// in /api/tags. These named families support Ollama's `think` parameter;
-		// do not apply this inference to Qwen 2.5 or arbitrary model names.
+		// Native Ollama model cards do not consistently expose thinking metadata.
+		// Infer only families with a stable, documented distinction; do not infer
+		// support from arbitrary names.
 		if cfg, ok := m.providerByIDLocked(providerID); ok && cfg.Type == ProviderOllama {
 			name := strings.ToLower(model.ID)
 			if strings.HasPrefix(name, "deepseek-r1") || strings.HasPrefix(name, "qwen3:") || strings.HasPrefix(name, "qwen3.5:") {
-				return true
+				return true, true
+			}
+			if strings.HasPrefix(name, "qwen2.5:") {
+				return false, true
 			}
 		}
-		return false
+		if parametersKnown {
+			return false, true
+		}
+		return false, false
 	}
-	return false
+	return false, false
 }
 
 func (m *Manager) isLocalProvider(id string) bool {

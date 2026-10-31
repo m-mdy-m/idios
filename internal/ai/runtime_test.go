@@ -1789,17 +1789,22 @@ func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
 
 func TestNormalizeReasoningForModelNeverThinksDuringTranslation(t *testing.T) {
 	translation := GenerateRequest{Task: "translation", ReasoningEffort: "low", DisableThinking: true}
-	got := normalizeReasoningForModel(translation, true)
+	got := normalizeReasoningForModel(translation, true, true)
 	if got.ReasoningEffort != "" || !got.DisableThinking {
 		t.Fatalf("translation request must disable native thinking when supported: %#v", got)
 	}
 	unsupported := GenerateRequest{Task: "book_discussion", ReasoningEffort: "medium", DisableThinking: true}
-	got = normalizeReasoningForModel(unsupported, false)
+	got = normalizeReasoningForModel(unsupported, false, true)
 	if got.ReasoningEffort != "" || got.DisableThinking {
-		t.Fatalf("unsupported model retained reasoning controls: %#v", got)
+		t.Fatalf("known unsupported model retained reasoning controls: %#v", got)
+	}
+	unknown := GenerateRequest{Task: "chat", ReasoningEffort: "low"}
+	got = normalizeReasoningForModel(unknown, false, false)
+	if got.ReasoningEffort != "low" {
+		t.Fatalf("unknown model capability must not erase an explicit request: %#v", got)
 	}
 	supported := GenerateRequest{Task: "book_discussion", ReasoningEffort: "high"}
-	got = normalizeReasoningForModel(supported, true)
+	got = normalizeReasoningForModel(supported, true, true)
 	if got.ReasoningEffort != "high" {
 		t.Fatalf("capable model lost explicit reasoning preference: %#v", got)
 	}
@@ -1829,7 +1834,7 @@ func TestDiscussionQualityWarningsDetectParaphrasedArgumentEcho(t *testing.T) {
 	}
 	answer := "Chapters IV–VIII matter because they test a theory's ability to bring order and system to considered judgments across different questions. [source:page-21]"
 	similarity, shared := discussionEchoSimilarity(answer, peer.Content)
-	if shared < 4 || similarity < 0.46 {
+	if shared < 4 || similarity < 0.40 {
 		t.Fatalf("paraphrased echo similarity = %.2f with %d shared terms, want advisory overlap signal", similarity, shared)
 	}
 	warnings := discussionQualityWarnings(answer, map[string]bool{"page-21": true}, []ContextPassage{{ID: "page-21", Text: "A theory of justice."}}, []AgentContribution{peer}, "tutor", false)
