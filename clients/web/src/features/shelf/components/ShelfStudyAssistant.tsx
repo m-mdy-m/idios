@@ -658,7 +658,6 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
         const selectedWordCount = quoteWords(selectedQuote).length;
         if (selectedQuote && selectedWordCount > 0 && selectedWordCount <= 32 && promptAskedForHighlight) {
           const existingHighlight = requestedActions.find((action): action is Extract<RequestedBookAction, { type: 'highlight' }> => action.type === 'highlight');
-          const separateNote = requestedActions.find((action): action is Extract<RequestedBookAction, { type: 'note' }> => action.type === 'note');
           let annotationNote = existingHighlight?.note || '';
           if (!annotationNote && promptAskedForNote) {
             const visibleAnswer = parsedAnswer.visible.replace(/\\s+/g, ' ').trim();
