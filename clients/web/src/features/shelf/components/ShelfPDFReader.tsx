@@ -274,7 +274,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [progressMessage, setProgressMessage] = useState('');
   const currentPageTranslationKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`;
   const currentPageTranslationKeyRef = useRef(currentPageTranslationKey);
-  currentPageTranslationKeyRef.current = currentPageTranslationKey;
+  useEffect(() => {
+    currentPageTranslationKeyRef.current = currentPageTranslationKey;
+  }, [currentPageTranslationKey]);
   const runningTranslationJobs = translationJobSnapshots.filter((job) => job.bookID === bookID && job.status === 'running');
   const stopTranslation = useCallback((jobID?: string) => {
     const job = jobID
