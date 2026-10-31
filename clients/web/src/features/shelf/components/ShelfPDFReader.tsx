@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import type { ShelfAnnotation, ShelfAnnotationRect } from '@/types/idios';
 import { ShelfStudyAssistant } from './ShelfStudyAssistant';
 import type { ApplyBookHighlightsResult, RequestedBookHighlight } from '../model/study-types';
-import { extractPartialReaderTranslation, extractReaderPDFText, mergeReaderTranslations, parseReaderTranslation, splitReaderTranslationText, normalizeTranslationMatch, type ReaderTranslationCompletion, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationModelOption, type ReaderTranslationRequest } from '../model/reader-translation';
+import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, parseReaderTranslation, splitReaderTranslationText, normalizeTranslationMatch, type ReaderTranslationCompletion, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationModelOption, type ReaderTranslationRequest } from '../model/reader-translation';
 import { ShelfTranslationPanel, type ShelfTranslationTab } from './ShelfTranslationPanel';
 import { ShelfAgentDiscussion } from './ShelfAgentDiscussion';
 import './ShelfPDFReader.css';
@@ -268,6 +268,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [companionPins, setCompanionPins] = useState<CompanionPin[]>([]);
   const [activeCompanionPin, setActiveCompanionPin] = useState<number | null>(null);
   const [hoveredTextForAI, setHoveredTextForAI] = useState('');
+  const [hoveredWordRectangles, setHoveredWordRectangles] = useState<ShelfAnnotationRect[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
 
   useEffect(() => {
@@ -907,7 +908,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         result.failed.push({ quote, reason: 'the page text layer is still loading; retry after the page is ready' });
         continue;
       }
-      const located = findUniqueQuoteRectangles(layer, sheet, quote);
+      const selectedRange = pending && normalizeReaderSelectionText(pending.quote) === normalizeReaderSelectionText(quote)
+        ? pending
+        : null;
+      const effectiveQuote = selectedRange?.quote ?? quote;
+      const located = selectedRange
+        ? { occurrences: 1, rectangles: selectedRange.rectangles }
+        : findUniqueQuoteRectangles(layer, sheet, effectiveQuote);
       if (located.occurrences !== 1 || !located.rectangles.length) {
         result.failed.push({ quote, reason: located.occurrences > 1 ? 'that phrase appears more than once on this page, so I avoided marking the wrong one' : 'that exact phrase was not found in the selectable text of this page' });
         continue;
@@ -920,16 +927,24 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           saved = await api.updateShelfAnnotation(existing.id, { note: mark.note.trim(), color });
           setAnnotations((items) => items.map((item) => item.id === existing.id ? { ...item, ...saved, rectangles: existing.rectangles } : item));
         } else {
-          saved = await api.createShelfAnnotation(bookID, { page: targetPage, quote, note: mark.note.trim(), color, rectangles: located.rectangles });
+          saved = await api.createShelfAnnotation(bookID, { page: targetPage, quote: effectiveQuote, note: mark.note.trim(), color, rectangles: located.rectangles });
           setAnnotations((items) => [...items.filter((item) => item.id !== saved.id), saved]);
         }
-        result.saved.push(`“${quote}” on page ${targetPage}${mark.note.trim() ? ` — ${mark.note.trim()}` : ''}`);
+        result.saved.push(`“${effectiveQuote}” on page ${targetPage}${mark.note.trim() ? ` — ${mark.note.trim()}` : ''}`);
       } catch (cause) {
         result.failed.push({ quote, reason: cause instanceof Error ? cause.message : 'the annotation could not be saved' });
       }
     }
     return result;
-  }, [annotations, bookID, pageNumber, textLayerLoading, rendering]);
+  }, [annotations, bookID, pageNumber, pending, textLayerLoading, rendering]);
+  const clearHoveredWordHighlight = useCallback(() => {
+    clearReaderWordHighlight();
+    setHoveredWordRectangles([]);
+  }, []);
+  const clearHoveredWord = useCallback(() => {
+    clearHoveredWordHighlight();
+    setHoveredTextForAI('');
+  }, [clearHoveredWordHighlight]);
   const handleTextHover = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     const layer = textLayerRef.current;
     if (!layer) return;
@@ -946,66 +961,121 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           const caret = textDocument.caretPositionFromPoint?.(event.clientX, event.clientY);
           return caret ? { node: caret.offsetNode, offset: caret.offset } : null;
         })();
-    // Preserve the last word while the pointer travels from the PDF to the assistant panel.
-    // The word is cleared when the reader changes pages; a new word replaces it immediately.
-    if (!position || !layer.contains(position.node) || position.node.nodeType !== Node.TEXT_NODE) return;
+    // Clear stale hover when the pointer lands on whitespace rather than a text node.
+    if (!position || !layer.contains(position.node) || position.node.nodeType !== Node.TEXT_NODE) {
+      clearHoveredWord();
+      return;
+    }
     const value = position.node.textContent ?? '';
     const offset = Math.max(0, Math.min(value.length, position.offset));
-    const isWordCharacter = (character: string) => /[\p{L}\p{N}_’'-]/u.test(character);
+    const isWordCharacter = (character: string) => /[\p{L}\p{N}\p{M}_’'ʼ\u200c\u200d-]/u.test(character);
     let start = offset;
     let end = offset;
     if (start === value.length || (start < value.length && !isWordCharacter(value[start]))) start = Math.max(0, start - 1);
     while (start > 0 && isWordCharacter(value[start - 1])) start -= 1;
     while (end < value.length && isWordCharacter(value[end])) end += 1;
     const word = value.slice(start, end).trim();
-    if (word.length >= 2) setHoveredTextForAI(word);
-  }, []);
+    const sheet = pageSheetRef.current;
+    if (word.length < 2 || !sheet) {
+      clearHoveredWord();
+      return;
+    }
+
+    // Paint the exact character range, never its enclosing PDF.js span (which may be a line).
+    const wordRange = document.createRange();
+    wordRange.setStart(position.node, start);
+    wordRange.setEnd(position.node, end);
+    const bounds = sheet.getBoundingClientRect();
+    const rectangles = bounds.width > 0 && bounds.height > 0
+      ? Array.from(wordRange.getClientRects()).map((rect) => {
+          const left = Math.max(bounds.left, rect.left);
+          const top = Math.max(bounds.top, rect.top);
+          const right = Math.min(bounds.right, rect.right);
+          const bottom = Math.min(bounds.bottom, rect.bottom);
+          return {
+            x: (left - bounds.left) / bounds.width,
+            y: (top - bounds.top) / bounds.height,
+            width: (right - left) / bounds.width,
+            height: (bottom - top) / bounds.height,
+          };
+        }).filter((rect) => rect.width > 0.001 && rect.height > 0.001).slice(0, 12)
+      : [];
+    const registry = (window.CSS as typeof CSS & { highlights?: HighlightRegistryLike }).highlights;
+    const HighlightConstructor = (window as WindowWithTextHighlight).Highlight;
+    if (registry && HighlightConstructor) {
+      try {
+        registry.set(readerWordHoverHighlightName, new HighlightConstructor(wordRange));
+        setHoveredWordRectangles([]);
+      } catch {
+        clearReaderWordHighlight();
+        setHoveredWordRectangles(rectangles);
+      }
+    } else {
+      setHoveredWordRectangles(rectangles);
+    }
+    setHoveredTextForAI(word);
+  }, [clearHoveredWord]);
 
   useEffect(() => {
+    clearReaderWordHighlight();
+    setHoveredWordRectangles([]);
     setHoveredTextForAI('');
     setSelectedTextForAI('');
   }, [pageNumber, pdfURL]);
 
-  // Link the active translation segment back to the transparent PDF text layer.
-  // This is DOM-local: it never changes the PDF text or saved annotations.
-  useEffect(() => {
-    const layer = textLayerRef.current;
-    if (!layer) return;
-    const needle = normalizeTranslationMatch(hoveredTextForAI);
-    const spans = Array.from(layer.querySelectorAll('span'));
-    for (const span of spans) {
-      span.classList.remove('shelf-pdf-reader__ai-hover-match');
-      const value = normalizeTranslationMatch(span.textContent ?? '');
-      if (needle && value && (value === needle || value.split(' ').includes(needle) || needle.split(' ').some((part) => part.length > 2 && value.split(' ').includes(part)))) {
-        span.classList.add('shelf-pdf-reader__ai-hover-match');
-      }
-    }
-  }, [hoveredTextForAI, pageNumber, textLayerLoading]);
+  useEffect(() => () => clearReaderWordHighlight(), []);
   const visiblePageLabel = pageCount ? `${pageNumber} / ${pageCount}` : '—';
 
   const captureSelection = useCallback(() => {
     const selection = window.getSelection();
     const textLayer = textLayerRef.current;
     const sheet = pageSheetRef.current;
-    const quote = selection?.toString().trim() ?? '';
-    if (!selection || !textLayer || !sheet || !quote || selection.rangeCount === 0) { setPending(null); setSelectedTextForAI(''); return; }
+    const rawQuote = selection?.toString() ?? '';
+    const quote = normalizeReaderSelectionText(rawQuote);
+    if (!selection || selection.isCollapsed || !textLayer || !sheet || !quote || selection.rangeCount === 0) {
+      setPending(null);
+      setSelectedTextForAI('');
+      return;
+    }
     const range = selection.getRangeAt(0);
     const anchor = range.commonAncestorContainer;
-    if (!textLayer.contains(anchor.nodeType === Node.ELEMENT_NODE ? anchor as Element : anchor.parentElement)) { setPending(null); setSelectedTextForAI(''); return; }
+    if (!textLayer.contains(anchor.nodeType === Node.ELEMENT_NODE ? anchor as Element : anchor.parentElement)) {
+      setPending(null);
+      setSelectedTextForAI('');
+      return;
+    }
     const pageRect = sheet.getBoundingClientRect();
+    if (!pageRect.width || !pageRect.height) {
+      setPending(null);
+      setSelectedTextForAI('');
+      return;
+    }
+    // Keep browser-derived range geometry; normalize only the AI-facing text.
     const rectangles = Array.from(range.getClientRects()).map((rect) => {
-      const x = Math.max(0, (rect.left - pageRect.left) / pageRect.width);
-      const y = Math.max(0, (rect.top - pageRect.top) / pageRect.height);
-      const right = Math.min(1, (rect.right - pageRect.left) / pageRect.width);
-      const bottom = Math.min(1, (rect.bottom - pageRect.top) / pageRect.height);
-      return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
+      const left = Math.max(pageRect.left, rect.left);
+      const top = Math.max(pageRect.top, rect.top);
+      const right = Math.min(pageRect.right, rect.right);
+      const bottom = Math.min(pageRect.bottom, rect.bottom);
+      return {
+        x: (left - pageRect.left) / pageRect.width,
+        y: (top - pageRect.top) / pageRect.height,
+        width: (right - left) / pageRect.width,
+        height: (bottom - top) / pageRect.height,
+      };
     }).filter((rect) => rect.width > 0.001 && rect.height > 0.001).slice(0, 300);
-    if (!rectangles.length) { setPending(null); setSelectedTextForAI(''); return; }
+    if (!rectangles.length) {
+      setPending(null);
+      setSelectedTextForAI('');
+      return;
+    }
     setSelectionTranslation(null);
-    const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(quote);
+    clearReaderWordHighlight();
+    setHoveredWordRectangles([]);
+    const selectedWord = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_’'ʼ\u200c\u200d-]*$/u.test(quote);
     setHoveredTextForAI(selectedWord ? quote : '');
     setSelectedTextForAI(quote.slice(0, 10000));
-    setPending({ quote: quote.slice(0, 8000), rectangles });
+    const exactSourceQuote = rawQuote.normalize('NFKC').replace(/[\u00ad\u200b\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+    setPending({ quote: exactSourceQuote.slice(0, 8000), rectangles });
   }, []);
 
   async function saveHighlight() {
@@ -1293,7 +1363,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
             <div className="shelf-pdf-reader__page-sheet" ref={pageSheetRef} onClick={handleSheetClick} style={{ width: pageSize.width || undefined, height: pageSize.height || undefined }}>
               <canvas ref={canvasRef} className="shelf-pdf-reader__canvas" aria-label={`PDF page ${pageNumber}`} />
               <div className="shelf-pdf-reader__saved-marks" aria-hidden="true">{pageAnnotations.map((annotation) => annotation.rectangles.map((rect, index) => <span key={`${annotation.id}-${index}`} className={`shelf-pdf-reader__mark shelf-pdf-reader__mark--${annotation.color} ${annotation.note?.trim() ? 'shelf-pdf-reader__mark--underline' : ''} ${activeAnnotationID === annotation.id ? 'is-active' : ''}`} style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` }} />))}</div>
-              <div className="textLayer shelf-pdf-reader__text-layer" ref={textLayerRef} onMouseMove={handleTextHover} />
+              <div className="textLayer shelf-pdf-reader__text-layer" ref={textLayerRef} onMouseMove={handleTextHover} onMouseLeave={clearHoveredWordHighlight} />
+              <div className="shelf-pdf-reader__word-hover" aria-hidden="true">{hoveredWordRectangles.map((rect, index) => <span key={index} style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` }} />)}</div>
               {companionPins.length > 0 && <div className="shelf-pdf-reader__companion-pins" aria-label="Mimi's page notes">
                 {companionPins.some((pin) => pin.fallbackHighlight) && <div className="shelf-pdf-reader__companion-fallback-highlights" aria-hidden="true">
                   {companionPins.filter((pin) => pin.fallbackHighlight).flatMap((pin, pinIndex) => pin.rectangles.map((rect, rectIndex) => <span
@@ -1335,11 +1406,17 @@ function markSearchSpans(layer: HTMLDivElement, query: string) {
 }
 
 type CompanionHighlightDetail = { bookID: string; pageNumber: number; marks?: CompanionMark[]; quote?: string };
+const readerWordHoverHighlightName = 'idios-shelf-word-hover';
 const companionHighlightImportantName = 'idios-shelf-companion-anchor';
 const companionHighlightUnclearName = 'idios-shelf-companion-unclear';
 type HighlightRegistryLike = { set: (name: string, highlight: unknown) => void; delete: (name: string) => boolean };
 type WindowWithTextHighlight = Window & { Highlight?: new (...ranges: Range[]) => unknown };
 type TextWordRange = { word: string; node: Text; start: number; end: number };
+
+function clearReaderWordHighlight() {
+  const registry = (window.CSS as typeof CSS & { highlights?: HighlightRegistryLike }).highlights;
+  registry?.delete(readerWordHoverHighlightName);
+}
 
 function normalizeHighlightWord(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/[‐‑‒–—]/g, '-');
@@ -1347,7 +1424,7 @@ function normalizeHighlightWord(value: string): string {
 
 type ExactQuoteRectangleResult = { occurrences: number; rectangles: ShelfAnnotationRect[] };
 function findUniqueQuoteRectangles(layer: HTMLDivElement, sheet: HTMLDivElement, quote: string): ExactQuoteRectangleResult {
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const query = toWords(quote);
   if (!query.length || query.length > 32) return { occurrences: 0, rectangles: [] };
   const words: TextWordRange[] = [];
@@ -1403,7 +1480,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
   const HighlightConstructor = (window as WindowWithTextHighlight).Highlight;
   const canUseCustomHighlights = Boolean(registry && HighlightConstructor);
 
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const words: TextWordRange[] = [];
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {

@@ -50,20 +50,89 @@ export function normalizeTranslationMatch(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
 }
 
-/** Rebuild readable PDF text without joining line-end hyphenation into broken words. */
+/**
+ * Rebuild PDF.js text items using their baseline and advance width when available.
+ * The fallback preserves stream-order behavior for PDFs without usable geometry.
+ */
 export function extractReaderPDFText(items: readonly unknown[]): string {
-  const lines = items.map((item) => {
+  type PositionedItem = {
+    text: string; x: number; y: number; width: number; height: number;
+    direction: 'ltr' | 'rtl'; hasEOL: boolean; positioned: boolean;
+  };
+  const parsed: PositionedItem[] = items.map((item) => {
     const record = asRecord(item);
-    const value = typeof record.str === 'string' ? record.str : '';
-    return value + (record.hasEOL ? '\n' : ' ');
-  }).join('');
+    const transform = Array.isArray(record.transform) ? record.transform.map(Number) : [];
+    const x = Number(transform[4]);
+    const y = Number(transform[5]);
+    const width = Number(record.width);
+    const explicitHeight = Number(record.height);
+    const transformHeight = Math.hypot(Number(transform[2]) || 0, Number(transform[3]) || 0);
+    const height = Math.max(
+      Number.isFinite(explicitHeight) ? Math.abs(explicitHeight) : 0,
+      Number.isFinite(transformHeight) ? transformHeight : 0,
+      1,
+    );
+    return {
+      text: typeof record.str === 'string' ? record.str.replace(/\u00ad/g, '') : '',
+      x: Number.isFinite(x) ? x : 0,
+      y: Number.isFinite(y) ? y : 0,
+      width: Number.isFinite(width) ? Math.max(0, Math.abs(width)) : 0,
+      height,
+      direction: record.dir === 'rtl' ? 'rtl' : 'ltr',
+      hasEOL: record.hasEOL === true,
+      positioned: transform.length >= 6 && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(width),
+    };
+  }).filter((item) => item.text.length > 0);
 
-  return lines
+  const geometryAvailable = parsed.length > 1 && parsed.every((item) => item.positioned);
+  let output = '';
+  let previous: PositionedItem | null = null;
+  const openingPunctuation = /^[\s([{«“‘‹]/u;
+  const closingPunctuation = /^[,.;:!?%)\]}»”’›،؛؟]/u;
+
+  for (const item of parsed) {
+    if (previous) {
+      if (geometryAvailable) {
+        const fontHeight = Math.max(1, Math.min(previous.height, item.height));
+        const verticalDistance = Math.abs(previous.y - item.y);
+        if (previous.hasEOL || verticalDistance > fontHeight * 0.58) {
+          output += verticalDistance > fontHeight * 1.48 ? '\n\n' : '\n';
+        } else {
+          const horizontalGap = item.direction === 'rtl'
+            ? previous.x - (item.x + item.width)
+            : item.x - (previous.x + previous.width);
+          const needsSpace = horizontalGap > Math.max(1, fontHeight * 0.18);
+          if (needsSpace && !closingPunctuation.test(item.text) && !openingPunctuation.test(previous.text.slice(-1))) {
+            output += ' ';
+          }
+        }
+      } else if (previous.hasEOL) {
+        output += '\n';
+      } else if (!closingPunctuation.test(item.text) && !openingPunctuation.test(previous.text.slice(-1))) {
+        output += ' ';
+      }
+    }
+    output += item.text;
+    previous = item;
+  }
+
+  return output
     .replace(/\u00ad/g, '')
     .replace(/-\s*\r?\n\s*(?=\p{Ll})/gu, '')
     .replace(/[ \t]*\r?\n[ \t]*/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/** Normalize PDF selection text for AI while preserving the original quote for saving. */
+export function normalizeReaderSelectionText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[\u00ad\u200b\ufeff]/g, '')
+    .replace(/[-‐‑‒–—][ \t]*\r?\n[ \t]*(?=\p{Ll})/gu, '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/[ \t]+/g, ' ')
     .trim();
 }
 

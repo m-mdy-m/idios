@@ -316,6 +316,7 @@ export const api = {
   issueLabels: () => request<Record<string, Label[]>>('/api/issue-labels'),
   issueMilestones: () => request<Record<string, Milestone[]>>('/api/issue-milestones'),
   quotes: () => request<Quote[]>('/api/quotes'),
+  createQuote: (body: { text: string; author?: string; source?: string; source_url?: string; category?: string }) => runCommand<Quote>('quote.create', body),
   nextQuote: () => request<Quote>('/api/quotes/next'),
   jobs: () => request<ScheduledJob[]>('/api/jobs'),
   profile: () => request<{ username: string; full_name: string; focus?: string; topics?: string; website?: string; bio: string; readme: string; updated_at: string }>('/api/profile'),

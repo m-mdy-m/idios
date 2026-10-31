@@ -17,7 +17,7 @@ import type {
   ModelAvailability, ModelOption, PageInsight, Props, PromptMode, ReasoningEffort, RequestedBookAction, StudyContext,
 } from '../model/study-types';
 import {
-  isBookMutationRequest, isBroadPageAnnotationRequest, isExplicitBookNoteRequest, isExplicitHighlightRequest,
+  isBookMutationRequest, isBroadPageAnnotationRequest, isExplicitBookNoteRequest, isExplicitHighlightRequest, isExplicitQuoteRequest,
   parseBookActionResponse,
 } from '../model/study-actions';
 import {
@@ -452,6 +452,7 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
       && !asksForExplanation
       && !isExplicitBookNoteRequest(userPrompt)
       && isExplicitHighlightRequest(userPrompt)
+      && !isExplicitQuoteRequest(userPrompt)
       && selectedQuoteForDirectAction.length > 0
       && quoteWords(selectedQuoteForDirectAction).length > 0
       && quoteWords(selectedQuoteForDirectAction).length <= 32
@@ -488,6 +489,36 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
       } finally {
         setBusy(false);
       }
+      return;
+    }
+
+    const directQuoteAllowed = !retry
+      && options.replaceFromIndex === undefined
+      && !options.hiddenUser
+      && !options.contextOverride
+      && !options.modelOverride
+      && !asksForExplanation
+      && !isExplicitBookNoteRequest(userPrompt)
+      && !isExplicitHighlightRequest(userPrompt)
+      && isExplicitQuoteRequest(userPrompt)
+      && selectedQuoteForDirectAction.length > 0;
+    if (directQuoteAllowed) {
+      const userMessage: ChatMessage = { role: 'user', content: userPrompt, pageNumber };
+      setBusy(true); setError(''); setNotice(''); setQuestion('');
+      setEditingMessageIndex(null); setOpenTryModelIndex(null);
+      try {
+        const saved = await api.createQuote({
+          text: selectedQuoteForDirectAction,
+          source: `${bookTitle} · page ${pageNumber}`,
+          category: 'Reading',
+        });
+        setMessages([...messages, userMessage, { role: 'assistant', content: `Saved to IDIOS Quotes: “${saved.text}”`, pageNumber }]);
+        setLastFailedPrompt('');
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : 'the Quotes service returned an error';
+        setMessages([...messages, userMessage, { role: 'assistant', content: `I couldn’t save that quotation: ${reason}`, pageNumber }]);
+        setError(`I couldn’t save the quotation: ${reason}`);
+      } finally { setBusy(false); }
       return;
     }
 
@@ -581,8 +612,8 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
     setOpenTryModelIndex(null);
     const bookMutationRequested = isBookMutationRequest(userPrompt);
     const bookActionContract = bookMutationRequested
-      ? `\n\n## REQUIRED BOOK EDIT — THIS IS AN ACTION, NOT A SUGGESTION\nThe reader explicitly asked you to change the book. Do not merely print HIGHLIGHT: or NOTE: labels or describe what you would do. Return one short, natural confirmation sentence followed by exactly one machine block in this form, with valid JSON and no markdown fence:\n<idios_book_actions>{"actions":[{"type":"highlight","page":${turnPage},"quote":"exact contiguous words copied from the current page","note":"short friendly note attached to that phrase","color":"purple"}]}</idios_book_actions>\nUse only exact contiguous quotes present in the labelled PDF text for the target page. For a current-page highlight, the quote must occur exactly once in the current page text. Keep each quote short (1–8 words) and choose a unique occurrence. Never fabricate or paraphrase an anchor. For general book notes with no text anchor, use {"type":"note","title":"short note title","content":"the saved note","labels":["reading-companion"]}. A note about a specific word/phrase may also be attached to its highlight. When the reader asks for both a highlight and a note, return two distinct actions: one exact anchored highlight and one standalone note. The highlight must carry only a short margin explanation. The standalone note must separately explain the page's central argument; do not copy it into the margin field. If you cannot find a valid quote, return no highlight action rather than inventing one; a valid standalone note may still be saved. Up to 3 actions. The app will execute each action independently and report its actual save result. Do not claim that it was saved before the app confirms it.`
-      : `\n\n## NO BOOK EDITS REQUESTED\nDo not output HIGHLIGHT:, NOTE:, MARK:, <idios_book_actions>, JSON action blocks, or machine-readable note labels. Only create a highlight or note when the reader explicitly asks you to change/save something in the book.`;
+      ? `\n\n## REQUIRED BOOK EDIT — THIS IS AN ACTION, NOT A SUGGESTION\nThe reader explicitly asked you to save or change something in the book. Return one short natural confirmation sentence followed by one valid JSON action block, with no markdown fence:\n<idios_book_actions>{"actions":[{"type":"highlight","page":${turnPage},"quote":"exact contiguous words from this page","note":"short margin explanation","color":"purple"}]}</idios_book_actions>\nChoose the action type strictly from the reader's request:\n- highlight: only when the reader explicitly asks to mark text in the PDF. Use a unique, exact, contiguous quote (1–8 words) from the specified page; never invent or paraphrase it.\n- note: when the reader asks for a standalone book note. Include a useful title and substantive content grounded in the supplied reading context.\n- quote: when the reader asks to keep a quotation in the IDIOS Quotes library. Use {"type":"quote","text":"exact quotation copied from the page","source":"${bookTitle} · page ${turnPage}","category":"Reading"}. Preserve the original wording and never invent a quotation. A quote request is not a PDF highlight; do not create a highlight unless the reader also explicitly asks for one.\nIf the reader asks for multiple actions, return each as a separate action in the same block. A note attached to a highlight is only a short margin explanation; keep a separately requested standalone note as its own action. If an exact highlight or quote cannot be found, omit that action rather than fabricate it; still return any other valid requested action. Up to 3 actions. The app executes each action independently and reports the actual save result. Never claim anything was saved before the app confirms it.`
+      : `\n\n## NO BOOK EDITS REQUESTED\nDo not output HIGHLIGHT:, NOTE:, MARK:, QUOTE:, <idios_book_actions>, JSON action blocks, or machine-readable note labels. Only create a highlight, note, or quote when the reader explicitly asks you to save or change something in the book.`;
     const systemPrompt = `${readingCompanionSkill}${activeSkillInstructions}\n\n## MUST-FOLLOW VOICE RULES FOR THIS CHAT\nThese style rules take priority over generic assistant habits. You are the same friendly reading companion as Mimi, just in conversation mode. Speak like a perceptive friend sitting beside the reader, not a lecturer. Lead with the useful answer in plain everyday language. Usually use 2–5 short sentences unless the reader explicitly asks for a deep dive. Do not default to academic prose, book-report summaries, or headings such as “Another way to see it” and “A gentle challenge”. Do not force a critique, question, or analogy into every answer. Explain a necessary technical term immediately in simple language. Answer the exact question and use page/notes/history context only when it helps. Never output Mimi’s machine-readable page-note labels in chat. Keep the visible final answer separate from analysis/planning: if this provider format uses a dedicated reasoning field or <think> block, never repeat that material in the user-facing answer.\n\n## Your role: MIMI — the primary Shelf reading companion\nYou are MIMI, the same reading companion the reader meets in the PDF margin. In chat, use your conversational tutoring mode: answer directly and naturally, explain the central idea clearly, and keep the same voice and standards across page notes and discussion. Your saved page notes are optional context, not sections you must repeat. Do not introduce yourself as a separate Tutor persona, stage a debate, or imitate a round-table agent.${bookActionContract}\n\n## Current reading state\nBook: ${bookTitle}\nCurrent page: ${turnPage}\n\n## REQUIRED PDF CONTEXT RULE\nWhen a COMPLETE PDF READING WINDOW is supplied, inspect the provided page-labelled text before answering. It contains every extractable page from page 1 through the current page and up to three following pages. Never claim a page is missing if its labelled text is present in this context. Never ask the reader to resend or paste pages already included here. Use earlier pages to understand definitions, prior arguments, and the author’s setup; use the current page as the primary passage; use following pages only to clarify continuity and never attribute their claims to the current page. If a page explicitly says text could not be extracted, state that limitation only for that page. Distinguish the author’s words from Mimi’s margin notes and the reader’s notes.\n\nApply every relevant rule above. Current page and selection are the freshest reading evidence. Conversation history helps you adapt, but never assume the reader understood something just because it appears in history.`;
     const historical = options.historyBeforeIndex !== undefined
       ? [...messages.slice(0, options.historyBeforeIndex), nextMessages[nextMessages.length - 1]].slice(-10)
@@ -635,26 +666,59 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
       let answer = parsedAnswer.visible;
       if (bookMutationRequested) {
         let requestedActions = parsedAnswer.actions;
-        // A small repair pass helps weaker models that answered in prose instead of the action schema.
-        if (!requestedActions.length) {
-          try {
-            const repairMessages = fitShelfRuntimeMessages([
-                { role: 'system', content: `${coreReliabilitySkill.replace(/^---\s*[\s\S]*?---\s*/, '').trim()}\n\nConvert the reader's requested book edit into a valid action envelope only. Do not answer in prose. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions>. Valid actions: highlight {type, page:${turnPage}, quote exact and unique from current page, note, color purple}; note {type,title,content,labels}. This is an action plan for the app to execute, not a claim that it has already been saved. Use the supplied PDF reading context as source. A highlight must quote an exact unique passage from the requested page; if that page is not the current open page, return no highlight action rather than saving it on the wrong page. If no exact anchor can be identified, return {"actions":[]}.` },
-                { role: 'user', content: `Reader request: ${userPrompt}\n\nReading context and current page text:\n${turnContext.slice(-12000)}\n\nAuthoritative current PDF page text for highlight anchors (quotes must be copied exactly from here):\n${pageText.slice(0, 16000)}\n\nYour first answer (for intent only, do not copy its HIGHLIGHT:/NOTE: labels):\n${rawAnswer.slice(0, 2500)}` },
-              ]);
-            const repair = await runShelfAIThroughRuntime(targetModel, repairMessages, effectiveEffort);
-            const repairText = getContent(repair.choices?.[0]?.message?.content).trim();
-            const repaired = parseBookActionResponse(repairText, turnPage);
-            if (repaired.actions.length) requestedActions = repaired.actions;
-          } catch { /* The message below will clearly say that no book edit was made. */ }
-        }
-        const resultLines: string[] = [];
-        const promptAskedForHighlight = isExplicitHighlightRequest(userPrompt);
-        const promptAskedForNote = isExplicitBookNoteRequest(userPrompt);
+      const promptAskedForHighlight = isExplicitHighlightRequest(userPrompt);
+      const promptAskedForNote = isExplicitBookNoteRequest(userPrompt);
+      const promptAskedForQuote = isExplicitQuoteRequest(userPrompt);
+      const selectedQuote = selectedText.trim();
+      const needsHighlightAction = promptAskedForHighlight && !selectedQuote
+        && !requestedActions.some((action) => action.type === 'highlight');
+      const needsNoteAction = promptAskedForNote
+        && !requestedActions.some((action) => action.type === 'note');
+      const needsQuoteAction = promptAskedForQuote
+        && !requestedActions.some((action) => action.type === 'quote');
+
+      // Retry missing action types independently: a partial envelope must not suppress
+      // a separately requested note or highlight.
+      if (needsHighlightAction || needsNoteAction || needsQuoteAction) {
+        const missingActionInstructions = [
+          needsHighlightAction
+            ? `Add one highlight action only: quote 1–8 exact, contiguous, unique words from page ${turnPage}; include a short margin note and purple color. Never invent a quote.`
+            : '',
+          needsNoteAction
+            ? `Add one standalone note action only: write a concise, useful note grounded in the current page and book context, with a title and content. Do not return an empty note.`
+            : '',
+          needsQuoteAction
+            ? `Add one quote action only: copy one short, exact, contiguous quotation from the current page into the text field; include the book and page in source, category Reading. Never paraphrase.`
+            : '',
+        ].filter(Boolean).join('\n');
+        try {
+          const repairMessages = fitShelfRuntimeMessages([
+            {
+              role: 'system',
+              content: coreReliabilitySkill.replace(/^---\s*[\s\S]*?---\s*/, '').trim()
+                + '\n\nYou are repairing only missing Shelf book actions. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions> containing only these missing action types:\n'
+                + missingActionInstructions
+                + '\nDo not duplicate or modify any action already present in the first response. This is an action plan for the app to execute, not a claim that anything has been saved. Use only the supplied PDF page and book context. If an exact highlight anchor cannot be identified, omit that highlight rather than inventing one.',
+            },
+            {
+              role: 'user',
+              content: 'Reader request: ' + userPrompt
+                + '\n\nExisting actions already parsed (do not duplicate): ' + JSON.stringify(requestedActions)
+                + '\n\nReading context:\n' + turnContext.slice(-12000)
+                + '\n\nAuthoritative current PDF page text:\n' + pageText.slice(0, 16000)
+                + '\n\nFirst answer (intent/context only):\n' + rawAnswer.slice(0, 2500),
+            },
+          ]);
+          const repair = await runShelfAIThroughRuntime(targetModel, repairMessages, effectiveEffort);
+          const repairText = getContent(repair.choices?.[0]?.message?.content).trim();
+          const repaired = parseBookActionResponse(repairText, turnPage);
+          if (repaired.actions.length) requestedActions = [...requestedActions, ...repaired.actions];
+        } catch { /* Existing actions remain usable; missing writes are reported below. */ }
+      }
+      const resultLines: string[] = [];
         // A reader-selected phrase is authoritative. Always replace any model-generated
         // highlight anchor with the exact selection, even when the model returned an approximate
         // quote. Keep a separately requested note as its own shelf-note action.
-        const selectedQuote = selectedText.trim();
         const selectedWordCount = quoteWords(selectedQuote).length;
         if (selectedQuote && selectedWordCount > 0 && selectedWordCount <= 32 && promptAskedForHighlight) {
           const existingHighlight = requestedActions.find((action): action is Extract<RequestedBookAction, { type: 'highlight' }> => action.type === 'highlight');
@@ -667,6 +731,15 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
           }
           requestedActions = requestedActions.filter((action) => action.type !== 'highlight');
           requestedActions.push({ type: 'highlight', quote: selectedQuote, note: annotationNote, page: turnPage, color: 'purple' });
+        }
+        if (selectedQuote && promptAskedForQuote) {
+          requestedActions = requestedActions.filter((action) => action.type !== 'quote');
+          requestedActions.push({
+            type: 'quote',
+            text: selectedQuote,
+            source: `${bookTitle} · page ${turnPage}`,
+            category: 'Reading',
+          });
         }
         // If a weak model still fails the action schema for a page-wide request, reuse Mimi's
         // already-validated exact page marks rather than returning pretend HIGHLIGHT/NOTE text.
@@ -697,6 +770,7 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
         }
         const highlightActions = requestedActions.filter((action): action is Extract<RequestedBookAction, { type: 'highlight' }> => action.type === 'highlight');
         const noteActions = requestedActions.filter((action): action is Extract<RequestedBookAction, { type: 'note' }> => action.type === 'note');
+        const quoteActions = requestedActions.filter((action): action is Extract<RequestedBookAction, { type: 'quote' }> => action.type === 'quote');
         if (highlightActions.length) {
           if (onApplyBookHighlights) {
             try {
@@ -714,6 +788,23 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
           }
         }
         if (promptAskedForHighlight && !highlightActions.length) resultLines.push('I could not place a highlight because the model did not provide an exact phrase from the current page. I have not marked any text; try selecting the words first or ask me to highlight a short phrase on this page.');
+        for (const action of quoteActions) {
+          try {
+            const saved = await api.createQuote({
+              text: action.text,
+              author: action.author,
+              source: action.source || `${bookTitle} · page ${turnPage}`,
+              source_url: action.source_url,
+              category: action.category || 'Reading',
+            });
+            resultLines.push(`Saved to IDIOS Quotes: “${saved.text}”.`);
+          } catch (cause) {
+            resultLines.push(`I couldn’t save the quotation: ${cause instanceof Error ? cause.message : 'the Quotes service returned an error'}.`);
+          }
+        }
+        if (promptAskedForQuote && !quoteActions.length) {
+          resultLines.push('I couldn’t save a quotation because the model did not return an exact passage after a focused retry. Nothing was added to IDIOS Quotes.');
+        }
         for (const action of noteActions) {
           try {
             const saved = await api.createShelfNote(bookID, { title: action.title || `Reading note · page ${turnPage}`, content: `Book: ${bookTitle}\nPage: ${turnPage}\n\n${action.content}`, labels: action.labels?.length ? action.labels : ['reading-companion'] });
@@ -722,6 +813,9 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
           } catch (cause) {
             resultLines.push(`I couldn’t save the book note: ${cause instanceof Error ? cause.message : 'the notes API returned an error'}.`);
           }
+        }
+        if (promptAskedForNote && !noteActions.length) {
+          resultLines.push('I couldn’t write or save the requested book note: the model returned no note content after a focused retry, so no note was created.');
         }
         answer = resultLines.length ? resultLines.join('\n\n') : 'I didn’t change the book because I couldn’t identify a safe, exact action from the response. Try selecting the phrase first, or ask me to mark a short phrase on this page.';
       } else {
