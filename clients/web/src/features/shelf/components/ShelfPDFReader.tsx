@@ -867,6 +867,22 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setHoveredTextForAI('');
     setSelectedTextForAI('');
   }, [pageNumber, pdfURL]);
+
+  // Link the active translation segment back to the transparent PDF text layer.
+  // This is DOM-local: it never changes the PDF text or saved annotations.
+  useEffect(() => {
+    const layer = textLayerRef.current;
+    if (!layer) return;
+    const needle = normalizeTranslationMatch(hoveredTextForAI);
+    const spans = Array.from(layer.querySelectorAll('span'));
+    for (const span of spans) {
+      span.classList.remove('shelf-pdf-reader__ai-hover-match');
+      const value = normalizeTranslationMatch(span.textContent ?? '');
+      if (needle && value && (value === needle || value.split(' ').includes(needle) || needle.split(' ').some((part) => part.length > 2 && value.split(' ').includes(part)))) {
+        span.classList.add('shelf-pdf-reader__ai-hover-match');
+      }
+    }
+  }, [hoveredTextForAI, pageNumber, textLayerLoading]);
   const visiblePageLabel = pageCount ? `${pageNumber} / ${pageCount}` : '—';
 
   const captureSelection = useCallback(() => {
@@ -1071,12 +1087,10 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
             const width = Math.min(translationPanelWidth, window.innerWidth - 24);
             const availableAboveMascot = mascot ? mascot.top - 26 : window.innerHeight - 110;
             const height = Math.min(translationPanelHeight, window.innerHeight - 32, Math.max(300, availableAboveMascot));
-            const left = mascot
-              ? Math.max(12, Math.min(window.innerWidth - width - 12, mascot.right - width))
-              : Math.max(12, window.innerWidth - width - 24);
-            const top = mascot
-              ? Math.max(12, mascot.top - height - 14)
-              : Math.max(12, window.innerHeight - height - 100);
+            // Keep the companion beside the page instead of covering the reading
+            // surface or following Mimi's floating position.
+            const left = 12;
+            const top = Math.max(12, Math.round((window.innerHeight - height) / 2));
             setTranslationPanelWidth(width);
             setTranslationPanelHeight(height);
             setTranslationPanelPosition({ left, top });
