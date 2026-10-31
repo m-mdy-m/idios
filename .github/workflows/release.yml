@@ -46,8 +46,8 @@ jobs:
       changelog-path: CHANGELOG.md
       # `inputs` exists only for workflow_dispatch; tag pushes must publish.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true' }}
-      e2e-setup-command: ${{ inputs.e2e-setup-command }}
-      e2e-test-command: ${{ inputs.e2e-test-command }}
+      e2e-setup-command: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['e2e-setup-command'] || '' }}
+      e2e-test-command: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['e2e-test-command'] || '' }}
       build-matrix-json: >-
         {"include":[
           {"id":"linux-amd64","os":"ubuntu-24.04","target_os":"linux","architecture":"x86_64","platform":"desktop","test_command":"bash scripts/release/verify.sh linux-amd64","build_command":"bash scripts/release/build.sh linux-amd64","artifact_path":"dist/release/*"},
