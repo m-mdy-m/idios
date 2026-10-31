@@ -2160,6 +2160,24 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	} else {
 		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 55 words in 2–3 short sentences. Cite only supplied source IDs.\n", round)
 	}
+	targetLimit := 1
+	if finalTurn {
+		targetLimit = 2
+	}
+	targets := recentDiscussionPeers(usable, agent.ID, targetLimit)
+	if finalTurn {
+		if len(targets) > 0 {
+			review.WriteString("\n\nREQUIRED CHAIR ATTRIBUTIONS — use both exact displayed names and compare their positions; your first sentence must mention both:")
+			for _, target := range targets {
+				fmt.Fprintf(&review, "\n- %q: %s", strings.TrimSpace(target.AgentName), compactDiscussionExcerpt(target.Content, 220))
+			}
+		}
+	} else if len(targets) > 0 {
+		target := targets[len(targets)-1]
+		name := strings.TrimSpace(target.AgentName)
+		fmt.Fprintf(&review, "\n\nREQUIRED PEER TARGET: %q. Actual claim: %s\nYour first sentence MUST begin exactly with %q. Assess this named claim; do not write a generic summary.",
+			name, compactDiscussionExcerpt(target.Content, 300), "Regarding "+name+"'s point,")
+	}
 	if !finalTurn && agent.ID != "discussion-chair" && len(previous) > 0 && previous[len(previous)-1].AgentID == "discussion-chair" {
 		review.WriteString("\nCHAIR-REVIEW RULE: MIMI's prior Chair turn is a conclusion to verify, not wording to echo. Independently test one concrete claim or qualification against the supplied source and earlier peer reasoning. Add your own role-specific point, or state that no additional supported point is available.")
 	}
@@ -2543,16 +2561,41 @@ func hasCompletedDiscussionPeer(turns []AgentContribution) bool {
 	return false
 }
 
+func recentDiscussionPeers(previous []AgentContribution, agentID string, limit int) []AgentContribution {
+	if limit < 1 {
+		return nil
+	}
+	seen := make(map[string]bool, limit)
+	selected := make([]AgentContribution, 0, limit)
+	for index := len(previous) - 1; index >= 0 && len(selected) < limit; index-- {
+		turn := previous[index]
+		if turn.Status != "completed" || strings.TrimSpace(turn.Content) == "" || turn.AgentID == agentID || seen[turn.AgentID] {
+			continue
+		}
+		seen[turn.AgentID] = true
+		selected = append(selected, turn)
+	}
+	for left, right := 0, len(selected)-1; left < right; left, right = left+1, right-1 {
+		selected[left], selected[right] = selected[right], selected[left]
+	}
+	return selected
+}
+
 func discussionRepairInstructionWithPeers(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool, previous []AgentContribution, agentID string) string {
 	instruction := discussionRepairInstruction(reason, allowedSources, finalTurn, hasPeer)
 	if !hasPeer {
 		return instruction
 	}
+	limit := 1
+	if finalTurn {
+		limit = 2
+	}
+	targets := recentDiscussionPeers(previous, agentID, limit)
+	if len(targets) == 0 {
+		return instruction
+	}
 	var peers strings.Builder
-	for _, turn := range previous {
-		if turn.Status != "completed" || strings.TrimSpace(turn.Content) == "" || turn.AgentID == agentID {
-			continue
-		}
+	for _, turn := range targets {
 		claim := compactDiscussionExcerpt(turn.Content, 220)
 		if claim == "" {
 			continue
@@ -2562,7 +2605,11 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 	if peers.Len() == 0 {
 		return instruction
 	}
-	return instruction + "\n\nREAL COMPLETED PEERS — choose from these names only; do not invent or rename anyone:" + peers.String() + "\nAddress one of these concrete claims. The exact displayed name is the attribution target."
+	if finalTurn {
+		return instruction + "\n\nREQUIRED FINAL CHAIR POSITIONS — mention both distinct participant names exactly, compare their actual claims, and state agreement/disagreement:" + peers.String() + "\nYour first sentence must name both positions; do not write an anonymous consensus."
+	}
+	name := strings.TrimSpace(targets[0].AgentName)
+	return instruction + "\n\nREQUIRED PEER TARGET — address this exact participant and claim; do not choose another speaker:" + peers.String() + fmt.Sprintf("\nYour first sentence MUST begin with %q, then assess this claim. Do not start with a generic summary.", "Regarding "+name+"'s point,")
 }
 
 func discussionRepairInstruction(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool) string {
