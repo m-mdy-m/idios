@@ -32,7 +32,7 @@ assert.equal(note.actions[0].type, 'note');
 assert.equal(note.actions[0].content, 'A saved learning note.');
 assert.match(note.visible, /useful note/);
 
-const combinedPrompt = 'Mimi, write a short note about this passage and highlight “order and system” on page 21.';
+const combinedPrompt = 'Mimi, please write a concise standalone note about this passage and highlight “order and system” on page 21.';
 assert.equal(isBookMutationRequest(combinedPrompt), true);
 assert.equal(isExplicitBookNoteRequest(combinedPrompt), true);
 assert.equal(isExplicitHighlightRequest(combinedPrompt), true);
@@ -49,9 +49,9 @@ assert.equal(fixture.includes(combined.actions[0].quote), true, 'the parsed high
 // Guard the actual Shelf action dispatch: a mixed request must persist the annotation
 // and the standalone note separately, rather than collapsing one into the other.
 const assistantSource = readFileSync(new URL('../src/features/shelf/components/ShelfStudyAssistant.tsx', import.meta.url), 'utf8');
-assert.match(assistantSource, /onApplyBookHighlights\\(highlightActions\\)/);
-assert.match(assistantSource, /api\\.createShelfNote\\(bookID/);
-assert.match(assistantSource, /Keep a separately requested note as its own shelf-note action/);
+assert.equal(assistantSource.includes('onApplyBookHighlights(highlightActions)'), true);
+assert.equal(assistantSource.includes('api.createShelfNote(bookID'), true);
+assert.equal(assistantSource.includes('Keep a separately requested note as its own shelf-note action'), true);
 
 const malformed = parseBookActionResponse('<idios_book_actions>{bad json}</idios_book_actions>', 1);
 assert.equal(malformed.actions.length, 0);
