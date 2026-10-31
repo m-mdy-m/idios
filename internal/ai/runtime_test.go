@@ -1875,6 +1875,35 @@ func TestDiscussionModelRoutingUsesRoleQualityAndMeasuredProviderPerformance(t *
 	}
 }
 
+func TestDiscussionOpeningPromptUsesRoleSpecificDeliverableWithoutForcingAnInterpretation(t *testing.T) {
+	agent := AgentDefinition{
+		ID:           "concept-connector",
+		Name:         "Concept Connector",
+		Role:         "concept connector",
+		Instructions: "Find one grounded relationship or say none is available.",
+	}
+	messages := discussionMessages(DiscussionRequest{
+		BookTitle: "Example",
+		Question:  "Find a connection to another concept.",
+		Context: []ContextPassage{{
+			ID: "page-1", Page: 1, Text: "The passage discusses a theory of justice.",
+		}},
+	}, agent, false, nil)
+	if len(messages) == 0 {
+		t.Fatal("opening discussion prompt was empty")
+	}
+	prompt := messages[0].Content
+	if strings.Contains(prompt, "establish one provisional, source-grounded interpretation") {
+		t.Fatal("generic opening instruction still forces every specialist to make the same kind of interpretation")
+	}
+	if !strings.Contains(prompt, "fulfil your role-specific deliverable independently") {
+		t.Fatal("opening prompt does not prioritize the agent's own role deliverable")
+	}
+	if !strings.Contains(prompt, "no grounded cross-page connection") {
+		t.Fatal("Concept Connector must be allowed to report that no grounded link exists")
+	}
+}
+
 func TestDiscussionRoleFocusIsDistinctAndInjected(t *testing.T) {
 	readerFocus := discussionRoleFocus("reader")
 	tutorFocus := discussionRoleFocus("tutor")
