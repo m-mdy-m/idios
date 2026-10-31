@@ -685,10 +685,19 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const settled = await Promise.allSettled(batchIndexes.map(async (index) => {
         const chunk = chunks[index];
         const cacheKey = `${cachePrefix}:${index}:${chunk}`;
+        const previousPart = index > 0 ? results[index - 1] : undefined;
+        const currentPageContinuity = previousPart
+          ? [
+              '===== PREVIOUS PART OF THE CURRENT PAGE · CONTINUITY ONLY =====',
+              'SOURCE:\n' + chunks[index - 1].slice(-1100),
+              'TRANSLATION:\n' + previousPart.translation.slice(-1400),
+            ].join('\n')
+          : '';
         const chunkRequest: ReaderTranslationRequest = {
           ...contextRequest,
           text: chunk,
           kind: chunks.length > 1 ? 'chunk' : kind,
+          documentContext: [currentPageContinuity, contextRequest.documentContext].filter(Boolean).join('\n\n').slice(0, 5200),
           priorGlossary: batchGlossary,
           onStream: (rawContent) => {
             if (kind !== 'page' || translationPageInFlight.current !== pageRequestKey) return;
