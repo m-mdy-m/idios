@@ -60,6 +60,8 @@ assert.match(discussionUI, /From Round 2 onward[\s\S]*?actual completed peer cla
 assert.match(discussionUI, /Execution check/, 'the UI must expose a run-level execution summary');
 assert.match(discussionUI, /not run/, 'terminal discussions must distinguish agents that never started from agents that failed');
 assert.match(discussionUI, /runNotStartedCount/, 'the run summary must count queued/waiting agents that did not execute');
+assert.match(discussionUI, /runWaitingCount/, 'a deliberate reader pause must be counted separately from agents that never ran');
+assert.match(discussionUI, /waiting for you/, 'reader-waiting turns must remain distinguishable from not-run turns');
 assert.match(discussionUI, /not whether an interpretation is true/, 'the UI must distinguish runtime validation from semantic correctness');
 assert.match(discussionUI, /Use a guided page-analysis prompt/, 'the UI must offer a useful guided discussion prompt');
 assert.match(settingsUI, /max_agents: 6/, 'new Web settings must allow the six-role discussion by default');
