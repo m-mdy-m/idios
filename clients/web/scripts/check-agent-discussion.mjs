@@ -58,6 +58,8 @@ const settingsUI = await readFile(new URL('../src/features/ai-settings/AISetting
 assert.match(discussionUI, /This is a fresh discussion: in Round 1[\s\S]*?independently perform their configured role/, 'fresh opening specialists must be told to work independently');
 assert.match(discussionUI, /From Round 2 onward[\s\S]*?actual completed peer claim/, 'later rounds must explicitly require real peer review');
 assert.match(discussionUI, /Execution check/, 'the UI must expose a run-level execution summary');
+assert.match(discussionUI, /not run/, 'terminal discussions must distinguish agents that never started from agents that failed');
+assert.match(discussionUI, /runNotStartedCount/, 'the run summary must count queued/waiting agents that did not execute');
 assert.match(discussionUI, /not whether an interpretation is true/, 'the UI must distinguish runtime validation from semantic correctness');
 assert.match(discussionUI, /Use a guided page-analysis prompt/, 'the UI must offer a useful guided discussion prompt');
 assert.match(settingsUI, /max_agents: 6/, 'new Web settings must allow the six-role discussion by default');
