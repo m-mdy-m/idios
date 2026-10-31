@@ -1083,12 +1083,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
               setTranslationOpen(false);
               return;
             }
-            const mascot = document.querySelector('.shelf-study-mascot__character')?.getBoundingClientRect();
             const width = Math.min(translationPanelWidth, window.innerWidth - 24);
-            const availableAboveMascot = mascot ? mascot.top - 26 : window.innerHeight - 110;
-            const height = Math.min(translationPanelHeight, window.innerHeight - 32, Math.max(300, availableAboveMascot));
-            // Keep the companion beside the page instead of covering the reading
-            // surface or following Mimi's floating position.
+            const height = Math.min(translationPanelHeight, window.innerHeight - 24);
+            // Keep the companion docked to the left edge of the reader viewport.
             const left = 12;
             const top = Math.max(12, Math.round((window.innerHeight - height) / 2));
             setTranslationPanelWidth(width);
