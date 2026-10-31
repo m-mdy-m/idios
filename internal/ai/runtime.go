@@ -2553,12 +2553,12 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 		if claim == "" {
 			continue
 		}
-		fmt.Fprintf(&peers, "\\n- Exact displayed participant name: %q\\n  Actual completed claim: %s\\n", strings.TrimSpace(turn.AgentName), claim)
+		fmt.Fprintf(&peers, "\n- Exact displayed participant name: %q\n  Actual completed claim: %s\n", strings.TrimSpace(turn.AgentName), claim)
 	}
 	if peers.Len() == 0 {
 		return instruction
 	}
-	return instruction + "\\n\\nREAL COMPLETED PEERS — choose from these names only; do not invent or rename anyone:" + peers.String() + "\\nAddress one of these concrete claims. The exact displayed name is the attribution target."
+	return instruction + "\n\nREAL COMPLETED PEERS — choose from these names only; do not invent or rename anyone:" + peers.String() + "\nAddress one of these concrete claims. The exact displayed name is the attribution target."
 }
 
 func discussionRepairInstruction(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool) string {
