@@ -1829,6 +1829,13 @@ func discussionAgentPriority(id string) int {
 	return 500
 }
 
+// discussionIsIndependentOpening keeps each specialist's first fresh-session pass independent.
+// Only the final Chair sees those opening positions; later rounds and resumed discussions
+// receive peer history so agents can directly examine one another's claims.
+func discussionIsIndependentOpening(round int, hasPriorDebate bool, finalTurn bool) bool {
+	return round == 1 && !hasPriorDebate && !finalTurn
+}
+
 func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, taskID string) (WorkflowResult, error) {
 	// Parallel generations defeat peer critique because agents cannot respond to
 	// one another's same-round claims. Book discussions are always sequential.
@@ -1931,7 +1938,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			if !req.Parallel && index > 0 {
 				// Fresh Round 1 is independent analysis. Only the final Chair turn
 				// may see those first-round answers when the discussion has one round.
-				independentOpening := round == 1 && len(debateHistory) == 0 && !finalTurn
+				independentOpening := discussionIsIndependentOpening(round, len(debateHistory) > 0, finalTurn)
 				if !independentOpening {
 					priorTurns = append(priorTurns, currentRound[:index]...)
 				}
