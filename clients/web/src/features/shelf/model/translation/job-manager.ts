@@ -30,17 +30,28 @@ class TranslationJobManager {
     return () => this.listeners.delete(listener);
   }
 
+  private toSnapshot(job: JobRecord): TranslationJobSnapshot {
+    return {
+      id: job.id,
+      bookID: job.bookID,
+      pageNumber: job.pageNumber,
+      status: job.status,
+      completedParts: job.completedParts,
+      totalParts: job.totalParts,
+      ...(job.error ? { error: job.error } : {}),
+      updatedAt: job.updatedAt,
+    };
+  }
+
   list(): TranslationJobSnapshot[] {
     return [...this.jobs.values()]
-      .map(({ controller: _controller, ...job }) => ({ ...job }))
+      .map((job) => this.toSnapshot(job))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   get(id: string): TranslationJobSnapshot | undefined {
     const job = this.jobs.get(id);
-    if (!job) return undefined;
-    const { controller: _controller, ...snapshot } = job;
-    return { ...snapshot };
+    return job ? this.toSnapshot(job) : undefined;
   }
 
   start(input: { id: string; bookID: string; pageNumber: number; totalParts: number }): AbortSignal {
