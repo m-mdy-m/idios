@@ -1751,7 +1751,7 @@ func discussionRoleFocus(agentID string) string {
 	case "tutor":
 		return "Explain one difficult concept or relationship in plain language. Focus on what a key phrase such as 'order and system' does in the argument, not on repeating the page summary. Give one brief example only when it clarifies the idea; preserve all qualifications."
 	case "steelman":
-		return "On an opening turn, reconstruct the strongest fair reading of the author's position and name its key premise. When peers are available, steelman one role-relevant claim before testing that premise. State whether the objection refutes, narrows, or leaves the position intact; do not invent conflict."
+		return "On an opening turn, reconstruct the strongest fair reading of the author's position and name its key premise; do not invent an opposing position or present a hypothetical as the author's view. Preserve explicit negations and qualifications. When a passage separates the importance of material from the reader's freedom to choose a reading path, do not infer that the material is optional, peripheral, or merely an application. When peers are available, steelman one role-relevant claim before testing that premise. State whether the objection refutes, narrows, or leaves the position intact; do not invent conflict."
 	case "concept-connector":
 		return "Find one non-obvious conceptual relationship among supplied passages, earlier pages, or saved notes. Label it supports, contrasts with, defines, or depends on, and cite the relevant source IDs. If the request contains no grounded cross-page connection, say so; never substitute a paraphrase of the previous speaker."
 	case "context-keeper":
@@ -1771,7 +1771,7 @@ func discussionRoleFocus(agentID string) string {
 	case "reviewer":
 		return "Independently evaluate one consequential claim for logical strength. Classify it as supported, partly supported, unclear, or unsupported; identify the exact inference gap and offer the narrowest defensible correction. When peers exist, name the specific claim being reviewed."
 	case "evidence-auditor":
-		return "Audit one exact book-specific claim against the supplied passage. Quote or point to the strongest relevant sentence and cite its exact source marker. Distinguish explicit evidence from inference; missing evidence does not prove the opposite."
+		return "On an opening turn with no peer positions, audit the author's central book-specific claim directly against the supplied passage; do not invent a peer to review. In later turns, audit one exact claim from a named agent. Quote or point to the strongest relevant sentence and cite its exact source marker. Distinguish explicit evidence from inference; missing evidence does not prove the opposite."
 	case "counterexample-tester":
 		return "Test one precise claim with the strongest fair counterexample or boundary case. Label hypothetical examples clearly and state whether the test refutes, narrows, or leaves the claim intact. Never disagree for show."
 	case "code-cartographer":
@@ -1779,7 +1779,7 @@ func discussionRoleFocus(agentID string) string {
 	case "note-writer":
 		return "Extract one concise study insight grounded in the supplied page. Keep any proposed highlight quote exact and contiguous, distinguish the note from the highlight's margin comment, and never claim either was saved without application confirmation."
 	case "discussion-chair":
-		return "You are MIMI, the primary Shelf companion and Chair. With no prior positions, provide a bounded provisional reading; when this is the final turn, compare the actual named positions, weigh source evidence rather than vote counts, preserve valid disagreement, and state what is resolved, narrowed, or still open. Never force consensus."
+		return "You are MIMI, the primary Shelf companion and Chair. With no prior positions, provide a bounded provisional reading; when this is the final turn, compare the actual named positions against the decisive source sentences, not against one another's confidence. Explicitly flag a peer claim that contradicts the page's negation or qualification. When the author separates the importance of material from the reader's freedom to choose a reading path, keep those propositions separate: reading discretion is not evidence that the material is optional, peripheral, or unimportant. Weigh source evidence rather than vote counts, preserve valid disagreement, and state what is resolved, narrowed, or still open. Never force consensus."
 	default:
 		return "Make one distinct contribution that fulfils your configured role. On the opening round, work from the supplied source independently. In later rounds, address the most relevant peer claim, verify it against the source, and add a new reason rather than paraphrasing consensus."
 	}
@@ -2297,6 +2297,9 @@ func discussionHardResponseProblem(content string, allowedSources map[string]boo
 			return "the answer contains a source marker that was not supplied"
 		}
 	}
+	if problem := discussionLogicalForceProblem(trimmed, passages); problem != "" {
+		return problem
+	}
 	return unsupportedSectionReference(trimmed, passages)
 }
 
@@ -2399,8 +2402,46 @@ var namedChapterReference = regexp.MustCompile(`(?i)\bchapters?\s+([ivxlcdm]+|\d
 var sourceChapterReferencePattern = regexp.MustCompile(`(?i)\bchapters?\s+([ivxlcdm]+|\d+)(?:\s*(to|[-–—]|and)\s*([ivxlcdm]+|\d+))?`)
 var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|following|next|other)\s+chapters?\b`)
 
+// discussionLogicalForceProblem catches a narrow contradiction pattern: a source
+// explicitly rejects a downgrade in importance while separately granting reader
+// preference; a model must not turn that preference into optionality. This is a
+// source-triggered guard, not a general semantic truth classifier.
+var discussionDowngradeTerms = []string{"optional", "peripheral", "dispensable", "unimportant", "merely application", "only application"}
+
+func discussionLogicalForceProblem(content string, passages []ContextPassage) string {
+	if len(passages) == 0 { return "" }
+	var source strings.Builder
+	for _, passage := range passages { source.WriteString(passage.Text); source.WriteByte('\n') }
+	sourceText := strings.ToLower(source.String())
+	deniesDowngrade := (strings.Contains(sourceText, "do not mean to suggest") && strings.Contains(sourceText, "peripheral") && strings.Contains(sourceText, "applications")) || strings.Contains(sourceText, "not peripheral")
+	separatesReaderPreference := strings.Contains(sourceText, "preferences") && (strings.Contains(sourceText, "more free") || strings.Contains(sourceText, "free to follow"))
+	if !deniesDowngrade || !separatesReaderPreference { return "" }
+	answer := strings.ToLower(content)
+	for _, term := range discussionDowngradeTerms {
+		start := 0
+		for {
+			index := strings.Index(answer[start:], term)
+			if index < 0 { break }
+			index += start
+			prefixStart := index - 12
+			if prefixStart < 0 { prefixStart = 0 }
+			prefix := strings.TrimSpace(answer[prefixStart:index])
+			if !strings.HasSuffix(prefix, "not") && !strings.HasSuffix(prefix, "never") {
+				return "logical-force contradiction: the passage rejects a peripheral/application-only reading while separately giving readers flexibility to follow their preferences; do not infer that flexibility makes the material optional or unimportant"
+			}
+			start = index + len(term)
+		}
+	}
+	if strings.Contains(answer, "not central") || strings.Contains(answer, "can be skipped") || strings.Contains(answer, "may be skipped") {
+		return "logical-force contradiction: the passage rejects a peripheral/application-only reading while separately giving readers flexibility to follow their preferences; do not infer that flexibility makes the material optional or unimportant"
+	}
+	return ""
+}
 func validateDiscussionOutput(content string, allowedSources map[string]bool, passages []ContextPassage, finalTurn bool) string {
 	if problem := discussionResponseProblem(content, allowedSources, len(passages) > 0, finalTurn); problem != "" {
+		return problem
+	}
+	if problem := discussionLogicalForceProblem(content, passages); problem != "" {
 		return problem
 	}
 	if problem := unsupportedSectionReference(content, passages); problem != "" {
@@ -2505,6 +2546,9 @@ func validateDiscussionOutputWithoutCitationRequirement(content string, allowedS
 		if len(marker) > 1 && !allowedSources[marker[1]] {
 			return "the answer contains a source marker that was not supplied"
 		}
+	}
+	if problem := discussionLogicalForceProblem(trimmed, passages); problem != "" {
+		return problem
 	}
 	return unsupportedSectionReference(trimmed, passages)
 }
@@ -2804,7 +2848,11 @@ func discussionRepairInstruction(reason string, allowedSources map[string]bool, 
 	if finalTurn {
 		words = 110
 	}
-	return fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Copy one exact [source:ID] marker only when making a claim about the supplied text. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
+	instruction := fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Copy one exact [source:ID] marker only when making a claim about the supplied text. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
+	if strings.HasPrefix(reason, "logical-force contradiction:") {
+		instruction += " Preserve the author's exact logical direction: distinguish the importance of material from a reader's freedom to choose a reading path. Do not call the material optional, peripheral, unimportant, or merely an application when the source explicitly rejects that description."
+	}
+	return instruction
 }
 
 var incompleteDiscussionTail = regexp.MustCompile(`(?m)^\s*(?:[0-9]+\.|[-*])\s*$`)
@@ -3111,7 +3159,7 @@ func discussionMessages(req DiscussionRequest, agent AgentDefinition, synthesis 
 	if outputFormat == "" {
 		outputFormat = "Markdown"
 	}
-	systemPrompt := fmt.Sprintf("You are the IDIOS Shelf discussion persona %q. Role: %s. Instructions: %s\nRequired format: %s. You are in an evidence-led live round-table, not writing a standalone answer. HARD RULES: (1) Discuss only the supplied page text, saved annotations, and earlier turns. Never infer unseen chapters or pretend you have web access. (2) Distinguish direct textual evidence, interpretation, and speculation. If evidence is missing, explicitly say it is missing. (3) Never invent quotations, page numbers, or [source:ID] markers; use only exact source IDs supplied in context. (4) When earlier speaker turns are present, respond to one specific claim by a named participant; name them, fairly restate the claim, then agree/disagree/refine it and give a reason. If this is the opening turn and no peer claim exists yet, fulfil your role-specific deliverable independently from the supplied source; a specialist may validly report that no grounded connection, material ambiguity, or fair counterexample exists. Never invent a conversation or disagreement. (5) Do not repeat prior turns or give a generic summary; add one useful new step. (6) Do not ask the reader anything unless you are the final chair at the end of the final round and the answer could change the conclusion. (7) Provide concise public reasoning, never private hidden chain-of-thought. For compact local models, use 3–4 concise sentences and at most 85 words (final chair: 110 words). No headings, numbered lists, introductions, or generic book summaries. Reader notes are interpretations, not authoritative evidence. Never claim to have saved a note or highlight unless IDIOS confirms it.", agent.Name, role, instruction, outputFormat)
+	systemPrompt := fmt.Sprintf("You are the IDIOS Shelf discussion persona %q. Role: %s. Instructions: %s\nRequired format: %s. You are in an evidence-led live round-table, not writing a standalone answer. HARD RULES: (1) Discuss only the supplied page text, saved annotations, and earlier turns. Never infer unseen chapters or pretend you have web access. (2) Distinguish direct textual evidence, interpretation, and speculation. If evidence is missing, explicitly say it is missing. Preserve the direction of explicit negations and qualifications: a claim that material is not peripheral must never be softened into optional or unimportant merely because readers may choose their preferred route. Treat reader discretion and theoretical importance as separate propositions. (3) Never invent quotations, page numbers, or [source:ID] markers; use only exact source IDs supplied in context. (4) When earlier speaker turns are present, respond to one specific claim by a named participant; name them, fairly restate the claim, then agree/disagree/refine it and give a reason. If this is the opening turn and no peer claim exists yet, fulfil your role-specific deliverable independently from the supplied source; a specialist may validly report that no grounded connection, material ambiguity, or fair counterexample exists. Never invent a conversation or disagreement. (5) Do not repeat prior turns or give a generic summary; add one useful new step. (6) Do not ask the reader anything unless you are the final chair at the end of the final round and the answer could change the conclusion. (7) Provide concise public reasoning, never private hidden chain-of-thought. For compact local models, use 3–4 concise sentences and at most 85 words (final chair: 110 words). No headings, numbered lists, introductions, or generic book summaries. Reader notes are interpretations, not authoritative evidence. Never claim to have saved a note or highlight unless IDIOS confirms it.", agent.Name, role, instruction, outputFormat)
 	systemPrompt += "\n\nIDENTITY AND ORIGINALITY: You are only " + agent.Name + ". Never present another agent's name, role, or response as your own. Treat every peer contribution as a claim to inspect, not as evidence. Agreement is not a reason to paraphrase: add a distinct role-specific implication, qualification, or correction; if you have no independent addition, say so plainly."
 	if focus := discussionRoleFocus(agent.ID); focus != "" {
 		systemPrompt += "\n\nROLE-SPECIFIC DELIVERABLE: " + focus
