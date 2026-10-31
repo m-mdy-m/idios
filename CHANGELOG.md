@@ -13,8 +13,6 @@
 - Added an installable PWA shell with an app-shell service worker while keeping API requests network-only.
 - Added Capacitor build targets for Android ABI-specific APKs and iOS device/simulator app bundles, plus post-download mobile artifact checks.
 
-### Fixed
-
 - Let Xcode infer the iOS device/simulator architecture from its generic destination instead of passing a conflicting `-arch` flag; verify the macOS runner architecture before invoking Xcode.
 - Install the Web workspace's pinned TypeScript toolchain in the Capacitor client so `capacitor.config.ts` can be loaded on Android and iOS release runners.
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
