@@ -84,7 +84,7 @@ export function extractReaderPDFText(items: readonly unknown[]): string {
       y: Number.isFinite(y) ? y : 0,
       width: Number.isFinite(width) ? Math.max(0, Math.abs(width)) : 0,
       height,
-      direction: record.dir === 'rtl' ? 'rtl' : 'ltr',
+      direction: record.dir === 'rtl' ? ('rtl' as const) : ('ltr' as const),
       hasEOL: record.hasEOL === true,
       positioned: transform.length >= 6 && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(width),
     };
