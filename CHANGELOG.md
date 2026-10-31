@@ -6,6 +6,15 @@
 
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
 - Show an accurate waiting-for-model status while a discussion agent is generating a response.
+- Reconstruct selectable PDF text from line boundaries and repair words split by end-of-line hyphenation before translation or search.
+- Keep reader translation chunks sequential so local providers are not overloaded, and preserve useful partial output when a provider stream ends before its JSON is complete.
+
+### Changed
+
+- Stream Shelf page translations from AI Runtime into the reader as tokens arrive, with explicit context-loading, first-token, active-part, elapsed-time, and received-text progress.
+- Translate pages in bounded 1,800-character chunks and resume completed chunks from the reader-session cache.
+- Use earlier pages and a compact book glossary for terminology continuity without fetching unrelated notes or annotations for direct page translation.
+- Limit reader translation targets to Persian, English, and Arabic, with fluent-language and philosophical terminology guidance.
 
 ## [3.2.2] - 2026-10-31
 

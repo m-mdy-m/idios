@@ -1,7 +1,95 @@
 import assert from 'node:assert/strict';
-import { mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
+import { extractPartialReaderTranslation, extractReaderPDFText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
+
+const rawPDFItems = [
+  { str: 'The section headings, the remarks that preface each chapter, and the', hasEOL: true },
+  { str: 'index will guide the reader to the contents of the book. It seems superflu-', hasEOL: true },
+  { str: 'ous to comment on this except to say that I have avoided extensive', hasEOL: true },
+  { str: 'methodological discussions. There is a brief consideration of the nature', hasEOL: true },
+  { str: 'of moral theory in §9, and of justification in §4 and §87.', hasEOL: true },
+  { str: 'A short digression on the meaning of “good” is found in §62.', hasEOL: true },
+];
+const extractedRawlsText = extractReaderPDFText(rawPDFItems);
+const rawlsPage21Source = [
+  "The section headings, the remarks that preface each chapter, and the",
+  "index will guide the reader to the contents of the book. It seems superflu-",
+  "ous to comment on this except to say that I have avoided extensive",
+  "methodological discussions. There is a brief consideration of the nature",
+  "of moral theory in §9, and of justification in §4 and §87. A short digres-",
+  "sion on the meaning of “good” is found in §62. Occasionally there are",
+  "methodological comments and asides, but for the most part I try to work",
+  "out a substantive theory of justice. Comparisons and contrasts with other",
+  "theories, and criticisms thereof now and then, especially of utilitarianism,",
+  "are viewed as means to this end.",
+  "",
+  "By not including most of Chapters IV–VIII in the more basic parts of",
+  "the book, I do not mean to suggest that these chapters are peripheral, or",
+  "merely applications. Rather, I believe that an important test of a theory of",
+  "justice is how well it introduces order and system into our considered",
+  "judgments over a wide range of questions. Therefore the topics of these",
+  "chapters need to be taken up, and the conclusions reached modify in turn",
+  "the view proposed. But in this regard the reader is more free to follow his",
+  "preferences and to look at the problems which most concern him.",
+  "",
+  "In writing this book I have acquired many debts in addition to those",
+  "indicated in the text. Some of these I should like to acknowledge here.",
+  "Three different versions of the manuscript have passed among students",
+  "and colleagues, and I have benefited beyond estimation from the innu-",
+  "merable suggestions and criticisms that I have received. I am grateful to",
+  "Allan Gibbard for his criticism of the first version (1964–1965). To meet",
+  "his objections to the veil of ignorance as then presented, it seemed neces-",
+  "sary to include a theory of the good. The notion of primary goods based",
+  "on the conception discussed in Chapter VII is the result. I also owe him",
+  "thanks, along with Norman Daniels, for pointing out difficulties with my",
+  "account of utilitarianism as a basis for individual duties and obligations.",
+  "Their objections led me to eliminate much of this topic and to simplify",
+  "the treatment of this part of the theory. David Diamond objected force-",
+  "fully to my discussion of equality, particularly to its failure to consider",
+  "the relevance of status. I eventually included an account of self-respect as",
+  "a primary good to try to deal with this and other questions, including",
+  "those of society as a social union of social unions and the priority of",
+  "liberty. I had profitable discussions with David Richards on the problems",
+  "of political duty and obligation. Although supererogation is not a central",
+  "topic of the book, I have been helped in my comments on it by Barry",
+].join('\n');
+const fullPageItems = rawlsPage21Source.split('\n').map((str) => ({ str, hasEOL: true }));
+const extractedFullPage = extractReaderPDFText(fullPageItems);
+for (const repaired of ['superfluous', 'digression', 'innumerable', 'necessary', 'forcefully']) {
+  assert.ok(extractedFullPage.includes(repaired), 'PDF extraction must repair the split word: ' + repaired);
+}
+assert.ok(extractedFullPage.includes('by Barry'), 'the last visible line on page 21 must not be dropped');
+const fullPageChunks = splitReaderTranslationText(extractedFullPage, 1800);
+assert.ok(fullPageChunks.length >= 2, 'the complete Rawls page should be split into sequential requests');
+assert.ok(fullPageChunks.every((chunk) => chunk.length <= 1800), 'no Rawls page request may exceed 1,800 source characters');
+assert.equal(fullPageChunks.join(' ').replace(/\s+/g, ' '), extractedFullPage.replace(/\s+/g, ' '), 'all page 21 content must survive chunking');
+assert.equal(parseReaderTranslation('{"translation":"a streamed but incomplete translation', source).translation, 'a streamed but incomplete translation', 'a provider that ends after a useful translation but before closing JSON must not display raw JSON');
+
+assert.ok(extractedRawlsText.includes('superfluous to comment'), 'PDF line-end hyphenation must be rejoined');
+assert.ok(!extractedRawlsText.includes('superflu- ous'), 'line-end hyphenation must not leak into the model prompt');
+assert.ok(extractedRawlsText.includes('methodological discussions.'), 'PDF extraction must retain the complete passage');
+
+const page21Chunks = splitReaderTranslationText(extractedRawlsText, 1800);
+assert.ok(page21Chunks.length >= 1, 'a normal Rawls page should produce at least one bounded request');
+assert.ok(page21Chunks.every((chunk) => chunk.length <= 1800), 'page translation chunks must stay within the 1,800-character budget');
+assert.equal(page21Chunks.join(' ').replace(/\s+/g, ' '), extractedRawlsText.replace(/\s+/g, ' '), 'page chunking must preserve all extracted words');
+
+assert.equal(
+  extractPartialReaderTranslation('{"translation":"The first sentence is already arriving'),
+  'The first sentence is already arriving',
+  'the UI should be able to preview the translation before the JSON response is complete',
+);
+assert.equal(
+  extractPartialReaderTranslation('{"translation":"او گفت: \\"نه\\".\\nسپس رفت.'),
+  'او گفت: "نه".\nسپس رفت.',
+  'the streaming preview must decode JSON quotes and paragraph newlines',
+);
+assert.equal(
+  extractPartialReaderTranslation('{"translation":"عدالت بر اساس ' + '\\u06'),
+  'عدالت بر اساس ',
+  'incomplete Unicode escapes must not appear as broken text',
+);
 const valid = parseReaderTranslation(JSON.stringify({
   translation: 'یک خواننده دقیق استدلال را دنبال می‌کند. نتیجه تضمین‌شده نیست.',
   segments: [

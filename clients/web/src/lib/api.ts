@@ -58,6 +58,96 @@ const json = (method: string, body?: unknown): RequestInit => ({
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
 
+
+type AIChatRequest = {
+  provider_id?: string;
+  model?: string;
+  task?: string;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  temperature?: number;
+  max_tokens?: number;
+  timeout_seconds?: number;
+  reasoning_effort?: 'low' | 'medium' | 'high';
+  privacy_sensitive?: boolean;
+  response_format?: AIResponseFormat;
+};
+
+async function streamAIChat(
+  body: AIChatRequest,
+  onDelta: (text: string) => void,
+): Promise<{ provider_id: string; model: string; content: string; duration_ms: number }> {
+  const startedAt = performance.now();
+  const response = await fetch('/api/ai/chat/stream', {
+    method: 'POST',
+    headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = 'AI request failed (' + response.status + ')';
+    try {
+      const payload = await response.json() as { error?: string | { message?: string }; message?: string };
+      const detail = typeof payload.error === 'string' ? payload.error : payload.error?.message;
+      message = redactLocalPaths(detail || payload.message || message);
+    } catch {
+      // Preserve the HTTP status when the server did not return JSON.
+    }
+    throw new APIError(message, response.status);
+  }
+  if (!response.body) throw new Error('The AI provider opened a stream without a readable response body.');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let providerID = body.provider_id ?? '';
+  let model = body.model ?? '';
+  let completed = false;
+
+  const dispatch = (frame: string) => {
+    let eventName = '';
+    const data: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return;
+    const payloadText = data.join('\n');
+    let payload: Record<string, unknown>;
+    try { payload = JSON.parse(payloadText) as Record<string, unknown>; }
+    catch { throw new Error('The AI stream returned an invalid event.'); }
+
+    if (eventName === 'error' || payload.type === 'error') {
+      const detail = typeof payload.message === 'string' ? payload.message : 'The AI provider stopped before completing the translation.';
+      const code = typeof payload.code === 'string' ? payload.code : 'stream_failed';
+      throw new APIError('[' + code + '] ' + redactLocalPaths(detail), 502);
+    }
+    if (typeof payload.provider_id === 'string') providerID = payload.provider_id;
+    if (typeof payload.model === 'string') model = payload.model;
+    if (payload.type === 'delta' && typeof payload.text === 'string' && payload.text) onDelta(payload.text);
+    if (eventName === 'done' || payload.type === 'done') completed = true;
+  };
+
+  try {
+    while (true) {
+      const part = await reader.read();
+      buffer += decoder.decode(part.value, { stream: !part.done });
+      let boundary = buffer.search(/\r?\n\r?\n/);
+      while (boundary >= 0) {
+        const frame = buffer.slice(0, boundary);
+        const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/)?.[0] ?? '\n\n';
+        buffer = buffer.slice(boundary + separator.length);
+        dispatch(frame);
+        boundary = buffer.search(/\r?\n\r?\n/);
+      }
+      if (part.done) break;
+    }
+    if (buffer.trim()) dispatch(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+  if (!completed) throw new Error('The AI stream ended before the provider confirmed completion. Any received text is still available for retry.');
+  return { provider_id: providerID, model, content: '', duration_ms: Math.round(performance.now() - startedAt) };
+}
+
 export type AIExecutionMode = 'cloud-first' | 'local-first' | 'offline-only';
 export type AIProviderKind = 'openrouter' | 'openai-compatible' | 'ollama' | 'custom-adapter';
 export type AIRuntimeConfig = {
@@ -173,6 +263,7 @@ export const api = {
   refreshAIModels: (providerID: string) => request<{ models: AIModel[]; provider_id: string; last_refresh?: string }>('/api/ai/models/refresh', json('POST', { provider_id: providerID })),
   testAIModel: (providerID: string, modelID: string) => request<AIModel>('/api/ai/models/test', json('POST', { provider_id: providerID, model_id: modelID })),
   aiChat: (body: { provider_id?: string; model?: string; task?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; max_tokens?: number; timeout_seconds?: number; reasoning_effort?: 'low' | 'medium' | 'high'; privacy_sensitive?: boolean; response_format?: AIResponseFormat }) => request<{ provider_id: string; model: string; content: string; duration_ms: number }>('/api/ai/chat', json('POST', body)),
+  aiChatStream: streamAIChat,
   createAITask: (body: { provider_id?: string; model?: string; task?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; max_tokens?: number; timeout_seconds?: number; privacy_sensitive?: boolean; response_format?: AIResponseFormat }) => request<AITask>('/api/ai/tasks', json('POST', body)),
   aiTasks: () => request<AITask[]>('/api/ai/tasks'),
   aiTask: (id: string) => request<AITask>(`/api/ai/tasks/${encodeURIComponent(id)}`),
