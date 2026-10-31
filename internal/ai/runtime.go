@@ -1177,7 +1177,13 @@ func (m *Manager) generateWith(parent context.Context, cfg ProviderConfig, req G
 	if err := m.checkProviderExecutionPolicy(cfg, req); err != nil {
 		return GenerateResponse{}, err
 	}
-	provider, err := newProvider(cfg)
+	m.mu.RLock()
+	providerFactory := m.providerFactory
+	m.mu.RUnlock()
+	if providerFactory == nil {
+		providerFactory = newProvider
+	}
+	provider, err := providerFactory(cfg)
 	if err != nil {
 		return GenerateResponse{}, err
 	}
