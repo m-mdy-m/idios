@@ -60,7 +60,7 @@ timeout_seconds = 900
 [tasks.ai-agent-model-integration]
 description = "Pull the local Qwen model with Ollama and run the real sequential Shelf discussion integration test"
 command = ["bash", "scripts/test-ai-agent-ollama.sh"]
-timeout_seconds = 1200
+timeout_seconds = 1800
 
 [tasks.ci]
 description = "Run the complete IDIOS CI task graph"
