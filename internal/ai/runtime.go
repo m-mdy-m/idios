@@ -66,7 +66,7 @@ const (
 	// Small local models may need a cold-start/warm-up window before generating.
 	// The overall workflow timeout remains the upper bound for the complete discussion.
 	minimumLocalDiscussionTimeoutSeconds = 240
-	maximumDiscussionTurnTimeoutSeconds = 600
+	maximumDiscussionTurnTimeoutSeconds  = 600
 )
 
 var sourceMarker = regexp.MustCompile(`\[source:([^\]\s]+)\]`)

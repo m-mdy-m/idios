@@ -2038,9 +2038,9 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		}
 	}
 	result, err := manager.runDiscussion(ctx, DiscussionRequest{
-		BookID: "rawls-a-theory-of-justice",
+		BookID:    "rawls-a-theory-of-justice",
 		BookTitle: "A Theory of Justice: Revised Edition",
-		Question: "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, respond to the preceding agents, and preserve the qualification that readers may follow their preferences.",
+		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, respond to the preceding agents, and preserve the qualification that readers may follow their preferences.",
 		PageStart: 21, PageEnd: 21,
 		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
