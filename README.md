@@ -4,7 +4,7 @@
 
 <p align="center">A local-first workspace for learning, planning, and development.</p>
 
-IDIOS brings your projects, repositories, issues, reading library, notes, plans, and AI tools into one private workspace. It runs on your computer and gives you two ways to work: a command-line interface and a local web interface.
+IDIOS brings your projects, repositories, issues, reading library, notes, plans, and AI tools into one private workspace. It provides a command-line interface and a Web workspace that can be installed as a PWA; optional Android and iOS shells connect to an HTTPS IDIOS deployment.
 
 > IDIOS is an application, not an operating-system kernel. “Work OS” describes the workspace it provides.
 
@@ -54,6 +54,10 @@ idios version
 idios repo create --name "Learning Lab"
 idios repo list
 ```
+
+## Mobile and PWA
+
+The Web client includes an installable PWA shell. Android and iOS Capacitor build targets are available for device-specific packaging. Native builds require `IDIOS_MOBILE_SERVER_URL` to point to an HTTPS IDIOS deployment protected by your authentication/reverse-proxy layer. The current Go service remains loopback-only and is not embedded into the mobile shell. See [Mobile and PWA](docs/user/mobile.md) before building or distributing a mobile package.
 
 ## What can I do with IDIOS?
 

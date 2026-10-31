@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an installable PWA shell with an app-shell service worker while keeping API requests network-only.
+- Added Capacitor build targets for Android ABI-specific APKs and iOS device/simulator app bundles, plus post-download mobile artifact checks.
+
+### Changed
+
+- Added mobile release targets and user-selectable E2E setup/test commands to the shared Pipeline release contract; native clients require an HTTPS IDIOS endpoint and do not weaken the loopback-only backend default.
+
+## [Unreleased]
+
 ### Fixed
 
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.

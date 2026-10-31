@@ -11,6 +11,7 @@
     "build": "node scripts/check-feature-boundaries.mjs && node scripts/check-service-boundaries.mjs && node scripts/check-reading-skills.mjs && node --experimental-strip-types scripts/check-agent-discussion.mjs && node --experimental-strip-types scripts/check-study-actions.mjs && node --experimental-strip-types scripts/check-reader-translation.mjs && node scripts/copy-pdfjs-assets.mjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --host 127.0.0.1",
+    "build:pwa": "pnpm run build",
     "check:architecture": "node scripts/check-feature-boundaries.mjs && node scripts/check-service-boundaries.mjs",
     "check:study-actions": "node --experimental-strip-types scripts/check-study-actions.mjs"
   },

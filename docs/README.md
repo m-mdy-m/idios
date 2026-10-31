@@ -16,6 +16,7 @@ IDIOS is a local workspace for learning and development. You can use it from the
 | If you want to… | Read |
 |---|---|
 | Install IDIOS and open the workspace | [Getting started](user/getting-started.md) |
+| Install IDIOS as a PWA or build Android/iOS clients | [Mobile and PWA](user/mobile.md) |
 | Understand Repositories, Issues, Projects, and Pull Requests | [Workspace guide](user/workspace.md) |
 | Add books, filter your library, and read PDFs | [Shelf guide](user/shelf.md) |
 | Add AI providers and refresh one provider's models | [AI guide](user/ai.md) |

@@ -11,6 +11,16 @@ on:
         required: false
         type: boolean
         default: false
+      e2e-setup-command:
+        description: Optional command to boot the target emulator/simulator or prepare the native E2E environment
+        required: false
+        type: string
+        default: ""
+      e2e-test-command:
+        description: Optional command that installs/launches the downloaded app and runs native E2E tests
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -36,12 +46,24 @@ jobs:
       changelog-path: CHANGELOG.md
       # `inputs` exists only for workflow_dispatch; tag pushes must publish.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true' }}
+      e2e-setup-command: ${{ inputs.e2e-setup-command }}
+      e2e-test-command: ${{ inputs.e2e-test-command }}
       build-matrix-json: >-
         {"include":[
-          {"id":"linux-amd64","os":"ubuntu-24.04","test_command":"bash scripts/release/verify.sh linux-amd64","build_command":"bash scripts/release/build.sh linux-amd64","artifact_path":"dist/release/*"},
-          {"id":"linux-arm64","os":"ubuntu-24.04-arm","test_command":"bash scripts/release/verify.sh linux-arm64","build_command":"bash scripts/release/build.sh linux-arm64","artifact_path":"dist/release/*"},
-          {"id":"darwin-amd64","os":"macos-15-intel","test_command":"bash scripts/release/verify.sh darwin-amd64","build_command":"bash scripts/release/build.sh darwin-amd64","artifact_path":"dist/release/*"},
-          {"id":"darwin-arm64","os":"macos-15","test_command":"bash scripts/release/verify.sh darwin-arm64","build_command":"bash scripts/release/build.sh darwin-arm64","artifact_path":"dist/release/*"},
-          {"id":"windows-amd64","os":"windows-2025","test_command":"bash scripts/release/verify.sh windows-amd64","build_command":"bash scripts/release/build.sh windows-amd64","artifact_path":"dist/release/*","artifact_test_command":"pwsh -NoProfile -File scripts/release/test-artifacts.ps1","msys2_msystem":"UCRT64","msys2_packages":"mingw-w64-ucrt-x86_64-gcc"},
-          {"id":"windows-arm64","os":"windows-11-arm","test_command":"bash scripts/release/verify.sh windows-arm64","build_command":"bash scripts/release/build.sh windows-arm64","artifact_path":"dist/release/*","artifact_test_command":"pwsh -NoProfile -File scripts/release/test-artifacts.ps1","msys2_msystem":"CLANGARM64","msys2_packages":"mingw-w64-clang-aarch64-clang"}
+          {"id":"linux-amd64","os":"ubuntu-24.04","target_os":"linux","architecture":"x86_64","platform":"desktop","test_command":"bash scripts/release/verify.sh linux-amd64","build_command":"bash scripts/release/build.sh linux-amd64","artifact_path":"dist/release/*"},
+          {"id":"linux-arm64","os":"ubuntu-24.04-arm","target_os":"linux","architecture":"aarch64","platform":"desktop","test_command":"bash scripts/release/verify.sh linux-arm64","build_command":"bash scripts/release/build.sh linux-arm64","artifact_path":"dist/release/*"},
+          {"id":"darwin-amd64","os":"macos-15-intel","target_os":"macos","architecture":"x86_64","platform":"desktop","test_command":"bash scripts/release/verify.sh darwin-amd64","build_command":"bash scripts/release/build.sh darwin-amd64","artifact_path":"dist/release/*"},
+          {"id":"darwin-arm64","os":"macos-15","target_os":"macos","architecture":"arm64","platform":"desktop","test_command":"bash scripts/release/verify.sh darwin-arm64","build_command":"bash scripts/release/build.sh darwin-arm64","artifact_path":"dist/release/*"},
+          {"id":"windows-amd64","os":"windows-2025","target_os":"windows","architecture":"x86_64","platform":"desktop","test_command":"bash scripts/release/verify.sh windows-amd64","build_command":"bash scripts/release/build.sh windows-amd64","artifact_path":"dist/release/*","artifact_test_command":"pwsh -NoProfile -File scripts/release/test-artifacts.ps1","msys2_msystem":"UCRT64","msys2_packages":"mingw-w64-ucrt-x86_64-gcc"},
+          {"id":"windows-arm64","os":"windows-11-arm","target_os":"windows","architecture":"arm64","platform":"desktop","test_command":"bash scripts/release/verify.sh windows-arm64","build_command":"bash scripts/release/build.sh windows-arm64","artifact_path":"dist/release/*","artifact_test_command":"pwsh -NoProfile -File scripts/release/test-artifacts.ps1","msys2_msystem":"CLANGARM64","msys2_packages":"mingw-w64-clang-aarch64-clang"},
+          {"id":"pwa-web","os":"ubuntu-24.04","target_os":"web","architecture":"any","platform":"pwa","test_command":"bash scripts/release/verify-mobile.sh pwa-web","build_command":"bash scripts/release/build.sh pwa-web","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"android-armeabi-v7a","os":"ubuntu-24.04","target_os":"android","architecture":"arm","abi":"armeabi-v7a","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh android-armeabi-v7a","build_command":"bash scripts/release/build.sh android-armeabi-v7a","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"android-arm64-v8a","os":"ubuntu-24.04","target_os":"android","architecture":"arm64","abi":"arm64-v8a","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh android-arm64-v8a","build_command":"bash scripts/release/build.sh android-arm64-v8a","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"android-x86","os":"ubuntu-24.04","target_os":"android","architecture":"x86","abi":"x86","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh android-x86","build_command":"bash scripts/release/build.sh android-x86","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"android-x86_64","os":"ubuntu-24.04","target_os":"android","architecture":"x86_64","abi":"x86_64","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh android-x86_64","build_command":"bash scripts/release/build.sh android-x86_64","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"ios-arm64","os":"macos-15","target_os":"ios","architecture":"arm64","abi":"device","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh ios-arm64","build_command":"bash scripts/release/build.sh ios-arm64","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"ios-simulator-arm64","os":"macos-15","target_os":"ios-simulator","architecture":"arm64","abi":"simulator","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh ios-simulator-arm64","build_command":"bash scripts/release/build.sh ios-simulator-arm64","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"},
+          {"id":"ios-simulator-x86_64","os":"macos-15-intel","target_os":"ios-simulator","architecture":"x86_64","abi":"simulator","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh ios-simulator-x86_64","build_command":"bash scripts/release/build.sh ios-simulator-x86_64","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"}
         ]}
+    secrets:
+      mobile-server-url: ${{ secrets.IDIOS_MOBILE_SERVER_URL }}
