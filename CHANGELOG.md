@@ -9,17 +9,17 @@
 
 ### Fixed
 
-- Bound each sequential Shelf discussion turn by its provider timeout, with a four-minute minimum for local models to cover cold starts and one repair attempt; the workflow deadline remains the overall cap.
-- Give the discussion repair prompt the exact names and claims of completed peers, and retain complete contributions with explicit quality warnings when only word-budget, citation, or peer-attribution checks remain unsatisfied.
-- Keep hard evidence failures strict: empty/unfinished responses, unknown source IDs, and chapter/section references absent from the supplied page are still rejected.
-- Preserve independently requested Shelf note and highlight actions; use the reader's exact selected phrase as the authoritative highlight anchor.
-- Add a Rawls page-21 fixture, mixed note/highlight contract checks, and a shared-Pipeline task that downloads Qwen 2.5 3B through Ollama, runs the real sequential four-agent discussion, and verifies a MIMI-generated standalone note plus the exact reader-selected highlight anchor.
+- Let Xcode infer the iOS device/simulator architecture from its generic destination instead of passing a conflicting `-arch` flag; verify the macOS runner architecture before invoking Xcode.
+- Install the Web workspace's pinned TypeScript toolchain in the Capacitor client so `capacitor.config.ts` can be loaded on Android and iOS release runners.
+- Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
 - Show an accurate waiting-for-model status while a discussion agent is generating a response.
 - Reconstruct selectable PDF text from line boundaries and repair words split by end-of-line hyphenation before translation or search.
 - Keep reader translation chunks sequential so local providers are not overloaded, and preserve useful partial output when a provider stream ends before its JSON is complete.
 
 ### Changed
 
+- Run the complete Linux, macOS, Windows, PWA, Android ABI, and iOS device/simulator build matrix as a non-publishing dry-run on every branch push; publish a GitHub Release only for `v*` tag pushes.
+- Use a reserved `.invalid` HTTPS endpoint for mobile dry-runs so branch builds do not require production deployment credentials; real tag releases continue to require `IDIOS_MOBILE_SERVER_URL`.
 - Stream Shelf page translations from AI Runtime into the reader as tokens arrive, with explicit context-loading, first-token, active-part, elapsed-time, and received-text progress.
 - Translate pages in bounded 1,800-character chunks and resume completed chunks from the reader-session cache.
 - Use earlier pages and a compact book glossary for terminology continuity without fetching unrelated notes or annotations for direct page translation.
