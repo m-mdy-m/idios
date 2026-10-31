@@ -175,8 +175,8 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     try {
       await activateNotificationAudio();
       await playPlanReminderDemo();
-      if (!soundEnabled) setNotice('Sound is currently disabled. Turn it on to hear the final plan alarm.');
-      else setNotice('Played the final IDIOS plan alarm preview. This is the loudest of the three reminder stages.');
+      if (!soundEnabled) setNotice('Notification sound is muted. Turn it on to preview the chime.');
+      else setNotice('Played the gentle IDIOS notification chime.');
     } finally { setTestingSound(false); }
   }
 
@@ -424,14 +424,14 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
               <Field label="Midday" hint="A kind check-in"><input type="time" required value={config.notifications.plan_reminders?.midday_time || '13:00'} onChange={(event) => patchPlanReminders({ midday_time: event.target.value })} /></Field>
               <Field label="Evening" hint="Close the day"><input type="time" required value={config.notifications.plan_reminders?.evening_time || '20:30'} onChange={(event) => patchPlanReminders({ evening_time: event.target.value })} /></Field>
             </div>
-            <div className="settings-subsection-heading"><span className="settings-heading-icon"><Volume2 size={16} /></span><div><h3>Notification sound</h3><p>Plan reminders use three escalating, original action-style alerts: at reminder time, 5 seconds later, and a final warning 15 seconds after the second alert. The last stage layers synthetic impact, crack and ricochet effects with an urgent generated voice; it does not copy a specific actor or movie character. Browser audio requires a user interaction and an open IDIOS tab.</p></div></div>
-            <ToggleSetting title="Play a sound for new notifications" description="Includes plan reminders and other new inbox notifications. This preference is saved in this browser." checked={soundEnabled} onChange={toggleNotificationSound} />
+            <div className="settings-subsection-heading"><span className="settings-heading-icon"><Volume2 size={16} /></span><div><h3>Notification sound</h3><p>New inbox updates play a short, warm three-note chime. Plan reminders use a slightly longer variation of the same sound. Audio is generated locally in your browser, stays gentle at every volume setting, and requires an open IDIOS tab after a user interaction.</p></div></div>
+            <ToggleSetting title="Play a sound for new notifications" description="A soft, short chime for new inbox updates and plan reminders. This preference is saved in this browser." checked={soundEnabled} onChange={toggleNotificationSound} />
             <div className="settings-sound-volume">
               <label htmlFor="idios-notification-volume"><span>Alert volume</span><strong>{Math.round(soundVolume * 100)}%</strong></label>
               <input id="idios-notification-volume" type="range" min="0" max="1" step="0.05" value={soundVolume} onChange={(event) => { const next = Number(event.target.value); setSoundVolume(next); setNotificationSoundVolume(next); }} aria-label="Notification alert volume" />
-              <small>Three escalating IDIOS alarm stages · final stage is intentionally busy and sharp. Keep a comfortable level for your speakers or headphones.</small>
+              <small>A few soft bell-like notes, with no speech, alarm bursts, or sudden loud peaks.</small>
             </div>
-            <div className="settings-reminder-actions settings-notification-actions"><Button type="button" variant="secondary" onClick={() => void testNotificationSound()} loading={testingSound}>{soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />} <Play size={13}/> Preview final alarm</Button><Button type="button" variant="secondary" onClick={() => void requestBrowserNotifications()} disabled={browserPermission === 'granted' || browserPermission === 'unsupported'}><BellRing size={14}/>{browserPermission === 'granted' ? 'Browser alerts enabled' : browserPermission === 'denied' ? 'Browser alerts blocked' : browserPermission === 'unsupported' ? 'Browser alerts unavailable' : 'Allow browser alerts'}</Button><span>{soundEnabled ? 'Sound enabled in this browser' : 'Sound muted'}</span></div>
+            <div className="settings-reminder-actions settings-notification-actions"><Button type="button" variant="secondary" onClick={() => void testNotificationSound()} loading={testingSound}>{soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />} <Play size={13}/> Preview chime</Button><Button type="button" variant="secondary" onClick={() => void requestBrowserNotifications()} disabled={browserPermission === 'granted' || browserPermission === 'unsupported'}><BellRing size={14}/>{browserPermission === 'granted' ? 'Browser alerts enabled' : browserPermission === 'denied' ? 'Browser alerts blocked' : browserPermission === 'unsupported' ? 'Browser alerts unavailable' : 'Allow browser alerts'}</Button><span>{soundEnabled ? 'Sound enabled in this browser' : 'Sound muted'}</span></div>
 
             <div className="settings-subsection-heading"><span className="settings-heading-icon"><Sparkles size={16} /></span><div><h3>Quote of the moment</h3><p>Random quote reminders are scheduled by the Go background service.</p></div></div>
             <ToggleSetting title="Enable random quote reminders" description="Save a quote to your IDIOS inbox at a random interval." checked={Boolean(reminder.enabled)} onChange={(value) => patchQuoteReminders({ enabled: value }, true)} />
