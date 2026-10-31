@@ -44,7 +44,8 @@ export type MascotDrag = { pointerID: number; startX: number; startY: number; or
 export type RequestedBookHighlight = { quote: string; note: string; page?: number; color?: 'yellow' | 'green' | 'blue' | 'pink' | 'purple' };
 export type RequestedBookAction =
   | ({ type: 'highlight' } & RequestedBookHighlight)
-  | { type: 'note'; title: string; content: string; labels?: string[] };
+  | { type: 'note'; title: string; content: string; labels?: string[] }
+  | { type: 'quote'; text: string; author?: string; source?: string; source_url?: string; category?: string };
 export type ApplyBookHighlightsResult = { saved: string[]; failed: Array<{ quote: string; reason: string }> };
 export type Props = { bookID: string; bookTitle: string; pageNumber: number; pageText: string; selectedText: string; hoveredText: string; displayMode: DisplayMode; onOpenChat?: (prompt?: string) => void; onBackToReading?: () => void; onOpenModels?: () => void; onBackToChat?: () => void; onCloseInlineChat?: () => void; onApplyBookHighlights?: (marks: RequestedBookHighlight[]) => Promise<ApplyBookHighlightsResult>; onGetDocumentContext?: (pageNumber: number) => Promise<string>; initialPrompt?: string; initialSettingsOpen?: boolean; quietMode?: boolean };
 export type PromptMode = { label: string; icon: LucideIcon; prompt: string };

@@ -5,13 +5,15 @@ import {
   isBookMutationRequest,
   isExplicitBookNoteRequest,
   isExplicitHighlightRequest,
+  isExplicitQuoteRequest,
   parseBookActionResponse,
 } from '../src/features/shelf/model/study-actions.ts';
 
 assert.equal(isExplicitHighlightRequest('Highlight this passage'), true);
 assert.equal(isExplicitHighlightRequest('این عبارت رو هایلایت کن'), true);
-assert.equal(isExplicitHighlightRequest('Please quote this exact passage'), true);
-assert.equal(isExplicitHighlightRequest('لطفاً یک نقل قول از این بخش استخراج کن'), true);
+assert.equal(isExplicitQuoteRequest('Please quote this exact passage'), true);
+assert.equal(isExplicitQuoteRequest('لطفاً یک نقل قول از این بخش استخراج کن'), true);
+assert.equal(isExplicitHighlightRequest('Please quote this exact passage'), false);
 assert.equal(isExplicitBookNoteRequest('Please save a note about this page'), true);
 assert.equal(isExplicitBookNoteRequest('برای این بخش یک یادداشت بنویس'), true);
 assert.equal(isBookMutationRequest('What does this highlighted sentence mean?'), false);
@@ -31,8 +33,12 @@ const quoted = parseBookActionResponse(
   4,
 );
 assert.equal(quoted.actions.length, 1);
-assert.equal(quoted.actions[0].type, 'highlight', 'a model quote action must be kept as a PDF annotation');
-assert.equal(quoted.actions[0].quote, 'an exact sentence from this page');
+assert.equal(quoted.actions[0].type, 'quote', 'a model quote action must become a Quotes-library record');
+assert.equal(quoted.actions[0].text, 'an exact sentence from this page');
+
+const legacyQuote = parseBookActionResponse('QUOTE: “A line worth keeping.”', 4);
+assert.equal(legacyQuote.actions[0]?.type, 'quote', 'legacy QUOTE labels must not be misread as PDF highlights');
+assert.equal(legacyQuote.actions[0]?.text, 'A line worth keeping.');
 
 const note = parseBookActionResponse(
   'I made a useful note.\n<idios_book_actions>{"actions":[{"type":"note","title":"Key point","content":"A saved learning note.","labels":["reading"]}]}</idios_book_actions>',
@@ -92,6 +98,8 @@ assert.equal(assistantSource.includes('fitShelfRuntimeMessages(['), true, 'the r
 assert.equal(assistantSource.includes('if (separateNote && promptAskedForNote) annotationNote = separateNote.content;'), false, 'the standalone note must not overwrite the margin explanation');
 assert.equal(assistantSource.includes('A highlight persistence failure must not prevent a separately requested'), true);
 assert.equal(assistantSource.includes('needsNoteAction'), true, 'partial action envelopes must retry missing book notes');
+assert.equal(assistantSource.includes('needsQuoteAction'), true, 'partial action envelopes must retry missing Quotes actions');
+assert.equal(assistantSource.includes('api.createQuote'), true, 'quotes must persist through the Quotes feature API');
 assert.equal(assistantSource.includes('focused retry'), true, 'missing notes must be reported rather than claimed saved');
 assert.equal(assistantSource.indexOf('for (const action of noteActions)') > assistantSource.indexOf('A highlight persistence failure must not prevent a separately requested'), true);
 
