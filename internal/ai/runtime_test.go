@@ -1904,6 +1904,57 @@ func TestDiscussionOpeningPromptUsesRoleSpecificDeliverableWithoutForcingAnInter
 	}
 }
 
+func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinction(t *testing.T) {
+	source := `By not including most of Chapters IV–VIII in the more basic parts of the book, I do not mean to suggest that these chapters are peripheral, or merely applications. Rather, I believe that an important test of a theory of justice is how well it introduces order and system into our considered judgments over a wide range of questions. Therefore the topics of these chapters need to be taken up, and the conclusions reached modify in turn the view proposed. But in this regard the reader is more free to follow his preferences and to look at the problems which most concern him.`
+	passages := []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: source}}
+	bad := "Rawls treats Chapters IV–VIII as optional reading because readers may follow their preferences. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(bad, passages); problem == "" {
+		t.Fatal("reader preference was incorrectly allowed to downgrade chapters the source explicitly says are not peripheral")
+	}
+	contradictory := "Rawls says Chapters IV–VIII are not peripheral, but they are optional reading. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(contradictory, passages); problem == "" {
+		t.Fatal("a contrast that reverses the source's explicit qualification was accepted")
+	}
+	faithful := "Rawls says Chapters IV–VIII are not peripheral, or merely applications; the reader's freedom concerns which problems to approach first, not the chapters' importance. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(faithful, passages); problem != "" {
+		t.Fatalf("the source's own negated alternatives were incorrectly flagged: %s", problem)
+	}
+	negated := "The passage does not call Chapters IV–VIII optional; it explicitly rejects a peripheral reading. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(negated, passages); problem != "" {
+		t.Fatalf("a correctly negated downgrade was rejected: %s", problem)
+	}
+	unrelated := []ContextPassage{{ID: "page-1", Text: "The reader may follow personal preferences when choosing which examples to examine."}}
+	if problem := discussionLogicalForceProblem(bad, unrelated); problem != "" {
+		t.Fatalf("the page-specific logical-force guard leaked into an unrelated passage: %s", problem)
+	}
+}
+
+func TestDiscussionLogicalForceRepairInstructionExplainsTheExactDistinction(t *testing.T) {
+	reason := "logical-force contradiction: the source rejects a peripheral reading while separately granting reader preference"
+	instruction := discussionRepairInstruction(reason, map[string]bool{"rawls-page-21": true}, false, false)
+	for _, required := range []string{"distinguish the importance of material", "reader's freedom to choose a reading path", "Do not call the material optional"} {
+		if !strings.Contains(instruction, required) {
+			t.Errorf("logical-force repair instruction is missing %q: %s", required, instruction)
+		}
+	}
+}
+
+func TestReaderClaimsRequireAnExactSuppliedSourceMarker(t *testing.T) {
+	passages := []ContextPassage{{ID: "page-21", Page: 21, Text: "A theory of justice should introduce order and system into considered judgments."}}
+	allowed := map[string]bool{"page-21": true}
+	claim := "Rawls's central test is whether a theory can organize considered judgments across many questions."
+	if problem := validateDiscussionContribution(claim, allowed, passages, nil, "reader", false); problem != missingCitationProblem {
+		t.Fatalf("Reader's uncited page claim = %q, want missing-citation repair", problem)
+	}
+	grounded := claim + " [source:page-21]"
+	if problem := validateDiscussionContribution(grounded, allowed, passages, nil, "reader", false); problem != "" {
+		t.Fatalf("Reader's correctly cited claim was rejected: %s", problem)
+	}
+	limitation := "The supplied context does not establish what the later chapters contain."
+	if problem := validateDiscussionContribution(limitation, allowed, passages, nil, "reader", false); problem != "" {
+		t.Fatalf("a transparent evidence limitation should not require a citation: %s", problem)
+	}
+}
 func TestDiscussionOpeningIndependenceBoundary(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -2156,7 +2207,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	if err := manager.UpdateRuntimeConfig(config); err != nil {
 		t.Fatalf("configure local-only discussion runtime: %v", err)
 	}
-	agentIDs := []string{"reader", "tutor", "steelman", "discussion-chair"}
+	agentIDs := []string{"reader", "tutor", "steelman", "evidence-auditor", "discussion-chair"}
 	assigned := map[string]bool{}
 	for _, agent := range manager.Agents() {
 		if !containsString(agentIDs, agent.ID) {
@@ -2176,7 +2227,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	result, err := manager.runDiscussion(ctx, DiscussionRequest{
 		BookID:    "rawls-a-theory-of-justice",
 		BookTitle: "A Theory of Justice: Revised Edition",
-		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, and preserve the qualification that readers may follow their preferences. Each specialist should provide an independent role-specific opening analysis; MIMI should evaluate the completed positions.",
+		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, and preserve the qualification that readers may follow their preferences without treating reading choice as a judgement of importance. Each specialist should provide an independent role-specific opening analysis; Reader and Evidence Auditor must cite the exact supplied source marker; MIMI must check every position against the decisive wording.",
 		PageStart: 21, PageEnd: 21,
 		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
@@ -2194,6 +2245,12 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		t.Logf("round=%d agent=%s model=%s/%s status=%s warnings=%v\n%s",
 			contribution.Round, contribution.AgentName, contribution.ProviderID, contribution.Model,
 			contribution.Status, contribution.Warnings, contribution.Content)
+		if problem := discussionLogicalForceProblem(contribution.Content, []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: string(page)}}); problem != "" {
+			t.Errorf("agent %s reversed an explicit source qualification: %s; output=%q", contribution.AgentName, problem, contribution.Content)
+		}
+		if contribution.AgentID == "reader" && !sourceMarker.MatchString(contribution.Content) {
+			t.Errorf("Reader did not ground the central page claim with an exact supplied source marker: %q warnings=%v", contribution.Content, contribution.Warnings)
+		}
 		// The fresh first-round specialist pass is deliberately independent; only
 		// MIMI receives those positions in a one-round discussion. Later rounds and
 		// resumed sessions are peer-facing, so keep the name/position check there.
