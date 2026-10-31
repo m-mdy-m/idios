@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { extractPartialReaderTranslation, extractReaderPDFText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
+const readerPageSource = await readFile(new URL('../src/features/shelf/ShelfPDFReaderPage.tsx', import.meta.url), 'utf8');
+assert.ok(!/task:\s*'translation',[\s\S]{0,100}reasoning_effort\s*:/.test(readerPageSource), 'Shelf translation must not force a reasoning/thinking request on the selected model.');
 const rawlsTitlePage = [
   'A THEORY OF JUSTICE',
   'Revised Edition',

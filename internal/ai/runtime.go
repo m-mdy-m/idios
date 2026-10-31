@@ -1175,6 +1175,18 @@ func (m *Manager) checkProviderExecutionPolicy(cfg ProviderConfig, req GenerateR
 	return nil
 }
 
+func normalizeReasoningForModel(req GenerateRequest, supportsReasoning bool) GenerateRequest {
+	// Translation is a fidelity task, not a hidden-reasoning task. Never send a
+	// thinking flag for translation, even when the selected model supports it.
+	// Unsupported reasoning features degrade to ordinary generation rather than
+	// turning a useful request into a provider failure.
+	if strings.EqualFold(strings.TrimSpace(req.Task), "translation") || !supportsReasoning {
+		req.ReasoningEffort = ""
+		req.DisableThinking = false
+	}
+	return req
+}
+
 func (m *Manager) generateWith(parent context.Context, cfg ProviderConfig, req GenerateRequest, model string) (GenerateResponse, error) {
 	if err := m.checkProviderExecutionPolicy(cfg, req); err != nil {
 		return GenerateResponse{}, err
@@ -1200,6 +1212,7 @@ func (m *Manager) generateWith(parent context.Context, cfg ProviderConfig, req G
 		return GenerateResponse{}, err
 	}
 	req.Model = model
+	req = normalizeReasoningForModel(req, m.modelSupportsReasoning(cfg.ID, model))
 	return provider.Generate(ctx, req)
 }
 
@@ -1327,6 +1340,7 @@ func (m *Manager) Stream(ctx context.Context, req GenerateRequest, emit func(Str
 		return err
 	}
 	req.Model = model
+	req = normalizeReasoningForModel(req, m.modelSupportsReasoning(cfg.ID, model))
 	if err := emit(StreamEvent{Type: "start", ProviderID: cfg.ID, Model: model}); err != nil {
 		return err
 	}
@@ -1724,41 +1738,41 @@ func (m *Manager) DeleteAgent(id string) error {
 func discussionRoleFocus(agentID string) string {
 	switch agentID {
 	case "reader":
-		return "Find the page's central argumentative move and its strongest exact support. Preserve explicit negations, contrasts, and qualifications; do not turn a rejected reading into the author's conclusion."
+		return "Close-read the supplied page: state its central argumentative move, identify the decisive sentence or qualification, and cite it exactly. Separate the author's explicit claim from inference. Do not turn a rejected interpretation into the author's conclusion."
 	case "tutor":
-		return "Explain one difficult relationship or implication in plain language. Do not merely paraphrase the latest speaker or Chair; add a distinct clarification and preserve the author's qualifications."
+		return "Explain one difficult concept or relationship in plain language. Focus on what a key phrase such as 'order and system' does in the argument, not on repeating the page summary. Give one brief example only when it clarifies the idea; preserve all qualifications."
 	case "steelman":
-		return "Reconstruct the strongest fair version of one actual peer claim before testing its key premise. State whether the objection refutes, narrows, or leaves the claim intact."
+		return "On an opening turn, reconstruct the strongest fair reading of the author's position and name its key premise. When peers are available, steelman one role-relevant claim before testing that premise. State whether the objection refutes, narrows, or leaves the position intact; do not invent conflict."
 	case "concept-connector":
-		return "Connect concepts only through relationships actually present in supplied passages or notes. Label the relationship; when no grounded cross-page connection exists, say so rather than inventing one."
+		return "Find one non-obvious conceptual relationship among supplied passages, earlier pages, or saved notes. Label it supports, contrasts with, defines, or depends on, and cite the relevant source IDs. If the request contains no grounded cross-page connection, say so; never substitute a paraphrase of the previous speaker."
 	case "context-keeper":
-		return "Track the precise unresolved claim, accepted correction, and strongest remaining reason. Advance one unresolved issue and identify repetition that adds no evidence."
+		return "Track the live issue: the strongest claim, its strongest objection, accepted corrections, and what remains unresolved. Point out repeated reasoning that adds no evidence. Give the next useful issue to test; do not recap the whole discussion."
 	case "example-builder":
-		return "Use one short hypothetical example only to clarify an abstract point, then state where the analogy stops. Never present the example as evidence from the book."
+		return "Make one abstract idea concrete with a short hypothetical example, then state exactly where the analogy stops matching. The example explains an idea; it is never evidence from the book. Withdraw or refine it when a peer exposes a mismatch."
 	case "socratic-questioner":
-		return "Identify one consequential assumption or missing premise in a named peer's claim. Ask the group one precise question; do not pause or question the reader."
+		return "Identify one consequential assumption or missing premise in a supplied claim. Ask the group one precise, answerable question and explain why its answer matters. Do not ask the reader or use generic Socratic questions."
 	case "scope-keeper":
-		return "Separate direct statements, reasonable inferences, and claims not established by the supplied page. Narrow overreach without asserting the opposite."
+		return "Audit one claim for scope: mark what is directly stated, reasonably inferred, and not established by the supplied page. Do not infer unseen chapter contents from a chapter range. Narrow overreach without asserting the opposite."
 	case "signal-scout":
-		return "Offer at most one low-confidence candidate assumption or ambiguity for peers to verify. Mark it as a candidate, not a conclusion, and do not manufacture disagreement."
+		return "Offer at most one tentative overlooked assumption or ambiguity for a stronger specialist to test. Label it low-confidence, cite only supplied evidence, and do not decide the verdict or manufacture disagreement."
 	case "translator":
-		return "Focus on one material wording or terminology choice. Preserve the author's force, negation, and uncertainty; do not expand a translation choice into an unsupported philosophical claim."
+		return "Focus on one consequential wording or terminology choice. Offer at most two context-supported readings, preserve negation and logical force, and explain whether the choice changes the argument. Do not translate the whole page unless asked."
 	case "ambiguity-scout":
-		return "Test whether a genuine ambiguity exists. Offer at most two readings only when both are textually plausible; explicitly reject false ambiguity when the wording settles the point."
+		return "Test whether a genuine ambiguity exists in wording, referent, definition, translation, or scope. Offer at most two readings only when both fit the supplied words. Preserve explicit negation: wording such as 'not peripheral, or merely applications' rules out those readings rather than creating a false ambiguity. Say when no material ambiguity exists."
 	case "reviewer":
-		return "Audit one consequential claim from a named peer. Give a precise verdict and the evidence gap; missing evidence is not proof that the opposite is true."
+		return "Independently evaluate one consequential claim for logical strength. Classify it as supported, partly supported, unclear, or unsupported; identify the exact inference gap and offer the narrowest defensible correction. When peers exist, name the specific claim being reviewed."
 	case "evidence-auditor":
-		return "Audit one exact peer claim against the supplied passage. Classify it as supported, partly supported, inferred, unsupported, contradicted, or unverifiable, and cite the strongest relevant evidence."
+		return "Audit one exact book-specific claim against the supplied passage. Quote or point to the strongest relevant sentence and cite its exact source marker. Distinguish explicit evidence from inference; missing evidence does not prove the opposite."
 	case "counterexample-tester":
-		return "Test one precise claim with a fair boundary case. Label the case hypothetical and state whether it refutes, narrows, or leaves the claim intact; do not disagree for show."
+		return "Test one precise claim with the strongest fair counterexample or boundary case. Label hypothetical examples clearly and state whether the test refutes, narrows, or leaves the claim intact. Never disagree for show."
 	case "code-cartographer":
-		return "Trace one technical claim to its implementation consequences. Separate what the text specifies from what an implementation might choose; do not invent missing code or architecture."
+		return "Trace one technical claim, mechanism, or code example to its implementation implications. Preserve identifiers exactly, separate source statements from inference, and identify one consequential assumption or edge case without inventing missing code."
 	case "note-writer":
-		return "Extract one concise study insight grounded in the supplied passage. Keep a proposed quotation exact and distinguish a draft from a saved annotation."
+		return "Extract one concise study insight grounded in the supplied page. Keep any proposed highlight quote exact and contiguous, distinguish the note from the highlight's margin comment, and never claim either was saved without application confirmation."
 	case "discussion-chair":
-		return "You are MIMI, the primary Shelf reading companion and final Chair. In non-final rounds, critique one specific peer claim without prematurely summarizing the group. On the final turn, adjudicate the actual named positions rather than counting votes. Direct textual evidence, explicit negations, and qualifications outweigh repeated agreement; preserve unresolved disagreement and never invent a consensus."
+		return "You are MIMI, the primary Shelf companion and Chair. With no prior positions, provide a bounded provisional reading; when this is the final turn, compare the actual named positions, weigh source evidence rather than vote counts, preserve valid disagreement, and state what is resolved, narrowed, or still open. Never force consensus."
 	default:
-		return "Make one distinct contribution that fulfils your configured role. Respond to an actual earlier claim when present, verify it against the supplied source, and add a new reason rather than paraphrasing consensus."
+		return "Make one distinct contribution that fulfils your configured role. On the opening round, work from the supplied source independently. In later rounds, address the most relevant peer claim, verify it against the source, and add a new reason rather than paraphrasing consensus."
 	}
 }
 
@@ -1906,7 +1920,12 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			priorTurns := append([]AgentContribution(nil), debateHistory...)
 			// In sequential mode, each agent sees only turns already completed before it.
 			if !req.Parallel && index > 0 {
-				priorTurns = append(priorTurns, currentRound[:index]...)
+				// Fresh Round 1 is independent analysis. Only the final Chair turn
+				// may see those first-round answers when the discussion has one round.
+				independentOpening := round == 1 && len(debateHistory) == 0 && !finalTurn
+				if !independentOpening {
+					priorTurns = append(priorTurns, currentRound[:index]...)
+				}
 			}
 			if len(priorTurns) > 0 {
 				messages = discussionReviewMessages(messages, agent, round, priorTurns, finalTurn)
@@ -2156,15 +2175,15 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	previous = usable
 	var review strings.Builder
 	if finalTurn {
-		fmt.Fprintf(&review, "\n\nFINAL CHAIR TURN, round %d. You are the final moderator, not another independent summarizer. Name the participants whose positions matter. State the strongest supported reading, who disagrees and on what exact point, whether the objection is resolved or remains open, and one specific refinement. Compare actual statements only; never invent positions or force consensus. If the reader's answer would materially change the interpretation, finish with exactly one final line `Question for you: ...`; otherwise ask nothing. Under 75 words, 2–4 short sentences plus at most one question. Cite only supplied source IDs.\n", round)
+		fmt.Fprintf(&review, "\n\nFINAL CHAIR TURN, round %d. You are the final moderator, not another independent summarizer. Name the participants whose positions matter. State the strongest supported reading, who disagrees and on what exact point, whether the objection is resolved or remains open, and one specific refinement. Compare actual statements only; never invent positions or force consensus. If the reader's answer would materially change the interpretation, finish with exactly one final line `Question for you: ...`; otherwise ask nothing. Under 110 words, 3–5 short sentences plus at most one question. Cite only supplied source IDs.\n", round)
 	} else {
-		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 55 words in 2–3 short sentences. Cite only supplied source IDs.\n", round)
+		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 85 words in 3–4 short sentences. Cite only supplied source IDs.\n", round)
 	}
 	targetLimit := 1
 	if finalTurn {
 		targetLimit = 2
 	}
-	targets := recentDiscussionPeers(usable, agent.ID, targetLimit)
+	targets := discussionTargetPeers(usable, agent.ID, targetLimit)
 	if finalTurn {
 		if len(targets) > 0 {
 			review.WriteString("\n\nREQUIRED CHAIR ATTRIBUTIONS — use both exact displayed names and compare their positions; your first sentence must mention both:")
@@ -2265,12 +2284,49 @@ func discussionHardResponseProblem(content string, allowedSources map[string]boo
 	return unsupportedSectionReference(trimmed, passages)
 }
 
+var discussionEchoWords = regexp.MustCompile(`(?i)[\p{L}\p{N}]{3,}`)
+
+func discussionEchoSimilarity(left, right string) (float64, int) {
+	stop := map[string]bool{
+		"the": true, "and": true, "for": true, "that": true, "this": true, "with": true,
+		"from": true, "into": true, "about": true, "their": true, "they": true, "them": true,
+		"than": true, "then": true, "are": true, "was": true, "were": true, "has": true,
+		"have": true, "had": true, "not": true, "but": true, "also": true, "only": true,
+		"more": true, "most": true, "such": true, "each": true, "one": true, "page": true,
+		"author": true, "passage": true, "text": true, "claim": true, "point": true,
+		"regarding": true, "because": true, "therefore": true, "rather": true, "reader": true,
+		"agent": true, "supported": true, "support": true,
+	}
+	tokenSet := func(value string) map[string]bool {
+		result := make(map[string]bool)
+		for _, token := range discussionEchoWords.FindAllString(strings.ToLower(value), -1) {
+			if !stop[token] {
+				result[token] = true
+			}
+		}
+		return result
+	}
+	a, b := tokenSet(left), tokenSet(right)
+	if len(a) == 0 || len(b) == 0 {
+		return 0, 0
+	}
+	shared, union := 0, len(a)
+	for token := range b {
+		if a[token] {
+			shared++
+		} else {
+			union++
+		}
+	}
+	return float64(shared) / float64(union), shared
+}
+
 func discussionQualityWarnings(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) []string {
 	trimmed := strings.TrimSpace(content)
 	warnings := make([]string, 0, 3)
-	maxWords := 55
+	maxWords := 85
 	if finalTurn {
-		maxWords = 75
+		maxWords = 110
 	}
 	if words := len(strings.Fields(trimmed)); words > maxWords {
 		warnings = append(warnings, fmt.Sprintf("This contribution is complete but exceeds the %d-word style budget (%d words); the text was preserved rather than discarded.", maxWords, words))
@@ -2281,6 +2337,16 @@ func discussionQualityWarnings(content string, allowedSources map[string]bool, p
 	if peerProblem := discussionPeerResponseProblem(trimmed, previous, agentID, finalTurn); peerProblem != "" {
 		warnings = append(warnings, "Peer-attribution quality warning: "+peerProblem+". The contribution was retained, but it should not be treated as a verified response to that peer.")
 	}
+	for _, peer := range previous {
+		if peer.AgentID == agentID || peer.Status != "completed" || strings.TrimSpace(peer.Content) == "" {
+			continue
+		}
+		similarity, shared := discussionEchoSimilarity(trimmed, peer.Content)
+		if shared >= 4 && similarity >= 0.46 {
+			warnings = append(warnings, fmt.Sprintf("Possible argument echo: this contribution substantially overlaps %s (lexical overlap %.0f%%). This signal is advisory, not a semantic verdict; check for a genuinely new reason before treating it as independent support.", peer.AgentName, similarity*100))
+			break
+		}
+	}
 	return warnings
 }
 
@@ -2288,9 +2354,9 @@ func discussionResponseProblem(content string, allowedSources map[string]bool, h
 	if problem := discussionHardResponseProblem(content, allowedSources, nil); problem != "" {
 		return problem
 	}
-	maxWords := 55
+	maxWords := 85
 	if finalTurn {
-		maxWords = 75
+		maxWords = 110
 	}
 	if words := len(strings.Fields(strings.TrimSpace(content))); words > maxWords {
 		return fmt.Sprintf("the answer exceeds the %d-word budget", maxWords)
@@ -2361,8 +2427,17 @@ func discussionPeerResponseProblem(content string, previous []AgentContribution,
 			return "the response repeats a completed peer contribution verbatim instead of adding an independent point"
 		}
 	}
-	mentioned := make(map[string]bool)
+	required := 1
+	distinct := make(map[string]bool, len(usable))
 	for _, turn := range usable {
+		distinct[turn.AgentID] = true
+	}
+	if finalTurn && len(distinct) > 1 {
+		required = 2
+	}
+	targets := discussionTargetPeers(usable, agentID, required)
+	mentioned := make(map[string]bool)
+	for _, turn := range targets {
 		for _, alias := range discussionSpeakerAliases(turn) {
 			if alias != "" && strings.Contains(strings.ToLower(content), strings.ToLower(alias)) {
 				mentioned[turn.AgentID] = true
@@ -2370,19 +2445,11 @@ func discussionPeerResponseProblem(content string, previous []AgentContribution,
 			}
 		}
 	}
-	peerIDs := make(map[string]bool, len(usable))
-	for _, turn := range usable {
-		peerIDs[turn.AgentID] = true
-	}
-	required := 1
-	if finalTurn && len(peerIDs) > 1 {
-		required = 2
-	}
-	if len(mentioned) < required {
+	if len(targets) < required || len(mentioned) < len(targets) {
 		if finalTurn {
-			return fmt.Sprintf("the final Chair does not identify enough actual peer positions by participant name (need %d)", required)
+			return fmt.Sprintf("the final Chair does not identify enough role-relevant peer positions by participant name (need %d)", required)
 		}
-		return "the response does not identify an actual completed peer by participant name"
+		return "the response does not identify its role-relevant completed peer by participant name"
 	}
 	return ""
 }
@@ -2411,9 +2478,9 @@ func validateDiscussionOutputWithoutCitationRequirement(content string, allowedS
 		return "the answer is empty or visibly unfinished"
 	}
 	wordCount := len(strings.Fields(trimmed))
-	maxWords := 55
+	maxWords := 85
 	if finalTurn {
-		maxWords = 75
+		maxWords = 110
 	}
 	if wordCount > maxWords {
 		return fmt.Sprintf("the answer exceeds the %d-word budget", maxWords)
@@ -2581,6 +2648,88 @@ func recentDiscussionPeers(previous []AgentContribution, agentID string, limit i
 	return selected
 }
 
+func discussionPeerRolePreference(agentID string) []string {
+	switch agentID {
+	case "reader":
+		return []string{"discussion-chair", "evidence-auditor", "reviewer", "tutor"}
+	case "tutor":
+		return []string{"reader", "discussion-chair", "steelman"}
+	case "steelman":
+		return []string{"reader", "tutor", "reviewer"}
+	case "concept-connector":
+		return []string{"reader", "context-keeper", "scope-keeper"}
+	case "context-keeper":
+		return []string{"steelman", "reviewer", "evidence-auditor", "reader"}
+	case "example-builder":
+		return []string{"tutor", "reader", "steelman"}
+	case "socratic-questioner":
+		return []string{"reader", "steelman", "tutor"}
+	case "scope-keeper":
+		return []string{"reader", "concept-connector", "tutor"}
+	case "translator":
+		return []string{"reader", "tutor", "ambiguity-scout"}
+	case "ambiguity-scout":
+		return []string{"reader", "translator", "tutor"}
+	case "reviewer":
+		return []string{"reader", "steelman", "tutor"}
+	case "evidence-auditor":
+		return []string{"reader", "steelman", "tutor"}
+	case "counterexample-tester":
+		return []string{"steelman", "reader", "reviewer"}
+	case "code-cartographer":
+		return []string{"reader", "tutor", "reviewer"}
+	case "note-writer":
+		return []string{"reader", "tutor", "concept-connector"}
+	case "signal-scout":
+		return []string{"reader", "tutor", "scope-keeper"}
+	case "discussion-chair":
+		return []string{"reader", "steelman", "reviewer", "evidence-auditor", "counterexample-tester", "scope-keeper", "tutor"}
+	default:
+		return []string{"reader", "reviewer", "evidence-auditor", "tutor"}
+	}
+}
+
+func discussionTargetPeers(previous []AgentContribution, agentID string, limit int) []AgentContribution {
+	if limit < 1 {
+		return nil
+	}
+	latest := make(map[string]AgentContribution)
+	for index := len(previous) - 1; index >= 0; index-- {
+		turn := previous[index]
+		if turn.Status != "completed" || strings.TrimSpace(turn.Content) == "" || turn.AgentID == "" || turn.AgentID == agentID {
+			continue
+		}
+		if _, exists := latest[turn.AgentID]; !exists {
+			latest[turn.AgentID] = turn
+		}
+	}
+	selected := make([]AgentContribution, 0, limit)
+	seen := make(map[string]bool, limit)
+	add := func(id string) {
+		if len(selected) >= limit || seen[id] {
+			return
+		}
+		turn, ok := latest[id]
+		if !ok {
+			return
+		}
+		selected = append(selected, turn)
+		seen[id] = true
+	}
+	for _, id := range discussionPeerRolePreference(agentID) {
+		add(id)
+	}
+	// If a preferred specialist was not selected, use the newest distinct
+	// completed speaker. Never fabricate a target.
+	for index := len(previous) - 1; index >= 0 && len(selected) < limit; index-- {
+		turn := previous[index]
+		if turn.Status == "completed" && strings.TrimSpace(turn.Content) != "" && turn.AgentID != agentID {
+			add(turn.AgentID)
+		}
+	}
+	return selected
+}
+
 func discussionRepairInstructionWithPeers(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool, previous []AgentContribution, agentID string) string {
 	instruction := discussionRepairInstruction(reason, allowedSources, finalTurn, hasPeer)
 	if !hasPeer {
@@ -2590,7 +2739,7 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 	if finalTurn {
 		limit = 2
 	}
-	targets := recentDiscussionPeers(previous, agentID, limit)
+	targets := discussionTargetPeers(previous, agentID, limit)
 	if len(targets) == 0 {
 		return instruction
 	}
@@ -2635,9 +2784,9 @@ func discussionRepairInstruction(reason string, allowedSources map[string]bool, 
 			markerRule += " When stating a fact about the text, cite one exact marker from this list: " + strings.Join(markers, ", ") + ". Never create or alter markers."
 		}
 	}
-	words := 55
+	words := 85
 	if finalTurn {
-		words = 75
+		words = 110
 	}
 	return fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Copy one exact [source:ID] marker only when making a claim about the supplied text. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
 }
@@ -2731,24 +2880,26 @@ func (m *Manager) updateTaskWorkflow(id string, result *WorkflowResult) {
 // when those exact models are present and have passed the runtime's availability probe.
 // The UI uses the same preference table. User-authored PreferredModel always wins.
 func discussionModelCandidates(agentID string) []string {
+	// Quality preference, not a hardware requirement: only discovered, enabled,
+	// tested models can be chosen; smaller models remain valid fallbacks.
 	preferences := map[string][]string{
-		"reader":                {"qwen2.5:3b", "qwen2.5:7b"},
-		"tutor":                 {"qwen3:1.7b", "qwen2.5:3b", "deepseek-r1:1.5b", "qwen2.5:7b"},
-		"translator":            {"translategemma:4b", "qwen2.5:3b", "qwen2.5:7b"},
+		"reader":                {"qwen2.5:7b", "qwen2.5:3b"},
+		"tutor":                 {"qwen2.5:7b", "qwen3:8b", "qwen3:1.7b", "qwen2.5:3b", "deepseek-r1:1.5b"},
+		"translator":            {"translategemma:4b", "qwen2.5:7b", "qwen2.5:3b"},
 		"note-writer":           {"qwen2.5:3b", "qwen2.5:7b"},
-		"reviewer":              {"qwen2.5:7b", "qwen2.5:3b"},
-		"concept-connector":     {"qwen2.5:3b", "qwen2.5:7b"},
-		"socratic-questioner":   {"deepseek-r1:1.5b", "qwen2.5:3b"},
-		"counterexample-tester": {"qwen2.5:7b", "qwen2.5:3b", "deepseek-r1:1.5b"},
-		"context-keeper":        {"qwen2.5:3b", "qwen3:0.6b", "qwen2.5:7b"},
-		"example-builder":       {"qwen2.5:3b", "qwen2.5:7b"},
+		"reviewer":              {"qwen2.5:14b", "qwen2.5:7b", "qwen2.5:3b"},
+		"concept-connector":     {"qwen2.5:7b", "qwen2.5:3b"},
+		"socratic-questioner":   {"qwen2.5:7b", "deepseek-r1:1.5b", "qwen2.5:3b"},
+		"counterexample-tester": {"qwen2.5:14b", "qwen2.5:7b", "deepseek-r1:8b", "qwen2.5:3b"},
+		"context-keeper":        {"qwen2.5:3b", "qwen2.5:7b", "qwen3:0.6b"},
+		"example-builder":       {"qwen2.5:7b", "qwen2.5:3b"},
 		"discussion-chair":      {"qwen2.5:14b", "qwen3:8b", "qwen2.5:7b", "qwen2.5:3b"},
-		"evidence-auditor":      {"qwen2.5:7b", "qwen2.5:3b"},
-		"ambiguity-scout":       {"translategemma:4b", "qwen2.5:3b", "qwen2.5:7b"},
-		"steelman":              {"qwen2.5:3b", "qwen2.5:7b", "deepseek-r1:1.5b"},
-		"scope-keeper":          {"qwen3:0.6b", "qwen2.5:3b", "qwen2.5:7b"},
+		"evidence-auditor":      {"qwen2.5:14b", "qwen2.5:7b", "qwen2.5:3b"},
+		"ambiguity-scout":       {"translategemma:4b", "qwen2.5:7b", "qwen2.5:3b"},
+		"steelman":              {"qwen2.5:14b", "qwen2.5:7b", "deepseek-r1:8b", "qwen2.5:3b"},
+		"scope-keeper":          {"qwen2.5:7b", "qwen2.5:3b", "qwen3:0.6b"},
 		"code-cartographer":     {"qwen2.5-coder:latest", "qwen2.5:7b"},
-		"signal-scout":          {"qwen3:0.6b", "qwen2.5:3b"},
+		"signal-scout":          {"qwen2.5:3b", "qwen3:0.6b"},
 	}
 	return preferences[agentID]
 }
@@ -2773,6 +2924,9 @@ func (m *Manager) discussionModelForAgent(agent AgentDefinition, fallback string
 		}
 	}
 	for _, candidate := range candidates {
+		bestRef := ""
+		bestScore := 0.0
+		found := false
 		for _, model := range m.state.Models {
 			if !strings.EqualFold(model.ID, candidate) || model.Availability != "available" {
 				continue
@@ -2780,10 +2934,33 @@ func (m *Manager) discussionModelForAgent(agent AgentDefinition, fallback string
 			if _, ok := localProviders[model.ProviderID]; !ok {
 				continue
 			}
-			return model.ProviderID + "/" + model.ID
+			score := discussionModelPerformanceScore(model)
+			if !found || score > bestScore {
+				bestRef = model.ProviderID + "/" + model.ID
+				bestScore = score
+				found = true
+			}
+		}
+		if found {
+			return bestRef
 		}
 	}
 	return fallback
+}
+
+func discussionModelPerformanceScore(model Model) float64 {
+	if model.Performance == nil {
+		return 0
+	}
+	performance := model.Performance
+	score := performance.TokensPerSecond
+	if performance.TimeToFirstTokenMS > 0 {
+		score -= float64(performance.TimeToFirstTokenMS) / 10000
+	}
+	if performance.LoadDurationMS > 0 {
+		score -= float64(performance.LoadDurationMS) / 30000
+	}
+	return score
 }
 
 // modelSupportsReasoning returns true only when the selected model advertises a
@@ -2899,7 +3076,7 @@ func discussionMessages(req DiscussionRequest, agent AgentDefinition, synthesis 
 	if outputFormat == "" {
 		outputFormat = "Markdown"
 	}
-	systemPrompt := fmt.Sprintf("You are the IDIOS Shelf discussion persona %q. Role: %s. Instructions: %s\nRequired format: %s. You are in an evidence-led live round-table, not writing a standalone answer. HARD RULES: (1) Discuss only the supplied page text, saved annotations, and earlier turns. Never infer unseen chapters or pretend you have web access. (2) Distinguish direct textual evidence, interpretation, and speculation. If evidence is missing, explicitly say it is missing. (3) Never invent quotations, page numbers, or [source:ID] markers; use only exact source IDs supplied in context. (4) When earlier speaker turns are present, respond to one specific claim by a named participant; name them, fairly restate the claim, then agree/disagree/refine it and give a reason. If this is the opening turn and no peer claim exists yet, establish one provisional, source-grounded interpretation for the others to test. Never invent a conversation. (5) Do not repeat prior turns or give a generic summary; add one useful new step. (6) Do not ask the reader anything unless you are the final chair at the end of the final round and the answer could change the conclusion. (7) Provide concise public reasoning, never private hidden chain-of-thought. For compact local models, use 2–3 short sentences and at most 55 words (final chair: 75 words). No headings, numbered lists, introductions, or generic book summaries. Reader notes are interpretations, not authoritative evidence. Never claim to have saved a note or highlight unless IDIOS confirms it.", agent.Name, role, instruction, outputFormat)
+	systemPrompt := fmt.Sprintf("You are the IDIOS Shelf discussion persona %q. Role: %s. Instructions: %s\nRequired format: %s. You are in an evidence-led live round-table, not writing a standalone answer. HARD RULES: (1) Discuss only the supplied page text, saved annotations, and earlier turns. Never infer unseen chapters or pretend you have web access. (2) Distinguish direct textual evidence, interpretation, and speculation. If evidence is missing, explicitly say it is missing. (3) Never invent quotations, page numbers, or [source:ID] markers; use only exact source IDs supplied in context. (4) When earlier speaker turns are present, respond to one specific claim by a named participant; name them, fairly restate the claim, then agree/disagree/refine it and give a reason. If this is the opening turn and no peer claim exists yet, establish one provisional, source-grounded interpretation for the others to test. Never invent a conversation. (5) Do not repeat prior turns or give a generic summary; add one useful new step. (6) Do not ask the reader anything unless you are the final chair at the end of the final round and the answer could change the conclusion. (7) Provide concise public reasoning, never private hidden chain-of-thought. For compact local models, use 3–4 concise sentences and at most 85 words (final chair: 110 words). No headings, numbered lists, introductions, or generic book summaries. Reader notes are interpretations, not authoritative evidence. Never claim to have saved a note or highlight unless IDIOS confirms it.", agent.Name, role, instruction, outputFormat)
 	systemPrompt += "\n\nIDENTITY AND ORIGINALITY: You are only " + agent.Name + ". Never present another agent's name, role, or response as your own. Treat every peer contribution as a claim to inspect, not as evidence. Agreement is not a reason to paraphrase: add a distinct role-specific implication, qualification, or correction; if you have no independent addition, say so plainly."
 	if focus := discussionRoleFocus(agent.ID); focus != "" {
 		systemPrompt += "\n\nROLE-SPECIFIC DELIVERABLE: " + focus

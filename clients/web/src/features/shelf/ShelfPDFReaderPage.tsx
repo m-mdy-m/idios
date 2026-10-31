@@ -418,7 +418,6 @@ export function ShelfPDFReaderPage() {
         provider_id: selectedModel.providerID,
         model: selectedModel.modelID,
         task: 'translation',
-        reasoning_effort: 'low',
         messages: [
           { role: 'system', content: `${CORE_RELIABILITY_CONTRACT}\n\n${CONTEXTUAL_TRANSLATION_SKILL}\n\n${skillInstructions}\n\n## Task for this request\nTranslate the source passage into ${target}. The source passage supplied in the user message is the only text to translate. Use book/page context to interpret terminology and maintain consistency; never insert contextual facts into the translation. Preserve structure, formulas, identifiers, code, citations, numbers, negation, uncertainty, and the author's tone. Do not summarize or replace translation with explanation. Return the full translation first. Add a short translator note only if a genuine ambiguity materially affects meaning. If context is insufficient, choose the most likely meaning without pretending certainty.` },
           { role: 'user', content: `## Book and reading context\n${bookContext || 'No additional book context is available.'}\n\n## Exact passage to translate\n${text}` },
