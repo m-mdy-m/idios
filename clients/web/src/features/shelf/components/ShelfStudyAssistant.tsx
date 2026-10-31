@@ -875,7 +875,7 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
       setNotice(autoOverview || options.autoOverview ? 'Your book orientation is ready.' : '');
     } catch (cause) {
       const message = userFacingAIError(cause);
-      if (await saveSelectedPassageAsNote(false, `Saved directly because AI note generation failed: ${message}`)) {
+      if (await saveSelectedPassageActions(false, `Saved directly because AI note generation failed: ${message}`)) {
         setLastFailedPrompt('');
       } else {
         setLastFailedPrompt(userPrompt);
