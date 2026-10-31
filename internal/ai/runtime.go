@@ -1762,6 +1762,10 @@ func discussionRoleFocus(agentID string) string {
 	}
 }
 
+func (m *Manager) newDiscussionAgentContext(parent context.Context, providerID string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, m.discussionTimeoutForProvider(providerID))
+}
+
 func (m *Manager) discussionTimeoutForProvider(providerID string) time.Duration {
 	seconds := 120
 	local := false
@@ -1893,7 +1897,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			modelRef := m.discussionModelForAgent(agent, fallbackModel)
 			providerID, model := splitModelRef(modelRef)
 			turnTimeout := m.discussionTimeoutForProvider(providerID)
-			agentCtx, cancelAgent := context.WithTimeout(ctx, turnTimeout)
+			agentCtx, cancelAgent := m.newDiscussionAgentContext(ctx, providerID)
 			defer cancelAgent()
 			turnTimeoutSeconds := int(turnTimeout / time.Second)
 			messages := discussionMessages(req, agent, false, nil)
