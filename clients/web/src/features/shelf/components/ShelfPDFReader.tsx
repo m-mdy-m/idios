@@ -28,7 +28,8 @@ const highlightColors: Array<{ value: HighlightColor; label: string }> = [
 
 type PendingSelection = { quote: string; rectangles: ShelfAnnotationRect[] };
 type CompanionMark = { quote: string; note: string; kind: 'important' | 'unclear' };
-type CompanionPin = CompanionMark & { left: number; top: number };
+type CompanionPinRectangle = { left: number; top: number; width: number; height: number };
+type CompanionPin = CompanionMark & { left: number; top: number; rectangles: CompanionPinRectangle[]; fallbackHighlight: boolean };
 
 type PDFRequestEntry = {
   controller: AbortController;
@@ -249,7 +250,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [translationPageKey, setTranslationPageKey] = useState('');
   const [translationRevision, setTranslationRevision] = useState(0);
   const [pageTranslationBusy, setPageTranslationBusy] = useState(false);
-  const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0 });
+  const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0, startedAt: 0 });
   const [selectionTranslationBusy, setSelectionTranslationBusy] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const wordTranslationCache = useRef<Map<string, ReaderTranslationData>>(new Map());
@@ -573,6 +574,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const source = text.trim();
     if (!source) throw new Error('Select some readable text first.');
     if (!translationModel) throw new Error('Choose an AI model in the Reading Companion panel before translating.');
+    const requestStartedAt = Date.now();
     const documentContext = await getTranslationContext(pageNumber);
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
     const cachedPages = Array.from(pageTranslationCache.current.entries()).sort((left, right) => Number(left[0].split(':')[1]) - Number(right[0].split(':')[1]));
@@ -587,7 +589,6 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         glossary.set(termKey, { source: term.source, translation: term.translation, meaning: term.meaning });
       }
     }
-    const priorGlossary = Array.from(glossary.values()).slice(-30);
     const contextRequest: ReaderTranslationRequest = {
       text: source,
       pageText: currentPageText,
@@ -597,10 +598,16 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       timeoutSeconds: translationTimeoutSeconds,
       kind,
       documentContext,
-      priorGlossary,
+      priorGlossary: Array.from(glossary.values()).slice(-30),
     };
-    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1600);
+
+    // Most PDF pages fit in one provider request. Very long pages use larger,
+    // sentence-aware chunks and a small bounded parallel window instead of serial round trips.
+    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts'
+      ? [source]
+      : splitReaderTranslationText(source, 4800);
     if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
+
     const chunkRanges: Array<{ start: number; end: number }> = [];
     let sourceCursor = 0;
     for (const chunk of chunks) {
@@ -614,52 +621,93 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       return /\r?\n\s*\r?\n/.test(gap) ? '\n\n' : /\r?\n/.test(gap) ? '\n' : ' ';
     });
     const mergeCompletedChunks = (parts: ReaderTranslationData[]) => mergeReaderTranslations(parts, chunkSeparators.slice(0, Math.max(0, parts.length - 1)));
-    const results: ReaderTranslationData[] = [];
+    const results: Array<ReaderTranslationData | undefined> = Array.from({ length: chunks.length });
     const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
     const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
-    const updateProgress = (done: number, total: number) => {
+    const updateProgress = (done: number) => {
       if (kind === 'page' && translationPageInFlight.current === pageRequestKey) {
-        setTranslationProgress({ done, total });
+        setTranslationProgress({ done, total: chunks.length, startedAt: requestStartedAt });
       }
     };
-    updateProgress(0, chunks.length);
+    const publishContiguousPartial = () => {
+      if (kind !== 'page' || translationPageInFlight.current !== pageRequestKey) return;
+      const prefix: ReaderTranslationData[] = [];
+      for (const result of results) {
+        if (!result) break;
+        prefix.push(result);
+      }
+      if (prefix.length) setPartialPageTranslation(mergeCompletedChunks(prefix));
+    };
 
+    let completedCount = 0;
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index];
       const cacheKey = `${cachePrefix}:${index}:${chunk}`;
       const cached = translationChunkCache.current.get(cacheKey);
-      if (cached) {
-        results.push(cached);
-        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeCompletedChunks(results));
-        for (const term of cached.terms) {
-          const key = normalizeTranslationMatch(term.source);
-          if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
-        }
-        updateProgress(index + 1, chunks.length);
-        continue;
-      }
-
-      const chunkRequest: ReaderTranslationRequest = {
-        ...contextRequest,
-        text: chunk,
-        kind: chunks.length > 1 ? 'chunk' : kind,
-        priorGlossary: Array.from(glossary.values()).slice(-30),
-      };
-      const completion = await onTranslateText(chunkRequest);
-      const parsed = parseReaderTranslation(completion.content, chunk);
-      if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
-      translationChunkCache.current.set(cacheKey, parsed);
-      results.push(parsed);
-      if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeReaderTranslations(results));
-      for (const term of parsed.terms) {
+      if (!cached) continue;
+      results[index] = cached;
+      completedCount += 1;
+      for (const term of cached.terms) {
         const key = normalizeTranslationMatch(term.source);
         if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
       }
-      updateProgress(index + 1, chunks.length);
     }
-    updateProgress(chunks.length, chunks.length);
-    const combined = results.length === 1 ? results[0] : mergeCompletedChunks(results);
-    return combined;
+    updateProgress(completedCount);
+    publishContiguousPartial();
+
+    const maxConcurrentChunks = 2;
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += maxConcurrentChunks) {
+      const batchIndexes = Array.from(
+        { length: Math.min(maxConcurrentChunks, chunks.length - batchStart) },
+        (_, offset) => batchStart + offset,
+      ).filter((index) => !results[index]);
+
+      if (!batchIndexes.length) continue;
+      const batchGlossary = Array.from(glossary.values()).slice(-30);
+      const settled = await Promise.allSettled(batchIndexes.map(async (index) => {
+        const chunk = chunks[index];
+        const cacheKey = `${cachePrefix}:${index}:${chunk}`;
+        const chunkRequest: ReaderTranslationRequest = {
+          ...contextRequest,
+          text: chunk,
+          kind: chunks.length > 1 ? 'chunk' : kind,
+          priorGlossary: batchGlossary,
+        };
+        const completion = await onTranslateText(chunkRequest);
+        const parsed = parseReaderTranslation(completion.content, chunk);
+        if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
+        translationChunkCache.current.set(cacheKey, parsed);
+        return { index, parsed };
+      }));
+
+      const failures: unknown[] = [];
+      for (let offset = 0; offset < settled.length; offset += 1) {
+        const result = settled[offset];
+        if (result.status === 'rejected') {
+          failures.push(result.reason);
+          continue;
+        }
+        results[result.value.index] = result.value.parsed;
+        completedCount += 1;
+        for (const term of result.value.parsed.terms) {
+          const key = normalizeTranslationMatch(term.source);
+          if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
+        }
+      }
+      updateProgress(completedCount);
+      publishContiguousPartial();
+      if (failures.length) {
+        const cause = failures[0];
+        throw cause instanceof Error ? cause : new Error('One translation part failed. Retry to resume from the cached parts.');
+      }
+    }
+
+    const completedResults = results.map((result, index) => {
+      if (!result) throw new Error(`Translation part ${index + 1} was not completed. Retry to resume translation.`);
+      return result;
+    });
+    updateProgress(chunks.length);
+    return completedResults.length === 1 ? completedResults[0] : mergeCompletedChunks(completedResults);
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage, translationTimeoutSeconds]);
 
   const analyzePage = useCallback(async (kind: 'grammar' | 'ielts') => {
@@ -761,7 +809,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setPartialPageTranslation(null);
     setSelectionTranslation(null);
     setPageTranslationBusy(true);
-    setTranslationProgress({ done: 0, total: 0 });
+    setTranslationProgress({ done: 0, total: 0, startedAt: Date.now() });
     setTranslationError('');
     void requestTranslation(currentPageText, 'page').then((translated) => {
       if (!active || requestID !== translationRequestID.current) return;
@@ -1125,7 +1173,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           modelsLoading={translationModelsLoading}
           modelError={translationModelError}
           lastUsedModel={lastUsedTranslationModel}
-          onModelChange={(model) => { onTranslationModelChange(model); setPageTranslationBusy(false); setTranslationProgress({ done: 0, total: 0 }); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
+          onModelChange={(model) => { onTranslationModelChange(model); setPageTranslationBusy(false); setTranslationProgress({ done: 0, total: 0, startedAt: 0 }); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); setTranslationError(''); }}
           targetLanguage={translationTargetLanguage}
           onTargetLanguageChange={(language) => { setTranslationTargetLanguage(language); setTranslationPageKey(''); setPageTranslation(null); setPartialPageTranslation(null); setSelectionTranslation(null); }}
           tab={translationTab}
@@ -1197,6 +1245,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
               <div className="shelf-pdf-reader__saved-marks" aria-hidden="true">{pageAnnotations.map((annotation) => annotation.rectangles.map((rect, index) => <span key={`${annotation.id}-${index}`} className={`shelf-pdf-reader__mark shelf-pdf-reader__mark--${annotation.color} ${annotation.note?.trim() ? 'shelf-pdf-reader__mark--underline' : ''} ${activeAnnotationID === annotation.id ? 'is-active' : ''}`} style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` }} />))}</div>
               <div className="textLayer shelf-pdf-reader__text-layer" ref={textLayerRef} onMouseMove={handleTextHover} />
               {companionPins.length > 0 && <div className="shelf-pdf-reader__companion-pins" aria-label="Mimi's page notes">
+                {companionPins.some((pin) => pin.fallbackHighlight) && <div className="shelf-pdf-reader__companion-fallback-highlights" aria-hidden="true">
+                  {companionPins.filter((pin) => pin.fallbackHighlight).flatMap((pin, pinIndex) => pin.rectangles.map((rect, rectIndex) => <span
+                    key={`${pin.quote}:${pinIndex}:${rectIndex}`}
+                    className={`shelf-pdf-reader__companion-fallback-highlight shelf-pdf-reader__companion-fallback-highlight--${pin.kind}`}
+                    style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+                  />))}
+                </div>}
                 {companionPins.map((pin, index) => <button key={`${pin.quote}-${index}`} type="button" className={`shelf-pdf-reader__companion-pin shelf-pdf-reader__companion-pin--${pin.kind} ${activeCompanionPin === index ? 'is-active' : ''}`} style={{ left: `${pin.left}%`, top: `${pin.top}%` }} onClick={(event) => { event.stopPropagation(); setActiveCompanionPin((active) => active === index ? null : index); }} title={`${pin.quote}: ${pin.note}`} aria-label={`Mimi note for ${pin.quote}`}><span>{pin.kind === 'unclear' ? '?' : '✦'}</span></button>)}
                 {activeCompanionPin !== null && companionPins[activeCompanionPin] && <aside className={`shelf-pdf-reader__companion-note shelf-pdf-reader__companion-note--${companionPins[activeCompanionPin].kind}`} style={{ left: `${Math.max(3, Math.min(29, companionPins[activeCompanionPin].left))}%`, top: `${Math.max(3, Math.min(80, companionPins[activeCompanionPin].top + 2))}%` }} role="note">
                   <button type="button" className="shelf-pdf-reader__companion-note-close" onClick={() => setActiveCompanionPin(null)} aria-label="Close Mimi note"><X size={12} /></button>
@@ -1293,11 +1348,10 @@ function clearCompanionHighlight() {
 
 function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, marks: CompanionMark[]): CompanionPin[] {
   clearCompanionHighlight();
-  // CSS Custom Highlights keep the marks inside the exact text range; never colour whole PDF.js spans.
   if (!marks.length) return [];
   const registry = (window.CSS as typeof CSS & { highlights?: HighlightRegistryLike }).highlights;
   const HighlightConstructor = (window as WindowWithTextHighlight).Highlight;
-  if (!registry || !HighlightConstructor) return [];
+  const canUseCustomHighlights = Boolean(registry && HighlightConstructor);
 
   const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const words: TextWordRange[] = [];
@@ -1318,7 +1372,9 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
     }
   }
+
   const sheetRect = sheet.getBoundingClientRect();
+  if (!sheetRect.width || !sheetRect.height) return [];
   const safePins: CompanionPin[] = [];
   const importantRanges: Range[] = [];
   const unclearRanges: Range[] = [];
@@ -1341,25 +1397,38 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
       range.setStart(first.node, first.start);
       range.setEnd(last.node, last.end);
       if (toWords(range.toString()).join(' ') !== query.join(' ')) continue;
-      const rects = Array.from(range.getClientRects());
-      const rect = rects[0] ?? range.getBoundingClientRect();
-      if (!rect.width && !rect.height) continue;
+      const rectangles = Array.from(range.getClientRects()).map((rect) => ({
+        left: Math.max(0, Math.min(100, ((rect.left - sheetRect.left) / sheetRect.width) * 100)),
+        top: Math.max(0, Math.min(100, ((rect.top - sheetRect.top) / sheetRect.height) * 100)),
+        width: Math.max(0, Math.min(100, (rect.width / sheetRect.width) * 100)),
+        height: Math.max(0, Math.min(100, (rect.height / sheetRect.height) * 100)),
+      })).filter((rect) => rect.width > 0.05 && rect.height > 0.05).slice(0, 300);
+      const firstRect = rectangles[0];
+      if (!firstRect) continue;
       (mark.kind === 'unclear' ? unclearRanges : importantRanges).push(range);
       safePins.push({
         ...mark,
-        left: Math.max(2, Math.min(98, ((rect.right - sheetRect.left) / Math.max(1, sheetRect.width)) * 100)),
-        top: Math.max(2, Math.min(98, ((rect.top - sheetRect.top) / Math.max(1, sheetRect.height)) * 100)),
+        left: Math.max(2, Math.min(98, firstRect.left + firstRect.width)),
+        top: Math.max(2, Math.min(98, firstRect.top)),
+        rectangles,
+        fallbackHighlight: !canUseCustomHighlights,
       });
     } catch {
       // Fail closed: do not replace precise marking with broad span styling.
     }
   }
-  try {
-    if (importantRanges.length) registry.set(companionHighlightImportantName, new HighlightConstructor(...importantRanges));
-    if (unclearRanges.length) registry.set(companionHighlightUnclearName, new HighlightConstructor(...unclearRanges));
-  } catch {
-    clearCompanionHighlight();
-    return [];
+
+  if (canUseCustomHighlights && registry && HighlightConstructor) {
+    try {
+      if (importantRanges.length) registry.set(companionHighlightImportantName, new HighlightConstructor(...importantRanges));
+      if (unclearRanges.length) registry.set(companionHighlightUnclearName, new HighlightConstructor(...unclearRanges));
+      return safePins;
+    } catch {
+      clearCompanionHighlight();
+    }
   }
-  return safePins;
+
+  // Keep exact range-derived rectangles as a fallback for browsers without CSS Custom Highlights.
+  // They preserve text selection and avoid styling an entire PDF.js span.
+  return safePins.map((pin) => ({ ...pin, fallbackHighlight: true }));
 }

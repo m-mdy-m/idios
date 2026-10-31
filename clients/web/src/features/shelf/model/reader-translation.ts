@@ -15,7 +15,8 @@ export type ReaderTranslationRequest = {
   priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
 };
 
-export type ReaderTranslationSegment = { source: string; translation: string };
+export type ReaderTranslationWordAlignment = { source: string; translation: string };
+export type ReaderTranslationSegment = { source: string; translation: string; words?: ReaderTranslationWordAlignment[] };
 export type ReaderTranslationTerm = {
   source: string;
   translation: string;
@@ -46,6 +47,21 @@ function readString(value: unknown): string {
 
 export function normalizeTranslationMatch(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
+}
+
+function containsAlignedPhrase(container: string, candidate: string): boolean {
+  const normalizedContainer = normalizeTranslationMatch(container);
+  const normalizedCandidate = normalizeTranslationMatch(candidate);
+  if (!normalizedContainer || !normalizedCandidate) return false;
+  let position = normalizedContainer.indexOf(normalizedCandidate);
+  while (position >= 0) {
+    const before = position > 0 ? normalizedContainer[position - 1] : '';
+    const after = normalizedContainer[position + normalizedCandidate.length] ?? '';
+    const isWordCharacter = (character: string) => Boolean(character && /[\p{L}\p{N}]/u.test(character));
+    if (!isWordCharacter(before) && !isWordCharacter(after)) return true;
+    position = normalizedContainer.indexOf(normalizedCandidate, position + 1);
+  }
+  return false;
 }
 
 function stripCodeFence(value: string): string {
@@ -157,7 +173,28 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
     const rawSegments = Array.isArray(parsed.segments) ? parsed.segments : [];
     const candidateSegments = rawSegments.map((item) => {
       const segment = asRecord(item);
-      return { source: readString(segment.source), translation: readString(segment.translation) };
+      const segmentSource = readString(segment.source);
+      const segmentTranslation = readString(segment.translation);
+      const seenWords = new Set<string>();
+      const words = (Array.isArray(segment.words) ? segment.words : [])
+        .map((wordItem) => {
+          const word = asRecord(wordItem);
+          return { source: readString(word.source), translation: readString(word.translation) };
+        })
+        .filter((word) => {
+          const sourceKey = normalizeTranslationMatch(word.source);
+          const translationKey = normalizeTranslationMatch(word.translation);
+          if (!sourceKey || !translationKey || seenWords.has(sourceKey)) return false;
+          if (!containsAlignedPhrase(segmentSource, word.source) || !containsAlignedPhrase(segmentTranslation, word.translation)) return false;
+          seenWords.add(sourceKey);
+          return true;
+        })
+        .slice(0, 100);
+      return {
+        source: segmentSource,
+        translation: segmentTranslation,
+        ...(words.length ? { words } : {}),
+      };
     }).filter((item) => item.source && item.translation);
     const segments: ReaderTranslationSegment[] = [];
     let sourceCursor = 0;
