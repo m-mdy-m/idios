@@ -206,7 +206,7 @@ var specs = []commandSpec{
 			return nil, fmt.Errorf("the quote library is empty; add a quote before testing reminders")
 		}
 		item := reminders.Choose(items, "")
-		notice, err := s.CreateNotification(c, "Quote reminder test", reminders.FormatText(item), "quote")
+		notice, err := s.CreateNotification(c, "Quote reminder test", reminders.FormatText(item), "info")
 		if err != nil {
 			return nil, err
 		}
