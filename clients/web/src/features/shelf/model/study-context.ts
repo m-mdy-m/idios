@@ -87,7 +87,7 @@ export function fitShelfRuntimeMessages(messages: ShelfAIMessage[]): ShelfAIMess
   if (systemChunks.length > 1) {
     throw new Error('MIMI system instructions exceed the AI request budget; shorten the selected reading skills.');
   }
-  const currentChunks = splitUtf8Text(current.content, 48000).map((content, index, all) => ({
+  const currentChunks = splitUtf8Text(current.content, 47000).map((content, index, all) => ({
     role: current.role,
     content: all.length === 1
       ? content
