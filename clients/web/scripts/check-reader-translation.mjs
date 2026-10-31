@@ -20,6 +20,35 @@ assert.equal(valid.terms.length, 1, 'terms must come from the exact source text'
 assert.equal(valid.terms[0]?.translation, 'استدلال');
 assert.equal(valid.grammar.length, 1);
 assert.equal(valid.ielts.length, 1);
+const aligned = parseReaderTranslation(JSON.stringify({
+  translation: 'او پرده را کنار زد و وارد اتاق شد.',
+  segments: [{
+    source: 'She lifted the veil and entered the room.',
+    translation: 'او پرده را کنار زد و وارد اتاق شد.',
+    words: [
+      { source: 'veil', translation: 'پرده' },
+      { source: 'entered', translation: 'وارد' },
+      { source: 'invented', translation: 'ساختگی' },
+      { source: 'veil', translation: 'پرده' },
+      { source: 'the', translation: 'غیرمرتبط' },
+    ],
+  }],
+}), 'She lifted the veil and entered the room.');
+assert.deepEqual(aligned.segments[0]?.words, [
+  { source: 'veil', translation: 'پرده' },
+  { source: 'entered', translation: 'وارد' },
+], 'word alignments must map exact source and target phrases and discard invalid or duplicate entries');
+
+const wrongTarget = parseReaderTranslation(JSON.stringify({
+  translation: 'او پرده را کنار زد.',
+  segments: [{
+    source: 'She lifted the veil.',
+    translation: 'او پرده را کنار زد.',
+    words: [{ source: 'veil', translation: 'دریا' }],
+  }],
+}), 'She lifted the veil.');
+assert.equal(wrongTarget.segments[0]?.words, undefined, 'a target phrase absent from the translated sentence must be rejected');
+
 assert.equal(normalizeTranslationMatch('  ＡＲＧＵＭＥＮＴ  '), 'argument');
 
 const grammarOnly = parseReaderTranslation(JSON.stringify({

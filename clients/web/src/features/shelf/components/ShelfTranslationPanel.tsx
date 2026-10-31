@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   BookOpen, ChevronDown, GraduationCap, Languages, Lightbulb,
   LoaderCircle, Settings2, Sparkles, X,
@@ -112,10 +112,19 @@ export function ShelfTranslationPanel({
   onModelChange: (model: string) => void;
   timeoutSeconds: number;
   onTimeoutChange: (seconds: number) => void;
-  progress: { done: number; total: number };
+  progress: { done: number; total: number; startedAt: number };
 }) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!pageBusy || !progress.startedAt) return;
+    setClockNow(Date.now());
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [pageBusy, progress.startedAt]);
+  const elapsedSeconds = progress.startedAt ? Math.max(0, Math.floor((clockNow - progress.startedAt) / 1000)) : 0;
+  const elapsedLabel = `${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}`;
   const activeMode = modes.find((mode) => mode.value === tab) ?? { value: 'translate' as const, label: 'Translate', description: 'Full page translation' };
   const pageTerm = pageData?.terms.find((term) => termMatches(term, hoveredWord));
   const currentTerm = pageTerm || wordData?.terms[0];
@@ -199,7 +208,7 @@ export function ShelfTranslationPanel({
       {tab === 'translate' && <>
         {pageBusy && <div className="shelf-translation-panel__progress" role="status" aria-live="polite">
           <span className="shelf-translation-panel__progress-spinner"><LoaderCircle size={14} className="is-spinning" /></span>
-          <div><strong>{progress.total > 1 ? `Translating part ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : 'Translating this page'}</strong><small>{progress.total ? `${progress.done} of ${progress.total} parts complete` : 'Preparing page text…'}</small></div>
+          <div><strong>{progress.total > 1 ? `Translating ${progress.done} of ${progress.total} parts` : 'Translating this page'}</strong><small>{progress.total ? `${progress.done} of ${progress.total} complete · ${elapsedLabel} elapsed` : `Preparing page text… · ${elapsedLabel} elapsed`}</small></div>
           <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '5%' }} /></div>
         </div>}
         {selectionData && selectedText.trim() && <article className="shelf-translation-panel__selection-result">
@@ -209,7 +218,7 @@ export function ShelfTranslationPanel({
           {selectionBusy ? <LoaderCircle size={13} className="is-spinning" /> : <Sparkles size={13} />} Translate selected passage
         </button>}
         {pageData?.translation ? <article className="shelf-translation-panel__translation-document" aria-live="polite">
-          {pageData.segments.length > 1 ? (() => {
+          {pageData.segments.length > 1 || pageData.segments.some((segment) => (segment.words?.length ?? 0) > 0) ? (() => {
             let cursor = 0;
             const positions = pageData.segments.map((segment) => {
               const position = pageData.translation.indexOf(segment.translation, cursor);
@@ -223,12 +232,41 @@ export function ShelfTranslationPanel({
               const before = pageData.translation.slice(renderCursor, position);
               renderCursor = position + segment.translation.length;
               const source = normalizeTranslationMatch(segment.source);
-              const active = Boolean(hoveredWord && source.split(' ').includes(normalizeTranslationMatch(hoveredWord)));
-              return <span key={`${index}:${segment.source}`}>{before}<span
+              const hovered = normalizeTranslationMatch(hoveredWord);
+              const active = Boolean(hovered && source.split(/[^\p{L}\p{N}'’-]+/u).includes(hovered));
+              const alignedWords = segment.words ?? [];
+              const positionedWords = alignedWords
+                .map((word) => ({ word, position: segment.translation.indexOf(word.translation) }))
+                .filter((entry) => entry.position >= 0)
+                .sort((left, right) => left.position - right.position);
+              const orderedWordPositions: Array<{ word: typeof alignedWords[number]; position: number }> = [];
+              let previousWordEnd = -1;
+              for (const entry of positionedWords) {
+                if (entry.position < previousWordEnd) continue;
+                orderedWordPositions.push(entry);
+                previousWordEnd = entry.position + entry.word.translation.length;
+              }
+              const hasValidWordPositions = orderedWordPositions.length > 0;
+              const renderedSegment = hasValidWordPositions ? (() => {
+                let segmentCursor = 0;
+                return orderedWordPositions.map(({ word, position }, wordIndex) => {
+                  const textBefore = segment.translation.slice(segmentCursor, position);
+                  segmentCursor = position + word.translation.length;
+                  const wordActive = hovered === normalizeTranslationMatch(word.source);
+                  return <span key={`${wordIndex}:${word.source}`}>{textBefore}<span
+                    className={`shelf-translation-panel__linked-segment${wordActive ? ' is-linked' : ''}`}
+                    onMouseEnter={() => onSelectTerm(word.source)}
+                    onMouseLeave={() => onSelectTerm('')}
+                    title={word.source}
+                  >{word.translation}</span></span>;
+                }).concat(<span key="tail">{segment.translation.slice(segmentCursor)}</span>);
+              })() : <span
                 className={`shelf-translation-panel__linked-segment${active ? ' is-linked' : ''}`}
                 onMouseEnter={() => onSelectTerm(segment.source)}
+                onMouseLeave={() => onSelectTerm('')}
                 title={segment.source}
-              >{segment.translation}</span></span>;
+              >{segment.translation}</span>;
+              return <span key={`${index}:${segment.source}`}>{before}{renderedSegment}</span>;
             })}{pageData.translation.slice(renderCursor)}</p>;
           })() : <TranslationMarkdown value={pageData.translation} />}
         </article> : !pageBusy && <div className="shelf-translation-panel__empty">

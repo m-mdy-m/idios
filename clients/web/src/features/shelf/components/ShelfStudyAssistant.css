@@ -1781,6 +1781,7 @@ body.idios-reading-companion-chat-open .shelf-study-mascot__drag-note { display:
    bubble must never change the anchor's dimensions or move the character. */
 .shelf-study-mascot {
   position: fixed;
+  z-index: 12030;
   width: min(286px, calc(100vw - 24px));
   height: 46px;
   display: block;

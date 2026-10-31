@@ -512,8 +512,8 @@ export function ShelfPDFReaderPage() {
         'Target language: ' + targetLanguageName,
         scope,
         'Use the subject and local terminology of this book to choose accurate equivalents. Keep the author’s tone and register.',
-        'Return ONLY valid JSON with this exact shape: {"translation":"complete target-language passage","segments":[{"source":"one exact source sentence or clause","translation":"its complete target-language translation"}],"terms":[],"grammar":[],"ielts":[],"translatorNote":""}.',
-        'Split segments at sentence boundaries (or at a complete clause only when a sentence is unusually long). Copy each source segment exactly, in source order, and translate it fully. The UI displays only the translation field; the source field exists solely to synchronize hover highlights with the PDF.',
+        'Return ONLY valid JSON with this exact shape: {"translation":"complete target-language passage","segments":[{"source":"one exact source sentence or clause","translation":"its complete target-language translation","words":[{"source":"exact source word or short phrase","translation":"exact corresponding target-language word or phrase"}]}],"terms":[],"grammar":[],"ielts":[],"translatorNote":""}.',
+        'Split segments at sentence boundaries (or at a complete clause only when a sentence is unusually long). Copy each source segment exactly, in source order, and translate it fully. For each segment, map up to 4 high-value source content words or short idiomatic phrases (prioritise technical terms, key nouns, verbs, and expressions) to the exact corresponding words or phrases in that segment’s translation. Avoid filling the list with articles and common function words unless their meaning matters here. Keep each words[].source and words[].translation as exact contiguous substrings of their respective segment; include a mapping only when the correspondence is clear, never guess, and do not map one source word to unrelated target text. These mappings exist only for precise bidirectional hover highlights; the UI displays the translation field as the page text.',
         'The translation field must contain only the complete target-language text. Do not put source-language text, introductions, headings, explanations, vocabulary lessons or IELTS notes in it.',
         'Before responding, compare every segment against the source. Preserve all propositions, clauses, paragraph breaks, sentence order, negation, quantifiers, conditions, comparisons, actors, tense and uncertainty. Never summarize, invent, repeat or omit content.',
       ].join('\n\n');
@@ -546,8 +546,9 @@ export function ShelfPDFReaderPage() {
       model: selectedModel.modelID,
       task: 'translation',
       reasoning_effort: 'low',
+      temperature: directTranslation ? 0.15 : 0.2,
       timeout_seconds: Math.min(600, Math.max(45, request.timeoutSeconds ?? selectedOption.timeoutSeconds)),
-      max_tokens: directTranslation ? 2400 : learningAnalysis ? 1100 : 700,
+      max_tokens: directTranslation ? Math.min(4096, Math.max(2200, Math.ceil(request.text.length * 0.85))) : learningAnalysis ? 1100 : 700,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE\n' + request.text },

@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.2.2] - 2026-10-31
+
+### Added
+
+- Add verified source-to-target word alignments to sentence-aligned Shelf translations, enabling precise hover linking between PDF words and their translated equivalents.
+- Show live elapsed time and completed-part progress while page translation is running.
+
+### Changed
+
+- Send typical PDF pages in one larger translation request and process unusually long pages in bounded parallel batches, preserving source order, paragraph separators, and resumable chunk caching.
+- Use a low-variance translation request with an output budget sized to the passage, while keeping book terminology and nearby-page context available.
+
+### Fixed
+
+- Keep Mimi's page thought bubble visible and interactive while the translation companion is open.
+- Restore exact Mimi margin highlights on browsers without the CSS Custom Highlight API, using range-derived overlay rectangles instead of silently dropping marks.
+- Republish Mimi's page marks when Focus Mode changes so returning to normal reading restores the current page's notes.
+
 ## [3.2.1] - 2026-10-31
 
 ### Changed
@@ -214,6 +232,7 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
+[3.2.2]: https://github.com/m-mdy-m/idios/compare/v3.2.1...v3.2.2
 [3.2.1]: https://github.com/m-mdy-m/idios/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/m-mdy-m/idios/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/m-mdy-m/idios/compare/v3.1.1...v3.1.2

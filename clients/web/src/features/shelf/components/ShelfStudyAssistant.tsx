@@ -199,7 +199,7 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
     if (displayMode !== 'reader' || quietMode) return;
     const insight = pageInsight?.page === pageNumber ? pageInsight : loadPageInsight(bookID, pageNumber);
     publishCompanionHighlights(bookID, pageNumber, validatedCompanionMarks(insight, pageText));
-  }, [displayMode, bookID, pageNumber, pageText, pageInsight]);
+  }, [displayMode, quietMode, bookID, pageNumber, pageText, pageInsight]);
 
   useEffect(() => {
     try {
