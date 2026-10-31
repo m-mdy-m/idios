@@ -2258,7 +2258,7 @@ func discussionQualityWarnings(content string, allowedSources map[string]bool, p
 		warnings = append(warnings, fmt.Sprintf("This contribution is complete but exceeds the %d-word style budget (%d words); the text was preserved rather than discarded.", maxWords, words))
 	}
 	if len(passages) > 0 && len(allowedSources) > 0 && !sourceMarker.MatchString(trimmed) && discussionAnswerNeedsCitation(trimmed) {
-		warnings = append(warnings, "This contribution makes a claim about the supplied text without an exact source marker; treat that claim as unverified until another agent grounds it.")
+		warnings = append(warnings, "This contribution was retained after repair, but it lacks an exact source marker. Treat claims about the supplied text as unverified until another agent grounds them.")
 	}
 	if peerProblem := discussionPeerResponseProblem(trimmed, previous, agentID, finalTurn); peerProblem != "" {
 		warnings = append(warnings, "Peer-attribution quality warning: "+peerProblem+". The contribution was retained, but it should not be treated as a verified response to that peer.")
