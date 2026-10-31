@@ -9,7 +9,11 @@
 
 ### Fixed
 
-- Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
+- Bound each sequential Shelf discussion turn by its provider timeout, with a four-minute minimum for local models to cover cold starts and one repair attempt; the workflow deadline remains the overall cap.
+- Give the discussion repair prompt the exact names and claims of completed peers, and retain complete contributions with explicit quality warnings when only word-budget, citation, or peer-attribution checks remain unsatisfied.
+- Keep hard evidence failures strict: empty/unfinished responses, unknown source IDs, and chapter/section references absent from the supplied page are still rejected.
+- Preserve independently requested Shelf note and highlight actions; use the reader's exact selected phrase as the authoritative highlight anchor.
+- Add a Rawls page-21 fixture, mixed note/highlight contract checks, and a shared-Pipeline task that downloads Qwen 2.5 3B through Ollama and runs a real sequential four-agent discussion.
 - Show an accurate waiting-for-model status while a discussion agent is generating a response.
 - Reconstruct selectable PDF text from line boundaries and repair words split by end-of-line hyphenation before translation or search.
 - Keep reader translation chunks sequential so local providers are not overloaded, and preserve useful partial output when a provider stream ends before its JSON is complete.
