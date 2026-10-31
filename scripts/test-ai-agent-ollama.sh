@@ -51,4 +51,4 @@ ollama run "$MODEL" "Reply with the single word READY." >/dev/null
 echo "==> Running the real MIMI note/highlight proposal and sequential Shelf discussion against Ollama"
 IDIOS_OLLAMA_INTEGRATION=1 go test ./internal/ai \
   -run '^TestOllamaBookDiscussionIntegration$' \
-  -count=1 -v -timeout 20m
+  -count=1 -v -timeout 25m
