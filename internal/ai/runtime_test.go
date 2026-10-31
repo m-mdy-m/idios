@@ -2090,7 +2090,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	actionUser := "The reader asks: “Please write a concise standalone note about the central argument on this page, and highlight the selected phrase ‘order and system’. Add a short margin explanation to the highlight. Save both the highlight and the separate note to this book.”\n\nReader-selected exact highlight phrase (do not alter): “" + selectedQuote + "”\n\nPage 21 source text:\n" + string(page)
 	noteRequest := GenerateRequest{
 		ProviderID: providerID, Model: model, Task: "book_discussion",
-		Messages: []Message{{Role: "system", Content: actionSystem}, {Role: "user", Content: actionUser}},
+		Messages:  []Message{{Role: "system", Content: actionSystem}, {Role: "user", Content: actionUser}},
 		MaxTokens: 520, TimeoutSeconds: 240, PrivacySensitive: false,
 		ResponseFormat: &ResponseFormat{Type: "json_object"},
 	}
