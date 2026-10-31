@@ -1950,7 +1950,7 @@ func TestReaderClaimsRequireAnExactSuppliedSourceMarker(t *testing.T) {
 	if problem := validateDiscussionContribution(grounded, allowed, passages, nil, "reader", false); problem != "" {
 		t.Fatalf("Reader's correctly cited claim was rejected: %s", problem)
 	}
-	limitation := "The supplied context does not establish what the later chapters contain."
+	limitation := "The supplied context does not establish what those topics contain beyond this page."
 	if problem := validateDiscussionContribution(limitation, allowed, passages, nil, "reader", false); problem != "" {
 		t.Fatalf("a transparent evidence limitation should not require a citation: %s", problem)
 	}
