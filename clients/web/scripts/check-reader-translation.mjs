@@ -46,8 +46,16 @@ assert.equal(chunks.join(' '), longSource, 'splitting must preserve every source
 const paragraphMerge = mergeReaderTranslations([
   { translation: 'First paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
   { translation: 'Second paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
-], ['\\n\\n']);
+], ['\n\n']);
 assert.equal(paragraphMerge.translation, 'First paragraph.\n\nSecond paragraph.', 'chunk merging must preserve PDF paragraph breaks');
+
+const sparseParagraphMerge = mergeReaderTranslations([
+  { translation: '', segments: [], terms: [], grammar: [], ielts: [] },
+  { translation: 'First paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
+  { translation: '', segments: [], terms: [], grammar: [], ielts: [] },
+  { translation: 'Second paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
+], [' ', '\n\n', '\n\n']);
+assert.equal(sparseParagraphMerge.translation, 'First paragraph.\n\nSecond paragraph.', 'empty chunks must not shift paragraph separators');
 
 const merged = mergeReaderTranslations([
   { translation: 'ترجمه یک.', segments: [{ source: 'Sentence one.', translation: 'ترجمه یک.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }], grammar: [], ielts: [] },

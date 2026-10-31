@@ -107,12 +107,24 @@ export function mergeReaderTranslations(parts: ReaderTranslationData[], separato
   };
   const notes = uniqueBy(parts.map((part) => part.translatorNote ?? '').filter(Boolean), (item) => item, 6);
   return {
-    translation: parts.reduce((combined, part, index) => {
-      const next = part.translation.trim();
-      if (!next) return combined;
-      if (!combined) return next;
-      return combined + (separators[index - 1] ?? ' ') + next;
-    }, ''),
+    translation: (() => {
+      let combined = '';
+      let previousIndex = -1;
+      for (const [index, part] of parts.entries()) {
+        const next = part.translation.trim();
+        if (!next) continue;
+        if (previousIndex >= 0) {
+          const interveningSeparators = separators.slice(previousIndex, index);
+          const separator = interveningSeparators.find((value) => value.includes('\n\n'))
+            ?? interveningSeparators.find((value) => value.includes('\n'))
+            ?? ' ';
+          combined += separator;
+        }
+        combined += next;
+        previousIndex = index;
+      }
+      return combined;
+    })(),
     segments: parts.flatMap((part) => part.segments),
     terms: uniqueBy(parts.flatMap((part) => part.terms), (item) => item.source, 24),
     grammar: uniqueBy(parts.flatMap((part) => part.grammar), (item) => item.pattern, 10),
