@@ -1630,10 +1630,10 @@ func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.D
 		perRoundBudget += agentTurn
 	}
 
-	// Sum each selected provider's bounded turn timeout, then budget that sequence
-	// for every requested round plus a small allowance for state persistence.
-	required := time.Duration(rounds)*perRoundBudget + time.Duration(rounds)*30*time.Second
-	const maximumWorkflowBudget = time.Hour
+	// Each turn may need an initial generation and one focused correction. Give
+	// both attempts a fresh provider deadline and budget the sequential worst case.
+	required := time.Duration(rounds)*perRoundBudget*2 + time.Duration(rounds)*30*time.Second
+	const maximumWorkflowBudget = 2 * time.Hour
 	if required > maximumWorkflowBudget {
 		required = maximumWorkflowBudget
 	}
@@ -1880,9 +1880,9 @@ func discussionRoleFocus(agentID string) string {
 	case "tutor":
 		return "Explain one difficult concept or relationship in plain language. Focus on what a key phrase such as 'order and system' does in the argument, not on repeating the page summary. Give one brief example only when it clarifies the idea; preserve all qualifications."
 	case "steelman":
-		return "On an opening turn, reconstruct the strongest fair reading of the author's position and name its key premise; do not invent an opposing position or present a hypothetical as the author's view. Preserve explicit negations and qualifications. When a passage separates the importance of material from the reader's freedom to choose a reading path, do not infer that the material is optional, peripheral, or merely an application. When peers are available, steelman one role-relevant claim before testing that premise. State whether the objection refutes, narrows, or leaves the position intact; do not invent conflict."
+		return "On an opening turn, reconstruct the strongest fair reading of the author's position and identify the premise that makes it persuasive; then test one genuine limit or qualification without inventing an opposing position. Do not merely restate the central claim. Preserve explicit negations and qualifications. When a passage separates the importance of material from the reader's freedom to choose a reading path, do not infer that the material is optional, peripheral, or merely an application. When peers are available, steelman one role-relevant claim before testing that premise. State whether the objection refutes, narrows, or leaves the position intact; do not invent conflict."
 	case "concept-connector":
-		return "Find one non-obvious conceptual relationship among supplied passages, earlier pages, or saved notes. Label it supports, contrasts with, defines, or depends on, and cite the relevant source IDs. If the request contains no grounded cross-page connection, say so; never substitute a paraphrase of the previous speaker."
+		return "Find one non-obvious conceptual relationship among supplied passages, earlier pages, or saved notes. Label it supports, contrasts with, defines, or depends on, and cite the relevant source IDs. If no earlier page or saved note is supplied, explicitly say that no grounded cross-page connection is available; do not repackage the current page's central claim as a connection. You may connect distinct ideas within the supplied page only when you identify both ideas and their actual relation."
 	case "context-keeper":
 		return "Track the live issue: the strongest claim, its strongest objection, accepted corrections, and what remains unresolved. Point out repeated reasoning that adds no evidence. Give the next useful issue to test; do not recap the whole discussion."
 	case "example-builder":
@@ -1896,7 +1896,7 @@ func discussionRoleFocus(agentID string) string {
 	case "translator":
 		return "Focus on one consequential wording or terminology choice. Offer at most two context-supported readings, preserve negation and logical force, and explain whether the choice changes the argument. Do not translate the whole page unless asked."
 	case "ambiguity-scout":
-		return "Test whether a genuine ambiguity exists in wording, referent, definition, translation, or scope. Offer at most two readings only when both fit the supplied words. Preserve explicit negation: wording such as 'not peripheral, or merely applications' rules out those readings rather than creating a false ambiguity. Say when no material ambiguity exists."
+		return "Test one specific phrase, referent, definition, or scope boundary for a genuine ambiguity. Give two readings only if both are supported by the supplied wording and materially change the interpretation; otherwise say no material ambiguity is established. Preserve explicit negations and do not turn an author's rejected reading into an alternative."
 	case "reviewer":
 		return "Independently evaluate one consequential claim for logical strength. Classify it as supported, partly supported, unclear, or unsupported; identify the exact inference gap and offer the narrowest defensible correction. When peers exist, name the specific claim being reviewed."
 	case "evidence-auditor":
@@ -1916,6 +1916,14 @@ func discussionRoleFocus(agentID string) string {
 
 func (m *Manager) newDiscussionAgentContext(parent context.Context, providerID string) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, m.discussionTimeoutForProvider(providerID))
+}
+
+// generateDiscussionAttempt gives each model request its own provider timeout.
+// A correction must not inherit the time consumed by the original generation.
+func generateDiscussionAttempt(parent context.Context, timeout time.Duration, generate func(context.Context) (GenerateResponse, error)) (GenerateResponse, error) {
+	attemptCtx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	return generate(attemptCtx)
 }
 
 func (m *Manager) discussionTimeoutForProvider(providerID string) time.Duration {
@@ -1958,11 +1966,10 @@ func discussionAgentPriority(id string) int {
 	return 500
 }
 
-// discussionIsIndependentOpening keeps each specialist's first fresh-session pass independent.
-// Only the final Chair sees those opening positions; later rounds and resumed discussions
-// receive peer history so agents can directly examine one another's claims.
-func discussionIsIndependentOpening(round int, hasPriorDebate bool, finalTurn bool) bool {
-	return round == 1 && !hasPriorDebate && !finalTurn
+// discussionIsIndependentOpening keeps opening specialists independent, but
+// the Chair is an adjudicator and must see every completed position in its round.
+func discussionIsIndependentOpening(round int, hasPriorDebate bool, chairTurn bool) bool {
+	return round == 1 && !hasPriorDebate && !chairTurn
 }
 
 func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, taskID string) (WorkflowResult, error) {
@@ -2056,18 +2063,17 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			modelRef := m.discussionModelForAgent(agent, fallbackModel)
 			providerID, model := splitModelRef(modelRef)
 			turnTimeout := m.discussionTimeoutForProvider(providerID)
-			agentCtx, cancelAgent := m.newDiscussionAgentContext(ctx, providerID)
-			defer cancelAgent()
 			turnTimeoutSeconds := int(turnTimeout / time.Second)
 			messages := discussionMessages(req, agent, false, nil)
 			// Every later round receives the full bounded debate history, not just the
 			// immediately preceding round. Current-round replies are appended below.
 			priorTurns := append([]AgentContribution(nil), debateHistory...)
+			chairTurn := agent.ID == "discussion-chair" && index == len(chosen)-1
 			// In sequential mode, each agent sees only turns already completed before it.
 			if !req.Parallel && index > 0 {
-				// Fresh Round 1 is independent analysis. Only the final Chair turn
-				// may see those first-round answers when the discussion has one round.
-				independentOpening := discussionIsIndependentOpening(round, len(debateHistory) > 0, finalTurn)
+				// Opening specialists remain independent. MIMI is the exception:
+				// it reviews the completed positions at the end of every round.
+				independentOpening := discussionIsIndependentOpening(round, len(debateHistory) > 0, chairTurn)
 				if !independentOpening {
 					priorTurns = append(priorTurns, currentRound[:index]...)
 				}
@@ -2105,10 +2111,15 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					disableThinking = true
 				}
 			}
-			response, err := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: messages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+			generateAttempt := func(attemptMessages []Message) (GenerateResponse, error) {
+				return generateDiscussionAttempt(ctx, turnTimeout, func(attemptCtx context.Context) (GenerateResponse, error) {
+					return m.Generate(attemptCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: attemptMessages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+				})
+			}
+			response, err := generateAttempt(messages)
 			if err == nil {
 				response.Content = ensureRequiredDiscussionSourceMarker(response.Content, req.Context, agent.ID, finalTurn)
-				response.Content = ensureFinalChairPeerAttributions(response.Content, priorTurns, agent.ID, finalTurn)
+				response.Content = ensureChairPeerAttributions(response.Content, priorTurns, agent.ID, chairTurn)
 			}
 			repairFailure := ""
 			var contributionWarnings []string
@@ -2123,10 +2134,10 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 						Message{Role: "assistant", Content: response.Content},
 						Message{Role: "user", Content: discussionRepairInstructionWithPeers(repairReason, allowedSources, finalTurn, hasPeer, priorTurns, agent.ID)},
 					)
-					repaired, repairErr := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+					repaired, repairErr := generateAttempt(repairMessages)
 					if repairErr == nil {
 						repaired.Content = ensureRequiredDiscussionSourceMarker(repaired.Content, req.Context, agent.ID, finalTurn)
-						repaired.Content = ensureFinalChairPeerAttributions(repaired.Content, priorTurns, agent.ID, finalTurn)
+						repaired.Content = ensureChairPeerAttributions(repaired.Content, priorTurns, agent.ID, chairTurn)
 					}
 					originalHardProblem := discussionHardResponseProblem(response.Content, allowedSources, req.Context)
 					originalRequiredCitationProblem := discussionRequiredCitationProblem(response.Content, req.Context, agent.ID, finalTurn)
@@ -2333,19 +2344,22 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	}
 	previous = usable
 	var review strings.Builder
+	chairTurn := agent.ID == "discussion-chair"
 	if finalTurn {
 		fmt.Fprintf(&review, "\n\nFINAL CHAIR TURN, round %d. You are the final moderator, not another independent summarizer. Name the participants whose positions matter. State the strongest supported reading, who disagrees and on what exact point, whether the objection is resolved or remains open, and one specific refinement. Compare actual statements only; never invent positions or force consensus. If the reader's answer would materially change the interpretation, finish with exactly one final line `Question for you: ...`; otherwise ask nothing. Under 150 words, 3–5 short sentences plus at most one question. Cite only supplied source IDs.\n", round)
+	} else if chairTurn {
+		fmt.Fprintf(&review, "\n\nROUND CHAIR CHECKPOINT, round %d. You speak after the specialists in this round, even though the discussion will continue. Compare at least two actual named completed positions when available; weigh their claims against the source, identify what is already resolved, and state the next issue to test. This is a provisional synthesis, not a final verdict. Do not ask the reader a question. Under 100 words with exact source markers for page claims.\n", round)
 	} else {
 		fmt.Fprintf(&review, "\n\nSEQUENTIAL PEER REVIEW, round %d. Reply to one actual earlier speaker by exact displayed name. First identify their concrete claim in a short phrase, then assess it: supported, partly supported, unclear, or unsupported. Add a textual reason and one precise correction, counterargument, or refinement. Resolve the previous speaker's question if one was addressed to you. Do not repeat the thread, answer a different question, claim knowledge of unseen pages, or manufacture conflict. Do NOT ask the reader any question. Keep under 85 words in 3–4 short sentences. Cite only supplied source IDs.\n", round)
 	}
 	targetLimit := 1
-	if finalTurn {
+	if chairTurn {
 		targetLimit = 2
 	}
 	targets := discussionTargetPeers(usable, agent.ID, targetLimit)
-	if finalTurn {
+	if chairTurn {
 		if len(targets) > 0 {
-			review.WriteString("\n\nREQUIRED CHAIR ATTRIBUTIONS — use both exact displayed names and compare their positions. In your first sentence name both participants. Keep the complete answer to 3 short sentences; do not repeat a peer's full wording:")
+			review.WriteString("\n\nREQUIRED CHAIR POSITIONS — compare these exact displayed participants and their actual claims. In your first sentence name both when two are supplied. Do not merely summarize the shared topic:")
 			for _, target := range targets {
 				fmt.Fprintf(&review, "\n- %q: %s", strings.TrimSpace(target.AgentName), compactDiscussionExcerpt(target.Content, 220))
 			}
@@ -2545,7 +2559,7 @@ var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|follo
 // explicitly rejects a downgrade in importance while separately granting reader
 // preference; a model must not turn that preference into optionality. This is a
 // source-triggered guard, not a general semantic truth classifier.
-var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|to\s+read|chapters?|topics?|sections?)|(?:chapters?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant|not\s+important|less\s+important)|(?:peripheral|dispensable|unimportant)\s+(?:chapters?|topics?|sections?|material)|(?:merely|only)\s+applications?|not\s+central|(?:can|may|could)\s+be\s+skipped)\b`)
+var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|to\s+read|chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?)|(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant|not\s+important|less\s+important|not\s+central\s+to\s+(?:the\s+)?(?:theory|book|argument))|(?:peripheral|dispensable|unimportant)\s+(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)|(?:merely|only)\s+applications?|(?:can|may|could)\s+be\s+skipped)\b`)
 
 func discussionDowngradeIsNegated(content string, claimStart int) bool {
 	clauseStart := 0
@@ -2670,15 +2684,19 @@ func ensureRequiredDiscussionSourceMarker(content string, passages []ContextPass
 	return trimmed + marker
 }
 
-func ensureFinalChairPeerAttributions(content string, previous []AgentContribution, agentID string, finalTurn bool) string {
-	if agentID != "discussion-chair" || !finalTurn {
+func ensureChairPeerAttributions(content string, previous []AgentContribution, agentID string, chairTurn bool) string {
+	if agentID != "discussion-chair" || !chairTurn {
 		return content
 	}
-	problem := discussionPeerResponseProblem(content, previous, agentID, finalTurn)
-	if !strings.Contains(problem, "final Chair does not identify enough role-relevant peer positions") {
+	problem := discussionPeerResponseProblem(content, previous, agentID, false)
+	if !strings.Contains(problem, "Chair does not identify enough role-relevant peer positions") {
 		return content
 	}
-	targets := discussionTargetPeers(previous, agentID, 2)
+	limit := 2
+	if len(discussionTargetPeers(previous, agentID, 2)) == 1 {
+		limit = 1
+	}
+	targets := discussionTargetPeers(previous, agentID, limit)
 	if len(targets) == 0 {
 		return content
 	}
@@ -2725,7 +2743,7 @@ func discussionPeerResponseProblem(content string, previous []AgentContribution,
 	for _, turn := range usable {
 		distinct[turn.AgentID] = true
 	}
-	if finalTurn && len(distinct) > 1 {
+	if (agentID == "discussion-chair" || finalTurn) && len(distinct) > 1 {
 		required = 2
 	}
 	targets := discussionTargetPeers(usable, agentID, required)
@@ -2739,8 +2757,8 @@ func discussionPeerResponseProblem(content string, previous []AgentContribution,
 		}
 	}
 	if len(targets) < required || len(mentioned) < len(targets) {
-		if finalTurn {
-			return fmt.Sprintf("the final Chair does not identify enough role-relevant peer positions by participant name (need %d)", required)
+		if agentID == "discussion-chair" {
+			return fmt.Sprintf("the Chair does not identify enough role-relevant peer positions by participant name (need %d)", required)
 		}
 		return "the response does not identify its role-relevant completed peer by participant name"
 	}
@@ -3024,7 +3042,7 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 		return instruction
 	}
 	limit := 1
-	if finalTurn {
+	if finalTurn || agentID == "discussion-chair" {
 		limit = 2
 	}
 	targets := discussionTargetPeers(previous, agentID, limit)
@@ -3042,8 +3060,11 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 	if peers.Len() == 0 {
 		return instruction
 	}
-	if finalTurn {
+	if agentID == "discussion-chair" && finalTurn {
 		return instruction + "\n\nREQUIRED FINAL CHAIR POSITIONS — mention both distinct participant names exactly, compare their actual claims, and state agreement/disagreement:" + peers.String() + "\nYour first sentence must name both positions; do not write an anonymous consensus."
+	}
+	if agentID == "discussion-chair" {
+		return instruction + "\n\nREQUIRED ROUND CHAIR CHECKPOINT — compare the actual opening positions by the displayed names above. This is provisional, not the final answer; do not ask the reader a question and identify the next substantive issue for the specialists to test."
 	}
 	name := strings.TrimSpace(targets[0].AgentName)
 	return instruction + "\n\nREQUIRED PEER TARGET — address this exact participant and claim; do not choose another speaker:" + peers.String() + fmt.Sprintf("\nYour first sentence MUST begin with %q, then assess this claim. Do not start with a generic summary.", "Regarding "+name+"'s point,")
