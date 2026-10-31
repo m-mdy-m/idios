@@ -1566,7 +1566,7 @@ func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.D
 	if fallbackModel == "" {
 		fallbackModel = m.state.Config.DefaultModel
 	}
-	var maxTurn time.Duration
+	var perRoundBudget time.Duration
 	for _, agent := range selected {
 		modelRef := strings.TrimSpace(agent.PreferredModel)
 		if modelRef == "" {
@@ -1609,12 +1609,11 @@ func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.D
 			modelRef = fallbackModel
 		}
 		providerID, _ := splitModelRef(modelRef)
-		providerFound := false
+		var agentTurn time.Duration
 		for _, cfg := range m.state.Providers {
 			if cfg.ID != providerID {
 				continue
 			}
-			providerFound = true
 			seconds := normalizedTimeout(cfg.TimeoutSeconds)
 			if isConfigLocal(cfg) && seconds < minimumLocalDiscussionTimeoutSeconds {
 				seconds = minimumLocalDiscussionTimeoutSeconds
@@ -1622,22 +1621,18 @@ func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.D
 			if seconds > maximumDiscussionTurnTimeoutSeconds {
 				seconds = maximumDiscussionTurnTimeoutSeconds
 			}
-			if time.Duration(seconds)*time.Second > maxTurn {
-				maxTurn = time.Duration(seconds) * time.Second
-			}
+			agentTurn = time.Duration(seconds) * time.Second
 			break
 		}
-		if !providerFound && time.Duration(minimumLocalDiscussionTimeoutSeconds)*time.Second > maxTurn {
-			maxTurn = time.Duration(minimumLocalDiscussionTimeoutSeconds) * time.Second
+		if agentTurn <= 0 {
+			agentTurn = time.Duration(minimumLocalDiscussionTimeoutSeconds) * time.Second
 		}
-	}
-	if maxTurn <= 0 {
-		maxTurn = time.Duration(minimumLocalDiscussionTimeoutSeconds) * time.Second
+		perRoundBudget += agentTurn
 	}
 
-	// Sequential work needs one bounded turn per selected agent in every round,
-	// plus a small allowance for queue/state persistence between rounds.
-	required := time.Duration(len(selected)*rounds)*maxTurn + time.Duration(rounds)*30*time.Second
+	// Sum each selected provider's bounded turn timeout, then budget that sequence
+	// for every requested round plus a small allowance for state persistence.
+	required := time.Duration(rounds)*perRoundBudget + time.Duration(rounds)*30*time.Second
 	const maximumWorkflowBudget = time.Hour
 	if required > maximumWorkflowBudget {
 		required = maximumWorkflowBudget
