@@ -1517,9 +1517,9 @@ func (m *Manager) pruneTasksLocked(maxTasks int) {
 }
 
 // discussionWorkflowTimeoutLocked estimates the full sequential round-table budget.
- // It is called while m.mu is already held by dispatchLocked. Each agent remains
- // individually bounded; this only prevents a shared ten-minute task deadline from
- // expiring part-way through a deliberately sequential discussion.
+// It is called while m.mu is already held by dispatchLocked. Each agent remains
+// individually bounded; this only prevents a shared ten-minute task deadline from
+// expiring part-way through a deliberately sequential discussion.
 func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.Duration {
 	configured := time.Duration(m.state.Config.WorkflowTimeoutSeconds) * time.Second
 	if req == nil {
@@ -1647,7 +1647,6 @@ func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.D
 	}
 	return configured
 }
-
 func (m *Manager) dispatchLocked() {
 	limit := m.state.Config.MaxConcurrent
 	if limit < 1 {
