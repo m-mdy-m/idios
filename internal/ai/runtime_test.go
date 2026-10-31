@@ -764,6 +764,56 @@ func TestIncompleteDiscussionResponseDetectsDanglingListItem(t *testing.T) {
 	}
 }
 
+func TestDiscussionStyleBudgetIsWarningRatherThanHardFailure(t *testing.T) {
+	allowed := map[string]bool{"page-21": true}
+	content := "The passage supports this interpretation. [source:page-21] " + strings.Repeat("A concise explanatory sentence. ", 32)
+	if problem := discussionResponseProblem(content, allowed, true, false); problem != "" {
+		t.Fatalf("a complete source-grounded response should not fail solely for length: %s", problem)
+	}
+	warnings := discussionQualityWarnings(content, allowed, []ContextPassage{{ID: "page-21", Text: "A theory of justice."}}, nil, "reader", false)
+	if len(warnings) == 0 || !strings.Contains(strings.Join(warnings, "\n"), "exceeds the 100-word style budget") {
+		t.Fatalf("over-budget response should be retained with a style warning: %#v", warnings)
+	}
+}
+
+func TestRequiredDiscussionSourceMarkerUsesOnlyOneSuppliedPassage(t *testing.T) {
+	passage := []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: "Chapters IV–VIII are not peripheral."}}
+	content := "The author explicitly rejects calling Chapters IV–VIII peripheral."
+	got := ensureRequiredDiscussionSourceMarker(content, passage, "evidence-auditor", false)
+	if !strings.HasSuffix(got, "[source:rawls-page-21]") {
+		t.Fatalf("single supplied passage was not attached as an exact source marker: %q", got)
+	}
+	if got := ensureRequiredDiscussionSourceMarker(content, append(passage, ContextPassage{ID: "page-22", Text: "Other text."}), "evidence-auditor", false); got != content {
+		t.Fatalf("multiple passages must not receive an arbitrary citation: %q", got)
+	}
+	if got := ensureRequiredDiscussionSourceMarker("I cannot verify that claim from the supplied page.", passage, "reader", false); got != "I cannot verify that claim from the supplied page." {
+		t.Fatalf("transparent limitation should not receive an automatic citation: %q", got)
+	}
+}
+
+func TestFinalChairPeerAttributionLedgerQuotesActualCompletedPositions(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "The chapters test whether a theory can introduce order and system into considered judgments. [source:rawls-page-21]"},
+		{AgentID: "steelman", AgentName: "Atlas · Steelman", Status: "completed", Content: "The chapters are not peripheral applications; their conclusions modify the proposed view. [source:rawls-page-21]"},
+	}
+	content := "The page rejects the peripheral reading and distinguishes reader choice from the importance of the chapters. [source:rawls-page-21]"
+	if problem := discussionPeerResponseProblem(content, previous, "discussion-chair", true); problem == "" {
+		t.Fatal("test setup must require the two named peer positions")
+	}
+	got := ensureFinalChairPeerAttributions(content, previous, "discussion-chair", true)
+	if problem := discussionPeerResponseProblem(got, previous, "discussion-chair", true); problem != "" {
+		t.Fatalf("actual named peer claims were not preserved in the Chair ledger: %s; output=%q", problem, got)
+	}
+	for _, name := range []string{"Orion · Reader", "Atlas · Steelman"} {
+		if !strings.Contains(got, name) {
+			t.Errorf("Chair ledger omitted %s: %q", name, got)
+		}
+	}
+	if strings.Contains(ensureFinalChairPeerAttributions(content, previous, "tutor", true), "Peer positions reviewed:") {
+		t.Fatal("peer ledger should be exclusive to the final Chair")
+	}
+}
+
 func TestDiscussionValidationAllowsNonEvidencePeerCritiqueWithoutCitation(t *testing.T) {
 	allowed := map[string]bool{"page-20": true}
 	for _, content := range []string{
