@@ -2,7 +2,7 @@ import type { RequestedBookAction, RequestedBookHighlight } from './study-types'
 
 export function isExplicitQuoteRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
-  return /^\s*(?:please\s+)?(?:quote|extract|capture)\s+(?:(?:a|an|the|short|useful|key|memorable|important)\s+)*(?:quote|passage|sentence|line|phrase|this|that|it|from)\b/i.test(text)
+  return /^\s*(?:please\s+)?(?:quote|extract|capture)\s+(?:(?:a|an|the|some|short|useful|key|memorable|important|selected)\s+)*(?:quote|passage|sentence|line|phrase|text|words|excerpt|point|statement|paragraph|idea|this|that|it|from)\b/i.test(text)
     || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:quote|extract|capture)\b/i.test(text)
     || /\b(?:save|add|keep|store|give|find|get)\b.{0,60}\bquote\b/i.test(text)
     || /(?:نقل\s*قول|نقل‌قول|کوت).{0,70}(?:استخراج|ذخیره|ثبت|اضافه|بذار|بزار|کن|بنویس|بگیر|پیدا)/u.test(text)

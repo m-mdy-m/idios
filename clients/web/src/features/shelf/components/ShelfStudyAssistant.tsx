@@ -528,43 +528,85 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
     // A note is a durable user action. If inference is not available, at least preserve
     // the selected passage as a clearly-labelled note instead of dropping the request.
     // When a model is usable we keep the normal AI path, which can write a richer note.
-    const saveSelectedPassageAsNote = async (includePrompt: boolean, reason: string): Promise<boolean> => {
-      if (!isExplicitBookNoteRequest(userPrompt) || !selectedQuoteForDirectAction) return false;
+    const saveSelectedPassageActions = async (includePrompt: boolean, reason: string): Promise<boolean> => {
+      const wantsNote = isExplicitBookNoteRequest(userPrompt);
+      const wantsQuote = isExplicitQuoteRequest(userPrompt);
+      const wantsHighlight = isExplicitHighlightRequest(userPrompt);
+      if ((!wantsNote && !wantsQuote && !wantsHighlight) || !selectedQuoteForDirectAction) return false;
       const excerptTitle = selectedQuoteForDirectAction.replace(/\s+/g, ' ').trim().split(' ').slice(0, 7).join(' ');
       setBusy(true); setError(''); setNotice('');
+      const saved: string[] = [];
+      const failed: string[] = [];
       try {
-        const saved = await api.createShelfNote(bookID, {
-          title: `Reading note · ${excerptTitle.slice(0, 72) || `page ${pageNumber}`}`,
-          content: `Book: ${bookTitle}\nPage: ${pageNumber}\n\nSelected passage:\n“${selectedQuoteForDirectAction}”\n\n${reason}`,
-          labels: ['reading-companion', 'selected-passage'],
-        });
-        setContext((current) => ({ ...current, notes: [saved, ...current.notes.filter((note) => note.id !== saved.id)] }));
+        if (wantsNote) {
+          try {
+            const note = await api.createShelfNote(bookID, {
+              title: `Reading note · ${excerptTitle.slice(0, 72) || `page ${pageNumber}`}`,
+              content: `Book: ${bookTitle}\nPage: ${pageNumber}\n\nSelected passage:\n“${selectedQuoteForDirectAction}”\n\n${reason}`,
+              labels: ['reading-companion', 'selected-passage'],
+            });
+            setContext((current) => ({ ...current, notes: [note, ...current.notes.filter((item) => item.id !== note.id)] }));
+            saved.push(`Saved a note from your selected passage: “${note.title}”.`);
+          } catch (cause) {
+            failed.push(`I couldn’t save the note: ${cause instanceof Error ? cause.message : 'the notes service returned an error'}`);
+          }
+        }
+        if (wantsQuote) {
+          try {
+            const quote = await api.createQuote({
+              text: selectedQuoteForDirectAction,
+              source: `${bookTitle} · page ${pageNumber}`,
+              category: 'Reading',
+            });
+            saved.push(`Saved to IDIOS Quotes: “${quote.text}”.`);
+          } catch (cause) {
+            failed.push(`I couldn’t save the quotation: ${cause instanceof Error ? cause.message : 'the Quotes service returned an error'}`);
+          }
+        }
+        if (wantsHighlight) {
+          if (onApplyBookHighlights) {
+            try {
+              const outcome = await onApplyBookHighlights([{
+                quote: selectedQuoteForDirectAction,
+                note: '',
+                page: pageNumber,
+                color: 'purple',
+              }]);
+              outcome.saved.forEach((item) => saved.push(`Highlighted in the PDF: ${item}`));
+              outcome.failed.forEach((item) => failed.push(`I couldn’t highlight “${item.quote}”: ${item.reason}`));
+            } catch (cause) {
+              failed.push(`I couldn’t save the PDF highlight: ${cause instanceof Error ? cause.message : 'the annotation service returned an error'}`);
+            }
+          } else {
+            failed.push('The PDF highlight could not be saved because annotation saving is not connected in this view.');
+          }
+        }
         setMessages((current) => [
           ...current,
           ...(includePrompt ? [{ role: 'user' as const, content: userPrompt, pageNumber }] : []),
-          { role: 'assistant', content: `Saved a note from your selected passage: “${saved.title}”. The passage is preserved; connect an available model to generate an AI-written explanation too.`, pageNumber },
+          {
+            role: 'assistant',
+            content: [...saved, ...failed, 'The selected passage was preserved directly; no AI-generated explanation was claimed.'].join('\n\n'),
+            pageNumber,
+          },
         ]);
+        if (failed.length) setError(failed.join(' '));
+        else setNotice('Selected passage actions saved directly. No AI-generated explanation was claimed.');
         setLastFailedPrompt('');
-        setNotice('Selected passage saved as a note. No AI-generated text was claimed.');
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'the notes service returned an error';
-        setError(`I couldn’t save the selected passage as a note: ${message}`);
-        setMessages((current) => [
-          ...current,
-          ...(includePrompt ? [{ role: 'user' as const, content: userPrompt, pageNumber }] : []),
-          { role: 'assistant', content: `I couldn’t save the note: ${message}`, pageNumber },
-        ]);
-      } finally { setBusy(false); }
+      } finally {
+        setBusy(false);
+      }
       return true;
     };
+
     if (!targetModel) {
-      if (await saveSelectedPassageAsNote(true, 'Saved directly from the selected passage because no usable AI model was configured.')) return;
+      if (await saveSelectedPassageActions(true, 'Saved directly from the selected passage because no usable AI model was configured.')) return;
       if (displayMode === 'inline-chat') setInlineSettingsOpen(true); else onOpenModels?.();
       setError('Choose a model in the shared AI Runtime. Open Settings → AI Runtime to configure a provider, then refresh the model list.');
       return;
     }
     if (!targetModelAvailable) {
-      if (await saveSelectedPassageAsNote(true, `Saved directly because the selected model “${targetModel}” is not currently available.`)) return;
+      if (await saveSelectedPassageActions(true, `Saved directly because the selected model “${targetModel}” is not currently available.`)) return;
       if (displayMode === 'inline-chat') setInlineSettingsOpen(true); else onOpenModels?.();
       setError(`“${targetModel}” has not passed the availability test. Select it in the model list to run one direct check, or choose a verified model.`);
       return;
