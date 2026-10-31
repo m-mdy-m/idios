@@ -27,7 +27,7 @@ const modes: Array<{ value: ShelfTranslationTab; label: string; description: str
 ];
 
 function renderMarkdownInline(value: string): ReactNode[] {
-  return value.split(/(\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|\x60[^\x60]+\x60)/g).filter(Boolean).map((part, index) => {
+  return value.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\x60[^\x60]+\x60)/g).filter(Boolean).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
     if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
     if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
@@ -36,17 +36,17 @@ function renderMarkdownInline(value: string): ReactNode[] {
 }
 
 function TranslationMarkdown({ value }: { value: string }) {
-  const blocks = value.replace(/\\r/g, '').trim().split(/\\n\\s*\\n/).filter(Boolean);
+  const blocks = value.replace(/\r/g, '').trim().split(/\n\s*\n/).filter(Boolean);
   return <div className="shelf-translation-panel__markdown">
     {blocks.map((block, index) => {
-      const lines = block.split('\\n').map((line) => line.trim()).filter(Boolean);
-      const heading = lines[0]?.match(/^#{1,3}\\s+(.+)$/);
+      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+      const heading = lines[0]?.match(/^#{1,3}\s+(.+)$/);
       if (heading && lines.length === 1) return <h3 key={index}>{renderMarkdownInline(heading[1])}</h3>;
-      if (lines.length && lines.every((line) => /^[-*]\\s+/.test(line))) {
-        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^[-*]\\s+/, ''))}</li>)}</ul>;
+      if (lines.length && lines.every((line) => /^[-*]\s+/.test(line))) {
+        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^[-*]\s+/, ''))}</li>)}</ul>;
       }
-      if (lines.length && lines.every((line) => /^\\d+[.)]\\s+/.test(line))) {
-        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^\\d+[.)]\\s+/, ''))}</li>)}</ol>;
+      if (lines.length && lines.every((line) => /^\d+[.)]\s+/.test(line))) {
+        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^\d+[.)]\s+/, ''))}</li>)}</ol>;
       }
       return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderMarkdownInline(line)}</span>)}</p>;
     })}
