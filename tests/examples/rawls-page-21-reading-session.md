@@ -48,21 +48,22 @@ Illustrative normalized action envelope after the Shelf client combines MIMI’s
 
 ## 2. Run the sequential discussion
 
-Select these five participants, with MIMI · Chair last:
+Select these six participants, with MIMI · Chair last:
 
 1. Orion · Reader
 2. Sage · Tutor
 3. Atlas · Steelman
-4. Vera · Evidence Auditor
-5. MIMI · Chair
+4. Concept Connector
+5. Vera · Evidence Auditor
+6. MIMI · Chair
 
 Use this discussion prompt:
 
 > Analyze why Rawls insists that Chapters IV–VIII are not peripheral or merely applications. Explain what “order and system” means for our considered judgments, and connect that claim to the examples of theoretical revision in the acknowledgments. Preserve the distinction between the chapters’ importance and the reader’s freedom to choose which problems to approach first. Use only this page as direct evidence; do not invent the contents of unseen chapters.
 
-The fresh Round 1 is intentionally independent: Reader, Tutor, Steelman, and Evidence Auditor each fulfil their own role from the page, without pretending to respond to peers they have not seen. MIMI receives all four opening positions and must compare them against the decisive wording, explicitly rejecting any claim that turns reader preference into evidence that the chapters are optional or unimportant. If you choose a second round, the specialists then receive completed peer history and review real claims by name.
+The fresh Round 1 is intentionally independent: Reader, Tutor, Steelman, Concept Connector, and Evidence Auditor each fulfil their own role from the page, without pretending to respond to peers they have not seen. MIMI receives all four opening positions and must compare them against the decisive wording, explicitly rejecting any claim that turns reader preference into evidence that the chapters are optional or unimportant. If you choose a second round, the specialists then receive completed peer history and review real claims by name.
 
-The source passage is supplied as `[source:rawls-page-21]`. The integration test uses the complete fixture, downloads Qwen through Ollama, checks that all five sequential discussion turns finish, and asks the same local model to generate MIMI’s standalone note as JSON. It validates the note title/content, the Reader’s exact source marker, the distinction between reader preference and chapter importance, and the selected phrase as an exact, unique page-21 anchor. CI logs model names, warnings, every contribution, and the note output.
+The source passage is supplied as `[source:rawls-page-21]`. The integration test uses the complete fixture, downloads Qwen through Ollama, checks that all twelve sequential discussion turns (six agents across two rounds) finish, and asks the same local model to generate MIMI’s standalone note as JSON. It validates the note title/content, the Reader’s exact source marker, the distinction between reader preference and chapter importance, and the selected phrase as an exact, unique page-21 anchor. CI logs model names, warnings, every contribution, and the note output.
 
 ## 3. Run locally
 
