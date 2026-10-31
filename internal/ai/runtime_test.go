@@ -1790,8 +1790,8 @@ func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
 func TestNormalizeReasoningForModelNeverThinksDuringTranslation(t *testing.T) {
 	translation := GenerateRequest{Task: "translation", ReasoningEffort: "low", DisableThinking: true}
 	got := normalizeReasoningForModel(translation, true)
-	if got.ReasoningEffort != "" || got.DisableThinking {
-		t.Fatalf("translation request retained thinking controls: %#v", got)
+	if got.ReasoningEffort != "" || !got.DisableThinking {
+		t.Fatalf("translation request must disable native thinking when supported: %#v", got)
 	}
 	unsupported := GenerateRequest{Task: "book_discussion", ReasoningEffort: "medium", DisableThinking: true}
 	got = normalizeReasoningForModel(unsupported, false)

@@ -1180,7 +1180,15 @@ func normalizeReasoningForModel(req GenerateRequest, supportsReasoning bool) Gen
 	// thinking flag for translation, even when the selected model supports it.
 	// Unsupported reasoning features degrade to ordinary generation rather than
 	// turning a useful request into a provider failure.
-	if strings.EqualFold(strings.TrimSpace(req.Task), "translation") || !supportsReasoning {
+	if strings.EqualFold(strings.TrimSpace(req.Task), "translation") {
+		req.ReasoningEffort = ""
+		// Ollama models that advertise native thinking can otherwise think by
+		// default. Explicitly turn that capability off for faithful translation.
+		// Models that do not support it receive no thinking field at all.
+		req.DisableThinking = supportsReasoning
+		return req
+	}
+	if !supportsReasoning {
 		req.ReasoningEffort = ""
 		req.DisableThinking = false
 	}
