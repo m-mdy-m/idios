@@ -968,7 +968,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }
     const value = position.node.textContent ?? '';
     const offset = Math.max(0, Math.min(value.length, position.offset));
-    const isWordCharacter = (character: string) => /[\p{L}\p{N}\p{M}_’'ʼ-]/u.test(character);
+    const isWordCharacter = (character: string) => /[\p{L}\p{N}\p{M}_’'ʼ\u200c\u200d-]/u.test(character);
     let start = offset;
     let end = offset;
     if (start === value.length || (start < value.length && !isWordCharacter(value[start]))) start = Math.max(0, start - 1);
@@ -1071,7 +1071,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setSelectionTranslation(null);
     clearReaderWordHighlight();
     setHoveredWordRectangles([]);
-    const selectedWord = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_’'ʼ-]*$/u.test(quote);
+    const selectedWord = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_’'ʼ\u200c\u200d-]*$/u.test(quote);
     setHoveredTextForAI(selectedWord ? quote : '');
     setSelectedTextForAI(quote.slice(0, 10000));
     const exactSourceQuote = rawQuote.normalize('NFKC').replace(/[\u00ad\u200b\ufeff]/g, '').replace(/\s+/g, ' ').trim();
@@ -1424,7 +1424,7 @@ function normalizeHighlightWord(value: string): string {
 
 type ExactQuoteRectangleResult = { occurrences: number; rectangles: ShelfAnnotationRect[] };
 function findUniqueQuoteRectangles(layer: HTMLDivElement, sheet: HTMLDivElement, quote: string): ExactQuoteRectangleResult {
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const query = toWords(quote);
   if (!query.length || query.length > 32) return { occurrences: 0, rectangles: [] };
   const words: TextWordRange[] = [];
@@ -1480,7 +1480,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
   const HighlightConstructor = (window as WindowWithTextHighlight).Highlight;
   const canUseCustomHighlights = Boolean(registry && HighlightConstructor);
 
-  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map(normalizeHighlightWord) ?? [];
+  const toWords = (value: string) => value.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu)?.map(normalizeHighlightWord) ?? [];
   const words: TextWordRange[] = [];
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {

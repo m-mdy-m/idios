@@ -89,6 +89,12 @@ assert.equal(
   ['A careful reader follows', 'the argument, clearly.', '', 'Next paragraph starts here.'].join(String.fromCharCode(10)),
   'geometric extraction must reconstruct spaces, lines, punctuation and paragraph gaps',
 );
+const rtlItems = [
+  { str: 'کتاب', dir: 'rtl', transform: [10, 0, 0, 10, 150, 700], width: 25, height: 10, hasEOL: false },
+  { str: 'متن', dir: 'rtl', transform: [10, 0, 0, 10, 90, 700], width: 25, height: 10, hasEOL: true },
+];
+assert.equal(extractReaderPDFText(rtlItems), 'کتاب متن', 'PDF extraction must restore word gaps for right-to-left text');
+
 for (const repaired of ['superfluous', 'digression', 'innumerable', 'necessary', 'forcefully']) {
   assert.ok(extractedFullPage.includes(repaired), 'PDF extraction must repair the split word: ' + repaired);
 }
