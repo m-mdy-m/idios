@@ -76,6 +76,7 @@ assert.equal(
   'superfluous argument',
   'AI-facing selections must join line-end hyphenation and remove soft hyphens',
 );
+assert.equal(normalizeReaderSelectionText('می‌روم'), 'می‌روم', 'Persian ZWNJ must be preserved in selected text');
 const positionedItems = [
   { str: 'A careful', transform: [10, 0, 0, 10, 50, 700], width: 44, height: 10, hasEOL: false },
   { str: 'reader follows', transform: [10, 0, 0, 10, 98, 700], width: 72, height: 10, hasEOL: true },

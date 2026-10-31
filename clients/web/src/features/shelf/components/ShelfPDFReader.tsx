@@ -1438,7 +1438,7 @@ function findUniqueQuoteRectangles(layer: HTMLDivElement, sheet: HTMLDivElement,
   while ((current = walker.nextNode())) {
     if (current.nodeType !== Node.TEXT_NODE) continue;
     const node = current as Text;
-    for (const match of node.data.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)) {
+    for (const match of node.data.matchAll(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu)) {
       const start = match.index ?? 0;
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
     }
@@ -1493,7 +1493,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
   while ((current = walker.nextNode())) {
     if (current.nodeType !== Node.TEXT_NODE) continue;
     const node = current as Text;
-    const pattern = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
+    const pattern = /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\u200c\u200d-]*/gu;
     for (const match of node.data.matchAll(pattern)) {
       const start = match.index ?? 0;
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
