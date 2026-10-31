@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Install the Web workspace's pinned TypeScript toolchain in the Capacitor client so `capacitor.config.ts` can be loaded on Android and iOS release runners.
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
 - Show an accurate waiting-for-model status while a discussion agent is generating a response.
 - Reconstruct selectable PDF text from line boundaries and repair words split by end-of-line hyphenation before translation or search.
