@@ -1,28 +1,48 @@
 # Changelog
 
+## [3.2.0] - 2026-10-31
+
+### Added
+
+- Added mandatory role-specific deliverables for built-in Shelf discussion agents, with explicit identity, originality, source-verification, and non-echo requirements.
+- Added regression coverage for chapter-range source validation, bounded discussion-history carry-over, citation preservation, and distinct agent role prompts.
+
+### Changed
+
+- Make MIMI the single primary Shelf identity and final discussion Chair; prefer a larger verified local model for its moderation role while preserving explicit user model choices.
+- Strengthen the sequential-agent skill with mandatory role-specific contribution, non-echo review after Chair turns, and explicit preservation of negation, scope, and argument structure.
+- Preserve up to 40 completed discussion turns across continuations, using shared UTF-8 byte limits between the Web client and Go runtime instead of dropping history after eight turns.
+- Keep source markers when discussion history must be compacted, and disclose omitted or shortened carry-over to subsequent agents.
+- Require an available MIMI · Chair for Shelf round-table starts and continuations; final synthesis must compare evidence rather than count repeated agreement.
+- Strengthen Mimi's page-reading contract to preserve explicit negations, qualifications, and the distinction between a page's main argument and secondary acknowledgements.
+
+### Fixed
+
+- Reject verbatim peer echoes, unnamed peer responses, and final Chair summaries that omit available participant positions; require one focused repair and keep repeat failures out of subsequent peer evidence.
+- Correctly recognize inclusive chapter ranges such as `Chapters IV–VIII` when validating chapter references, preventing valid references to range endpoints from being rejected.
+- Prevent failed agent turns from being passed forward as if they were completed peer arguments.
+
 ## [3.1.2] - 2026-10-31
 
 ### Added
 
 - Add an in-reader, translation-first companion for PDF pages and selected passages. The full page translation is the default view; Word, Grammar, and IELTS are available from a compact tool menu and run as focused tasks.
 - Add a compact settings popover for target language, AI model, and per-request timeout, plus a resizable, collapsible reader companion docked beside the PDF page.
-- Retain the reader's resized translation-window dimensions when the bubble is closed and reopened.
+- Retain the reader's resized companion dimensions when it is closed and reopened.
 - Dock the resizable reading companion to the left side of the PDF reader and synchronize hover highlights between source text and sentence-aligned translation segments.
 - Render translation Markdown safely in the reader, including paragraphs, headings, emphasis, inline code, and lists.
-- Request exact source-to-translation sentence segments so the companion can map translated passages back to their PDF text.
-- Reduce serial page-translation round trips by increasing context-preserving chunk size while retaining sequential order and resumable chunk caching.
 - Add source-grounded grammar and IELTS analysis on demand, without making either analysis part of the page-translation request.
 
 ### Changed
 
 - Use book subject, nearby PDF pages, saved notes, highlights, and the existing glossary only as supporting context for terminology and meaning.
-- Return plain complete translation text for page and selection requests rather than requiring a large JSON response containing translation, vocabulary, grammar, and IELTS data together.
-- Translate long pages in sequential chunks, display partial results, and keep completed chunks in the Reader session so a retry resumes at the first unfinished chunk.
+- Return a target-language-only translation field with exact sentence-aligned source/translation segments for PDF hover synchronization; keep vocabulary, grammar, and IELTS analysis in separate focused requests.
+- Translate long pages in larger sequential chunks to reduce provider round trips, display partial results, and keep completed chunks in the Reader session so a retry resumes at the first unfinished chunk.
 - Allow translation requests up to the Runtime's bounded 10-minute ceiling; the provider HTTP client no longer silently truncates a longer per-request deadline at its ordinary 120-second default.
 
 ### Fixed
 
-- Keep the PDF layout unchanged when translation opens; show the companion as a floating, dismissible window rather than a permanent side column or bottom sheet.
+- Keep the PDF page open when translation opens; show the companion as a dismissible, resizable left-side panel rather than navigating away from the book.
 - Keep the sidebar expand control available while navigation is collapsed, so the same control can collapse and restore the sidebar without opening Settings.
 - Render Search as a centered icon in the collapsed sidebar instead of squeezing its text label into the narrow navigation rail.
 
