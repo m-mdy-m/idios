@@ -1516,6 +1516,130 @@ func (m *Manager) pruneTasksLocked(maxTasks int) {
 	}
 }
 
+// discussionWorkflowTimeoutLocked estimates the full sequential round-table budget.
+ // It is called while m.mu is already held by dispatchLocked. Each agent remains
+ // individually bounded; this only prevents a shared ten-minute task deadline from
+ // expiring part-way through a deliberately sequential discussion.
+func (m *Manager) discussionWorkflowTimeoutLocked(req *DiscussionRequest) time.Duration {
+	configured := time.Duration(m.state.Config.WorkflowTimeoutSeconds) * time.Second
+	if req == nil {
+		return configured
+	}
+
+	selected := make([]AgentDefinition, 0, len(req.AgentIDs))
+	if len(req.AgentIDs) == 0 {
+		for _, agent := range m.state.Agents {
+			if agent.Enabled && agentAllowsTask(agent, "book_discussion") {
+				selected = append(selected, agent)
+			}
+		}
+	} else {
+		byID := make(map[string]AgentDefinition, len(m.state.Agents))
+		for _, agent := range m.state.Agents {
+			byID[agent.ID] = agent
+		}
+		for _, id := range req.AgentIDs {
+			if agent, ok := byID[id]; ok {
+				selected = append(selected, agent)
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return configured
+	}
+	if len(selected) > m.state.Config.MaxAgents {
+		selected = selected[:m.state.Config.MaxAgents]
+	}
+
+	rounds := req.Rounds
+	if rounds < 1 {
+		rounds = 1
+	}
+	if rounds > m.state.Config.MaxDiscussionRounds {
+		rounds = m.state.Config.MaxDiscussionRounds
+	}
+	if rounds < 1 {
+		rounds = 1
+	}
+
+	fallbackModel := m.state.Config.TaskModels["book_discussion"]
+	if fallbackModel == "" {
+		fallbackModel = m.state.Config.DefaultModel
+	}
+	maxTurn := time.Duration(minimumLocalDiscussionTimeoutSeconds) * time.Second
+	for _, agent := range selected {
+		modelRef := strings.TrimSpace(agent.PreferredModel)
+		if modelRef == "" {
+			// Mirror discussionModelForAgent without taking another lock.
+			// Only already-discovered, enabled local models are candidates.
+			for _, candidate := range discussionModelCandidates(agent.ID) {
+				bestRef := ""
+				bestScore := 0.0
+				found := false
+				for _, model := range m.state.Models {
+					if !strings.EqualFold(model.ID, candidate) || model.Availability != "available" {
+						continue
+					}
+					var provider ProviderConfig
+					providerFound := false
+					for _, cfg := range m.state.Providers {
+						if cfg.ID == model.ProviderID && cfg.Enabled && isConfigLocal(cfg) {
+							provider = cfg
+							providerFound = true
+							break
+						}
+					}
+					if !providerFound {
+						continue
+					}
+					score := discussionModelPerformanceScore(model)
+					if !found || score > bestScore {
+						bestRef = provider.ID + "/" + model.ID
+						bestScore = score
+						found = true
+					}
+				}
+				if found {
+					modelRef = bestRef
+					break
+				}
+			}
+		}
+		if modelRef == "" {
+			modelRef = fallbackModel
+		}
+		providerID, _ := splitModelRef(modelRef)
+		for _, cfg := range m.state.Providers {
+			if cfg.ID != providerID {
+				continue
+			}
+			seconds := normalizedTimeout(cfg.TimeoutSeconds)
+			if isConfigLocal(cfg) && seconds < minimumLocalDiscussionTimeoutSeconds {
+				seconds = minimumLocalDiscussionTimeoutSeconds
+			}
+			if seconds > maximumDiscussionTurnTimeoutSeconds {
+				seconds = maximumDiscussionTurnTimeoutSeconds
+			}
+			if time.Duration(seconds)*time.Second > maxTurn {
+				maxTurn = time.Duration(seconds) * time.Second
+			}
+			break
+		}
+	}
+
+	// Sequential work needs one bounded turn per selected agent in every round,
+	// plus a small allowance for queue/state persistence between rounds.
+	required := time.Duration(len(selected)*rounds)*maxTurn + time.Duration(rounds)*30*time.Second
+	const maximumWorkflowBudget = time.Hour
+	if required > maximumWorkflowBudget {
+		required = maximumWorkflowBudget
+	}
+	if required > configured {
+		return required
+	}
+	return configured
+}
+
 func (m *Manager) dispatchLocked() {
 	limit := m.state.Config.MaxConcurrent
 	if limit < 1 {
@@ -1532,6 +1656,9 @@ func (m *Manager) dispatchLocked() {
 		task.UpdatedAt = time.Now().UTC()
 		m.tasks[job.id] = task
 		timeout := time.Duration(m.state.Config.WorkflowTimeoutSeconds) * time.Second
+		if job.discussion != nil {
+			timeout = m.discussionWorkflowTimeoutLocked(job.discussion)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		m.running[job.id] = cancel
 		go m.runJob(ctx, job)
