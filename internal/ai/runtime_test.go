@@ -2248,8 +2248,11 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		if problem := discussionLogicalForceProblem(contribution.Content, []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: string(page)}}); problem != "" {
 			t.Errorf("agent %s reversed an explicit source qualification: %s; output=%q", contribution.AgentName, problem, contribution.Content)
 		}
-		if contribution.AgentID == "reader" && !sourceMarker.MatchString(contribution.Content) {
-			t.Errorf("Reader did not ground the central page claim with an exact supplied source marker: %q warnings=%v", contribution.Content, contribution.Warnings)
+		if (contribution.AgentID == "reader" || contribution.AgentID == "evidence-auditor") && !sourceMarker.MatchString(contribution.Content) {
+			t.Errorf("%s did not ground the page claim with an exact supplied source marker: %q warnings=%v", contribution.AgentName, contribution.Content, contribution.Warnings)
+		}
+		if contribution.AgentID == "discussion-chair" && !sourceMarker.MatchString(contribution.Content) {
+			t.Errorf("MIMI did not cite the source while adjudicating the page claims: %q warnings=%v", contribution.Content, contribution.Warnings)
 		}
 		// The fresh first-round specialist pass is deliberately independent; only
 		// MIMI receives those positions in a one-round discussion. Later rounds and
