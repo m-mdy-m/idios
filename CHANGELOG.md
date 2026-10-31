@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
+- Show an accurate waiting-for-model status while a discussion agent is generating a response.
+
 ## [3.2.2] - 2026-10-31
 
 ### Added
