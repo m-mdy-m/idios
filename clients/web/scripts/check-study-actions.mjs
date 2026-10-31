@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fitShelfRuntimeMessages, splitUtf8Text, utf8ByteLength } from '../src/features/shelf/model/study-context.ts';
 import {
   isBookMutationRequest,
   isExplicitBookNoteRequest,
@@ -36,6 +37,28 @@ const combinedPrompt = 'Mimi, please write a concise standalone note about this 
 assert.equal(isBookMutationRequest(combinedPrompt), true);
 assert.equal(isExplicitBookNoteRequest(combinedPrompt), true);
 assert.equal(isExplicitHighlightRequest(combinedPrompt), true);
+
+// A complete book context may span multiple API messages without losing PDF pages.
+const longBookContext = Array.from({ length: 55 }, (_, page) => `===== PDF PAGE ${page + 1} =====\n${'Rawls page text and prior argument. '.repeat(220)}`).join('\n\n');
+const chunks = splitUtf8Text(longBookContext);
+assert.ok(chunks.length > 1, 'long book context should be split into multiple messages');
+assert.equal(chunks.join(''), longBookContext, 'splitting must preserve every source character');
+assert.ok(chunks.every((chunk) => utf8ByteLength(chunk) <= 48000), 'each context message must stay below the runtime per-message cap');
+
+const conversation = [
+  { role: 'system', content: 'MIMI instructions' },
+  { role: 'user', content: 'Earlier question: what does considered judgment mean?', context: 'DUPLICATED WHOLE BOOK PDF CONTEXT '.repeat(2000) },
+  { role: 'assistant', content: 'We established that these are reflective judgments.' },
+  { role: 'user', content: 'Why does Rawls need a systematic theory?', context: 'DUPLICATED WHOLE BOOK PDF CONTEXT '.repeat(2000) },
+  { role: 'assistant', content: 'Because separate judgments can conflict.' },
+  { role: 'user', content: 'Mimi, write a note and highlight order and system.\n' + longBookContext },
+];
+const fitted = fitShelfRuntimeMessages(conversation);
+assert.ok(fitted.every((message) => utf8ByteLength(message.content) <= 48000), 'fitted request messages must satisfy the per-message cap');
+assert.ok(fitted.reduce((sum, message) => sum + utf8ByteLength(message.content), 0) <= 175000, 'fitted request must stay below the total runtime cap');
+assert.ok(fitted.some((message) => message.content.includes('Earlier question: what does considered judgment mean?')), 'conversation dialogue should be retained');
+assert.ok(fitted.some((message) => message.content.includes('===== PDF PAGE 55 =====')), 'the end of the current book context should be preserved');
+assert.ok(!fitted.some((message) => message.content.includes('DUPLICATED WHOLE BOOK PDF CONTEXT')), 'old embedded document contexts must not be duplicated');
 assert.equal(isBookMutationRequest('Mimi, please write a concise standalone note about this page.'), true);
 assert.equal(isExplicitBookNoteRequest('Mimi, please write a concise standalone note about this page.'), true);
 
@@ -54,6 +77,9 @@ const assistantSource = readFileSync(new URL('../src/features/shelf/components/S
 assert.equal(assistantSource.includes('onApplyBookHighlights(highlightActions)'), true);
 assert.equal(assistantSource.includes('api.createShelfNote(bookID'), true);
 assert.equal(assistantSource.includes('Keep a separately requested note as its own shelf-note action'), true);
+assert.equal(assistantSource.includes('content: message.content'), true, 'conversation dialogue must be preserved in request history');
+assert.equal(assistantSource.includes('fitShelfRuntimeMessages(['), true, 'the runtime payload must be byte-budgeted');
+assert.equal(assistantSource.includes('if (separateNote && promptAskedForNote) annotationNote = separateNote.content;'), false, 'the standalone note must not overwrite the margin explanation');
 assert.equal(assistantSource.includes('A highlight persistence failure must not prevent a separately requested'), true);
 assert.equal(assistantSource.indexOf('for (const action of noteActions)') > assistantSource.indexOf('A highlight persistence failure must not prevent a separately requested'), true);
 
