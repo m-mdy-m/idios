@@ -1747,7 +1747,7 @@ func (m *Manager) DeleteAgent(id string) error {
 func discussionRoleFocus(agentID string) string {
 	switch agentID {
 	case "reader":
-		return "Close-read the supplied page: state its central argumentative move, identify the decisive sentence or qualification, and cite it exactly. Separate the author's explicit claim from inference. Do not turn a rejected interpretation into the author's conclusion."
+		return "Close-read the supplied page: state its central argumentative move, identify the decisive sentence or qualification, and cite it exactly using the supplied [source:ID] marker. End with that exact source marker when making a page-specific claim. Separate the author's explicit claim from inference. Do not turn a rejected interpretation into the author's conclusion."
 	case "tutor":
 		return "Explain one difficult concept or relationship in plain language. Focus on what a key phrase such as 'order and system' does in the argument, not on repeating the page summary. Give one brief example only when it clarifies the idea; preserve all qualifications."
 	case "steelman":
