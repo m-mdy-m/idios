@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.2.1] - 2026-10-31
+
+### Changed
+
+- Replace the harsh notification alarm effects and spoken warnings with a short, locally synthesized, gentle chime for inbox notifications and plan reminders.
+- Keep the browser notification sound preference and volume control, but cap the generated audio master level to avoid sudden loud peaks.
+- Update Notification Settings to describe the softer sound and preview the actual chime used by incoming notifications.
+
+### Fixed
+
+- Send test quote reminders with the supported `info` notification level instead of the unsupported `quote` level, which previously caused `POST /api/protocol/execute` to return HTTP 400.
+- Add a protocol regression test that sends a test quote reminder and verifies the stored notification severity.
+
 ## [3.2.0] - 2026-10-31
 
 ### Added
@@ -201,6 +214,9 @@ IDIOS 3.0.0 is a breaking release. It removes the full-screen TUI and its demo e
 - Added local server controls, browser autostart integration, and a single local database shared by CLI and Web.
 - Added the initial Shelf reading library and PDF Reader with progress, highlights, notes, search, zoom, and PDF.js rendering.
 
+[3.2.1]: https://github.com/m-mdy-m/idios/compare/v3.2.0...v3.2.1
+[3.2.0]: https://github.com/m-mdy-m/idios/compare/v3.1.2...v3.2.0
+[3.1.2]: https://github.com/m-mdy-m/idios/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/m-mdy-m/idios/compare/v3.1.0...v3.1.1
 [3.0.2]: https://github.com/m-mdy-m/idios/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/m-mdy-m/idios/releases/tag/v3.0.1
