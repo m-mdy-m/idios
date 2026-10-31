@@ -2407,37 +2407,51 @@ var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|follo
 // explicitly rejects a downgrade in importance while separately granting reader
 // preference; a model must not turn that preference into optionality. This is a
 // source-triggered guard, not a general semantic truth classifier.
-var discussionDowngradeTerms = []string{"optional", "peripheral", "dispensable", "unimportant", "merely application", "only application"}
+var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|chapters?|topics?|sections?)|(?:chapters?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant)|(?:peripheral|dispensable|unimportant)\s+(?:chapters?|topics?|sections?|material)|(?:merely|only)\s+applications?|not\s+central|(?:can|may|could)\s+be\s+skipped)\b`)
+
+func discussionDowngradeIsNegated(content string, claimStart int) bool {
+	clauseStart := 0
+	for index, char := range content[:claimStart] {
+		if char == '.' || char == '!' || char == '?' || char == ';' {
+			clauseStart = index + 1
+		}
+	}
+	prefix := strings.ToLower(content[clauseStart:claimStart])
+	// A contrast pivot ends the scope of an earlier negation: “not peripheral,
+	// but optional” is still a downgrade claim, while “not peripheral or
+	// merely applications” keeps the original negation over both alternatives.
+	for _, pivot := range []string{" but ", " however ", " yet ", " nevertheless ", " instead "} {
+		if index := strings.LastIndex(prefix, pivot); index >= 0 {
+			prefix = prefix[index+len(pivot):]
+		}
+	}
+	return regexp.MustCompile(`(?i)\b(?:not|never|no)\b`).MatchString(prefix)
+}
 
 func discussionLogicalForceProblem(content string, passages []ContextPassage) string {
-	if len(passages) == 0 { return "" }
+	if len(passages) == 0 {
+		return ""
+	}
 	var source strings.Builder
-	for _, passage := range passages { source.WriteString(passage.Text); source.WriteByte('\n') }
+	for _, passage := range passages {
+		source.WriteString(passage.Text)
+		source.WriteByte('\n')
+	}
 	sourceText := strings.ToLower(source.String())
 	deniesDowngrade := (strings.Contains(sourceText, "do not mean to suggest") && strings.Contains(sourceText, "peripheral") && strings.Contains(sourceText, "applications")) || strings.Contains(sourceText, "not peripheral")
 	separatesReaderPreference := strings.Contains(sourceText, "preferences") && (strings.Contains(sourceText, "more free") || strings.Contains(sourceText, "free to follow"))
-	if !deniesDowngrade || !separatesReaderPreference { return "" }
-	answer := strings.ToLower(content)
-	for _, term := range discussionDowngradeTerms {
-		start := 0
-		for {
-			index := strings.Index(answer[start:], term)
-			if index < 0 { break }
-			index += start
-			prefixStart := index - 12
-			if prefixStart < 0 { prefixStart = 0 }
-			prefix := strings.TrimSpace(answer[prefixStart:index])
-			if !strings.HasSuffix(prefix, "not") && !strings.HasSuffix(prefix, "never") {
-				return "logical-force contradiction: the passage rejects a peripheral/application-only reading while separately giving readers flexibility to follow their preferences; do not infer that flexibility makes the material optional or unimportant"
-			}
-			start = index + len(term)
-		}
+	if !deniesDowngrade || !separatesReaderPreference {
+		return ""
 	}
-	if strings.Contains(answer, "not central") || strings.Contains(answer, "can be skipped") || strings.Contains(answer, "may be skipped") {
-		return "logical-force contradiction: the passage rejects a peripheral/application-only reading while separately giving readers flexibility to follow their preferences; do not infer that flexibility makes the material optional or unimportant"
+	answer := strings.ToLower(content)
+	for _, match := range discussionDowngradeClaim.FindAllStringIndex(answer, -1) {
+		if !discussionDowngradeIsNegated(answer, match[0]) {
+			return "logical-force contradiction: the passage rejects a peripheral/application-only reading while separately giving readers flexibility to follow their preferences; do not infer that flexibility makes the material optional or unimportant"
+		}
 	}
 	return ""
 }
+
 func validateDiscussionOutput(content string, allowedSources map[string]bool, passages []ContextPassage, finalTurn bool) string {
 	if problem := discussionResponseProblem(content, allowedSources, len(passages) > 0, finalTurn); problem != "" {
 		return problem
