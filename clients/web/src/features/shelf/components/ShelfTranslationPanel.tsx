@@ -182,7 +182,16 @@ export function ShelfTranslationPanel({
           {selectionBusy ? <LoaderCircle size={13} className="is-spinning" /> : <Sparkles size={13} />} Translate selected passage
         </button>}
         {pageData?.translation ? <article className="shelf-translation-panel__translation-document" aria-live="polite">
-          <p>{pageData.translation}</p>
+          {pageData.segments.length > 1 ? <p>{pageData.segments.map((segment, index) => {
+            const source = normalizeTranslationMatch(segment.source);
+            const active = Boolean(hoveredWord && (source === normalizeTranslationMatch(hoveredWord) || source.split(' ').includes(normalizeTranslationMatch(hoveredWord))));
+            return <span
+              key={`${index}:${segment.source}`}
+              className={`shelf-translation-panel__linked-segment${active ? ' is-linked' : ''}`}
+              onMouseEnter={() => onSelectTerm(segment.source)}
+              title={segment.source}
+            >{segment.translation}{index < pageData.segments.length - 1 ? ' ' : ''}</span>;
+          })}</p> : <p>{pageData.translation}</p>}
         </article> : !pageBusy && <div className="shelf-translation-panel__empty">
           <Languages size={21} />
           <strong>{translationModel ? 'No translation available' : 'Choose an AI model'}</strong>
