@@ -30,14 +30,14 @@ export function isExplicitHighlightRequest(prompt: string): boolean {
 }
 
 export function isExplicitBookNoteRequest(prompt: string): boolean {
-  const text = prompt.normalize('NFKC').toLocaleLowerCase();
-  return /^\s*(?:please\s+)?(?:write|add|create|save|make|put|leave)\s+(?:me\s+)?(?:a\s+)?(?:book\s+|margin\s+|marginal\s+)?notes?\b/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:write|add|create|save|make|put|leave)\b.{0,60}\b(?:notes?|marginalia)\b/i.test(text)
+  // A leading assistant/persona address is still an explicit reader instruction.
+  const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
+  return /^\s*(?:please\s+)?(?:write|add|create|save|make|put|leave)\s+(?:me\s+)?(?:a\s+)?(?:(?:short|brief|concise|useful|quick|standalone|personal|study)\s+)*(?:book\s+|margin\s+|marginal\s+)?notes?\b/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:write|add|create|save|make|put|leave)\b.{0,80}\b(?:notes?|marginalia)\b/i.test(text)
     || /\b(?:add|create|save|write|leave|put)\s+(?:a\s+)?(?:margin\s+|marginal\s+)?note\b.{0,70}\b(?:on|about|for|next to|beside|in|this|that|the)\b/i.test(text)
     || /(?:یادداشت|نوت).{0,70}(?:بنویس|بذار|بزار|ثبت|اضافه|کن|روی|برا)/u.test(text)
     || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت)/u.test(text);
 }
-
 export function isBroadPageAnnotationRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase();
   const action = /\b(?:highlight|mark|annotate|underline|note|notes|write|add|save)\b/i.test(text)
