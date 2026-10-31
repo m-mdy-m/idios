@@ -1,4 +1,4 @@
-import type { ReaderTranslationTerm } from '../reader-translation';
+import type { ReaderTranslationTerm } from '../reader-translation.ts';
 
 export type TranslationContextInput = {
   bookTitle: string;

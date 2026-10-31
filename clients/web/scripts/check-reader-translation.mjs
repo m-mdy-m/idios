@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText, translationSourceIdentity } from '../src/features/shelf/model/reader-translation.ts';
-import { buildFaithfulTranslationInstructions, buildTranslationContext, validateRawTranslationAlignment, validateTranslationIntegrity, translationBenchmarkFixtures, translationBenchmarkRubric, translationJobs } from '../src/features/shelf/model/translation/index.ts';
+import { buildFaithfulTranslationInstructions, buildTranslationContext } from '../src/features/shelf/model/translation/context.ts';
+import { validateRawTranslationAlignment, validateTranslationIntegrity } from '../src/features/shelf/model/translation/source-integrity.ts';
+import { translationJobs } from '../src/features/shelf/model/translation/job-manager.ts';
+import { translationBenchmarkFixtures, translationBenchmarkRubric } from '../src/features/shelf/model/translation/benchmarks.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
 const readerPageSource = await readFile(new URL('../src/features/shelf/ShelfPDFReaderPage.tsx', import.meta.url), 'utf8');

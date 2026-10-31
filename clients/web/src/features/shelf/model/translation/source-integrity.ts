@@ -1,4 +1,4 @@
-import { normalizeTranslationMatch, type ReaderTranslationData } from '../reader-translation';
+import { normalizeTranslationMatch, type ReaderTranslationData } from '../reader-translation.ts';
 
 export type TranslationIntegrity = {
   valid: boolean;
