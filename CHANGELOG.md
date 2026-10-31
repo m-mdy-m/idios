@@ -5,7 +5,10 @@
 ### Fixed
 
 - Stop sending native thinking requests for Shelf translation and enforce model reasoning capabilities in the shared generation and streaming runtime; unsupported reasoning parameters now degrade to ordinary generation instead of failing translation.
-- Make fresh Shelf discussions independent in their opening specialist analysis, then use role-relevant peer selection for later critique and MIMI's final adjudication.
+- Make fresh Shelf discussions independent in their opening specialist analysis, then use role-relevant peer selection for later critique and MIMI's round-by-round and final adjudication.
+- Give each agent's single correction attempt a fresh provider timeout; budget retries in the sequential discussion deadline so a slow first response cannot consume the repair window.
+- Let MIMI compare completed positions at the end of every round, not only when a one-round discussion happens to make that turn final; only the last Chair turn can pause for reader input.
+- Narrow the Rawls logical-force guard so qualified statements about centrality across perspectives are not confused with saying Chapters IV–VIII are optional or peripheral.
 - Align the Shelf discussion prompt with the runtime's fresh-opening and continuation protocol; add a guided page-analysis prompt and visible per-agent/run execution diagnostics so completion and validation warnings are inspectable without presenting them as semantic truth scores.
 - Preserve explicit source negations and qualifications during Agent Discussion; flag the specific Rawls page-21 error that confuses chapter importance with reader choice, and require Reader's page-specific claims to carry an exact source marker.
 - Calculate a separate bounded deadline for sequential Shelf discussions from the selected agents, round count, and provider timeouts; later-round speakers are no longer cut off by the default ten-minute general workflow deadline.

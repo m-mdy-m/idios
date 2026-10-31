@@ -464,6 +464,31 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
+func TestDiscussionAttemptGetsFreshTimeoutForCorrection(t *testing.T) {
+	timeout := 80 * time.Millisecond
+	var deadlines []time.Time
+	generate := func(ctx context.Context) (GenerateResponse, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("each attempt must have a deadline")
+		}
+		deadlines = append(deadlines, deadline)
+		if len(deadlines) == 1 {
+			time.Sleep(35 * time.Millisecond)
+		}
+		return GenerateResponse{Content: "complete"}, nil
+	}
+	if _, err := generateDiscussionAttempt(context.Background(), timeout, generate); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := generateDiscussionAttempt(context.Background(), timeout, generate); err != nil {
+		t.Fatal(err)
+	}
+	if len(deadlines) != 2 || deadlines[1].Sub(deadlines[0]) < 25*time.Millisecond {
+		t.Fatalf("correction did not receive a fresh timeout: %#v", deadlines)
+	}
+}
+
 func TestDiscussionAgentContextUsesProviderAwareDeadline(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
@@ -668,6 +693,14 @@ func TestBookDiscussionChairSpeaksLastAndLaterRoundsSeeFullHistory(t *testing.T)
 	if !strings.Contains(roundTwoReaderPrompt.String(), "Reader's central claim is narrowly supported") || !strings.Contains(roundTwoReaderPrompt.String(), "Tutor responds to Reader's central claim") {
 		t.Fatalf("round two did not receive the complete prior-round history: %s", roundTwoReaderPrompt.String())
 	}
+	var firstRoundChairPrompt strings.Builder
+	for _, message := range captured[2].Messages {
+		firstRoundChairPrompt.WriteString(message.Content)
+		firstRoundChairPrompt.WriteByte('\n')
+	}
+	if !strings.Contains(firstRoundChairPrompt.String(), "Reader's central claim is narrowly supported") || !strings.Contains(firstRoundChairPrompt.String(), "Tutor responds to Reader's central claim") || !strings.Contains(firstRoundChairPrompt.String(), "ROUND CHAIR CHECKPOINT") {
+		t.Fatalf("first-round Chair did not compare the completed opening positions: %s", firstRoundChairPrompt.String())
+	}
 }
 
 func TestDiscussionValidationCanRetainSafeCompleteAnswerWithMissingCitationWarning(t *testing.T) {
@@ -804,7 +837,7 @@ func TestFinalChairPeerAttributionLedgerQuotesActualCompletedPositions(t *testin
 	if problem := discussionPeerResponseProblem(content, previous, "discussion-chair", true); problem == "" {
 		t.Fatal("test setup must require the two named peer positions")
 	}
-	got := ensureFinalChairPeerAttributions(content, previous, "discussion-chair", true)
+	got := ensureChairPeerAttributions(content, previous, "discussion-chair", true)
 	if problem := discussionPeerResponseProblem(got, previous, "discussion-chair", true); problem != "" {
 		t.Fatalf("actual named peer claims were not preserved in the Chair ledger: %s; output=%q", problem, got)
 	}
@@ -816,8 +849,8 @@ func TestFinalChairPeerAttributionLedgerQuotesActualCompletedPositions(t *testin
 	if !strings.HasSuffix(got, "Question for you: Which reading follows?") {
 		t.Fatalf("the reader question must remain the final line after peer evidence is added: %q", got)
 	}
-	if strings.Contains(ensureFinalChairPeerAttributions(content, previous, "tutor", true), "Peer positions reviewed:") {
-		t.Fatal("peer ledger should be exclusive to the final Chair")
+	if strings.Contains(ensureChairPeerAttributions(content, previous, "tutor", true), "Peer positions reviewed:") {
+		t.Fatal("peer ledger should be exclusive to the Chair")
 	}
 }
 
@@ -1988,6 +2021,14 @@ func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinctio
 	if problem := discussionLogicalForceProblem(negated, passages); problem != "" {
 		t.Fatalf("a correctly negated downgrade was rejected: %s", problem)
 	}
+	qualifiedCentrality := "The chapters are not central in every reader's preferred perspective, although Rawls says they test the theory across a wide range of questions. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(qualifiedCentrality, passages); problem != "" {
+		t.Fatalf("qualified centrality language was mistaken for a downgrade: %s", problem)
+	}
+	actualDowngrade := "Chapters IV–VIII are not central to the theory and can be skipped. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(actualDowngrade, passages); problem == "" {
+		t.Fatal("a direct downgrade of the chapters' importance was accepted")
+	}
 	unrelated := []ContextPassage{{ID: "page-1", Text: "The reader may follow personal preferences when choosing which examples to examine."}}
 	if problem := discussionLogicalForceProblem(bad, unrelated); problem != "" {
 		t.Fatalf("the page-specific logical-force guard leaked into an unrelated passage: %s", problem)
@@ -2304,7 +2345,7 @@ func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T)
 	manager.mu.RLock()
 	got := manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
-	want := 5*2*240*time.Second + 2*30*time.Second
+	want := time.Duration(5*2*240*2+2*30) * time.Second
 	if got != want {
 		t.Fatalf("two-round local discussion budget = %s, want %s", got, want)
 	}
@@ -2315,12 +2356,12 @@ func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T)
 	manager.mu.RLock()
 	oneRound := manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
-	if oneRound != 5*240*time.Second+30*time.Second {
-		t.Fatalf("one-round local discussion budget = %s, want %s", oneRound, 5*240*time.Second+30*time.Second)
+	if oneRound != 5*240*time.Second*2+30*time.Second {
+		t.Fatalf("one-round local discussion budget = %s, want %s", oneRound, 5*240*time.Second*2+30*time.Second)
 	}
 }
 
-func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtOneHour(t *testing.T) {
+func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtTwoHours(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
 		t.Fatal(err)
@@ -2354,7 +2395,7 @@ func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtOneHour(t
 	manager.mu.RLock()
 	got := manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
-	want := 5*2*90*time.Second + 2*30*time.Second
+	want := 5*2*90*time.Second*2 + 2*30*time.Second
 	if got != want {
 		t.Fatalf("cloud discussion budget = %s, want %s", got, want)
 	}
@@ -2373,8 +2414,8 @@ func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtOneHour(t
 	manager.mu.RLock()
 	got = manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
-	if got != time.Hour {
-		t.Fatalf("maximum discussion budget = %s, want %s", got, time.Hour)
+	if got != 2*time.Hour {
+		t.Fatalf("maximum discussion budget = %s, want %s", got, 2*time.Hour)
 	}
 }
 
