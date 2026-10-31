@@ -4,9 +4,9 @@ export function isExplicitQuoteRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
   return /^\s*(?:please\s+)?(?:quote|extract|capture)\s+(?:(?:a|an|the|short|useful|key|memorable|important)\s+)*(?:quote|passage|sentence|line|phrase|this|that|it|from)\b/i.test(text)
     || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:quote|extract|capture)\b/i.test(text)
-    || /\b(?:save|add|keep|store)\b.{0,60}\bquote\b/i.test(text)
-    || /(?:نقل\s*قول|نقل‌قول).{0,70}(?:استخراج|ذخیره|ثبت|اضافه|بذار|بزار|کن|بنویس)/u.test(text)
-    || /(?:استخراج|ذخیره|ثبت|اضافه).{0,70}(?:نقل\s*قول|نقل‌قول)/u.test(text);
+    || /\b(?:save|add|keep|store|give|find|get)\b.{0,60}\bquote\b/i.test(text)
+    || /(?:نقل\s*قول|نقل‌قول|کوت).{0,70}(?:استخراج|ذخیره|ثبت|اضافه|بذار|بزار|کن|بنویس|بگیر|پیدا)/u.test(text)
+    || /(?:استخراج|ذخیره|ثبت|اضافه|بگیر|پیدا).{0,70}(?:نقل\s*قول|نقل‌قول|کوت)/u.test(text);
 }
 
 export function isBookMutationRequest(prompt: string): boolean {
