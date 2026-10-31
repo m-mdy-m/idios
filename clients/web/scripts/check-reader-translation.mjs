@@ -43,6 +43,12 @@ assert.ok(chunks.length > 1, 'long page text must be split into multiple request
 assert.ok(chunks.every((chunk) => chunk.length <= 380), 'each request must remain within the configured size');
 assert.equal(chunks.join(' '), longSource, 'splitting must preserve every source character apart from repeated whitespace');
 
+const paragraphMerge = mergeReaderTranslations([
+  { translation: 'First paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
+  { translation: 'Second paragraph.', segments: [], terms: [], grammar: [], ielts: [] },
+], ['\\n\\n']);
+assert.equal(paragraphMerge.translation, 'First paragraph.\n\nSecond paragraph.', 'chunk merging must preserve PDF paragraph breaks');
+
 const merged = mergeReaderTranslations([
   { translation: 'ترجمه یک.', segments: [{ source: 'Sentence one.', translation: 'ترجمه یک.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }], grammar: [], ielts: [] },
   { translation: 'ترجمه دو.', segments: [{ source: 'Sentence two.', translation: 'ترجمه دو.' }], terms: [{ source: 'chapter', translation: 'فصل', meaning: 'بخش کتاب' }, { source: 'argument', translation: 'استدلال', meaning: 'روند منطقی متن' }], grammar: [], ielts: [] },
