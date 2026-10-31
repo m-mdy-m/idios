@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fitShelfRuntimeMessages, splitUtf8Text, utf8ByteLength } from '../src/features/shelf/model/study-context.ts';
+import { fitShelfRuntimeMessages, splitUtf8Text, utf8ByteLength } from '../src/features/shelf/model/study-request-budget.ts';
 import {
   isBookMutationRequest,
   isExplicitBookNoteRequest,
