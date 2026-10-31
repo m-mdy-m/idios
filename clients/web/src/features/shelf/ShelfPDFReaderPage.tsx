@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, FileWarning, Languages, LoaderCircle, Search, X } from 'lucide-react';
 import { ShelfPDFReader } from '@/features/shelf/components/ShelfPDFReader';
-import type { ReaderTranslationCompletion, ReaderTranslationModelOption, ReaderTranslationRequest } from './model/reader-translation';
+import { parseReaderTranslation, type ReaderTranslationCompletion, type ReaderTranslationModelOption, type ReaderTranslationRequest } from './model/reader-translation';
+import { buildFaithfulTranslationInstructions, buildTranslationContext, validateRawTranslationAlignment, validateTranslationIntegrity } from './model/translation';
 import { api, type AIModel, type AIProvider } from '@/lib/api';
 import type { ShelfAnnotation, Note, ShelfBook } from '@/types/idios';
 import { CORE_RELIABILITY_CONTRACT, CONTEXTUAL_TRANSLATION_SKILL, READING_SKILLS, loadSelectedReadingSkills, selectedReadingSkillInstructions } from '@/features/reading-skills';
@@ -473,10 +474,6 @@ export function ShelfPDFReaderPage() {
       notes = context.notes;
     }
     const nearbyAnnotations = annotations.filter((item) => Math.abs(item.page - request.pageNumber) <= 3).slice(-8);
-    const glossaryLines = request.priorGlossary.slice(-20)
-      .map((term) => '- ' + term.source + ' = ' + term.translation + ' (' + term.meaning + ')')
-      .join('\n')
-      .slice(0, directTranslation ? 900 : 2200);
     const annotationLines = nearbyAnnotations
       .map((item) => {
         const noteText = item.note?.trim() ? ' — ' + item.note.trim().slice(0, 150) : '';
@@ -489,12 +486,14 @@ export function ShelfPDFReaderPage() {
       .join('\n')
       .slice(0, 900);
     const bookContext = [
-      'Book title: ' + currentBook.title,
-      currentBook.summary?.trim() ? 'Book subject: ' + currentBook.summary.trim().slice(0, 600) : '',
-      currentBook.tags?.length ? 'Subject tags: ' + currentBook.tags.join(', ') : '',
-      'PDF page: ' + request.pageNumber,
-      request.documentContext.trim() ? 'Previous-page and earlier-part context (for continuity and terminology only):\n' + request.documentContext.slice(0, directTranslation ? 3200 : 4200) : '',
-      glossaryLines ? 'Established book terminology; keep these equivalents consistent when the sense matches:\n' + glossaryLines : '',
+      buildTranslationContext({
+        bookTitle: currentBook.title,
+        bookSummary: currentBook.summary,
+        subjectTags: currentBook.tags,
+        pageNumber: request.pageNumber,
+        previousContext: request.documentContext,
+        glossary: request.priorGlossary,
+      }),
       !directTranslation && annotationLines ? 'Reader annotations (supporting context only):\n' + annotationLines : '',
       !directTranslation && noteLines ? 'Reader notes (supporting context only):\n' + noteLines : '',
     ].filter(Boolean).join('\n\n');
@@ -518,6 +517,7 @@ export function ShelfPDFReaderPage() {
       systemPrompt = [
         ...commonRules,
         'READER TRANSLATION',
+        buildFaithfulTranslationInstructions(request.targetLanguage),
         'Target language: ' + targetLanguageName,
         scope,
         style,
@@ -570,8 +570,18 @@ export function ShelfPDFReaderPage() {
     }, (delta) => {
       streamedContent += delta;
       request.onStream?.(streamedContent);
-    });
+    }, request.signal);
     if (!streamedContent.trim()) throw new Error('The selected model completed the request without returning a translation. Check provider health or choose another model.');
+    const rawIntegrity = directTranslation ? validateRawTranslationAlignment(streamedContent, request.text) : { valid: true, verified: false, coverage: 0 };
+    if (!rawIntegrity.valid) {
+      throw new Error('The model returned invalid source alignment (' + rawIntegrity.reason + '). The result was withheld instead of being attached to this PDF passage. Retry the request.');
+    }
+    const parsedTranslation = parseReaderTranslation(streamedContent, request.text);
+    const integrity = validateTranslationIntegrity(request.text, parsedTranslation);
+    if (!integrity.valid) {
+      throw new Error('The model response could not be safely matched to the requested PDF passage (' + integrity.reason + '). Retry the translation; an unrelated or misaligned result was withheld.');
+    }
+    if (!parsedTranslation.translation.trim()) throw new Error('The model returned no usable translated text.');
     const providerName = selectedOption.label.split(' · ')[0] || response.provider_id;
     const modelName = translationModelOptionsRef.current.find((option) => option.value === response.provider_id + '/' + response.model)?.label
       || providerName + ' · ' + response.model;

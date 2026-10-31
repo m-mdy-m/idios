@@ -319,3 +319,17 @@
   border-radius: 12px;
   filter: drop-shadow(0 12px 30px rgb(0 0 0 / 28%));
 }
+
+.shelf-pdf-reader__translation-jobs-status {
+  position:absolute; z-index:40; top:64px; left:50%; display:flex;
+  max-width:min(560px,calc(100% - 24px)); flex-direction:column; gap:5px; padding:7px;
+  border:1px solid rgb(255 255 255 / 12%); border-radius:12px; color:#e6e8ec;
+  background:rgb(28 33 41 / 90%); box-shadow:0 12px 32px rgb(0 0 0 / 28%),inset 0 1px 0 rgb(255 255 255 / 5%);
+  -webkit-backdrop-filter:blur(18px) saturate(125%); backdrop-filter:blur(18px) saturate(125%);
+  transform:translateX(-50%);
+}
+.shelf-pdf-reader__translation-job-status { display:inline-flex; min-width:0; align-items:center; gap:9px; padding:3px 4px; color:#e6e8ec; font-size:11px; }
+.shelf-pdf-reader__translation-job-status span { min-width:0; overflow:hidden; color:#cbd1da; text-overflow:ellipsis; white-space:nowrap; }
+.shelf-pdf-reader__translation-job-status button { flex:none; padding:4px 8px; border:1px solid rgb(255 255 255 / 12%); border-radius:7px; color:#f1f3f6; background:rgb(255 255 255 / 6%); font:inherit; cursor:pointer; }
+.shelf-pdf-reader__translation-job-status button:first-of-type { border-color:rgb(248 113 113 / 25%); color:#fecaca; }
+.shelf-pdf-reader__translation-job-status button:hover { background:rgb(255 255 255 / 11%); }

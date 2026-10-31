@@ -11,8 +11,9 @@ import { api } from '@/lib/api';
 import type { ShelfAnnotation, ShelfAnnotationRect } from '@/types/idios';
 import { ShelfStudyAssistant } from './ShelfStudyAssistant';
 import type { ApplyBookHighlightsResult, RequestedBookHighlight } from '../model/study-types';
-import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, parseReaderTranslation, splitReaderTranslationText, normalizeTranslationMatch, type ReaderTranslationCompletion, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationModelOption, type ReaderTranslationRequest } from '../model/reader-translation';
+import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, parseReaderTranslation, splitReaderTranslationText, normalizeTranslationMatch, translationSourceIdentity, type ReaderTranslationCompletion, type ReaderTranslationData, type ReaderTranslationKind, type ReaderTranslationModelOption, type ReaderTranslationRequest } from '../model/reader-translation';
 import { ShelfTranslationPanel, type ShelfTranslationTab } from './ShelfTranslationPanel';
+import { translationJobs, type TranslationJobSnapshot } from '../model/translation';
 import { ShelfAgentDiscussion } from './ShelfAgentDiscussion';
 import './ShelfPDFReader.css';
 
@@ -260,6 +261,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const wordTranslationInFlight = useRef<Set<string>>(new Set());
   const translationPageInFlight = useRef('');
   const translationRequestID = useRef(0);
+  const [translationJobSnapshots, setTranslationJobSnapshots] = useState<TranslationJobSnapshot[]>(() => translationJobs.list());
+  const translationJobSequence = useRef(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState('');
   const [inlineChatOpen, setInlineChatOpen] = useState(false);
   const [inlineChatPrompt, setInlineChatPrompt] = useState('');
@@ -270,6 +273,18 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [hoveredTextForAI, setHoveredTextForAI] = useState('');
   const [hoveredWordRectangles, setHoveredWordRectangles] = useState<ShelfAnnotationRect[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
+  const currentPageTranslationKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`;
+  const currentPageTranslationKeyRef = useRef(currentPageTranslationKey);
+  currentPageTranslationKeyRef.current = currentPageTranslationKey;
+  const runningTranslationJobs = translationJobSnapshots.filter((job) => job.bookID === bookID && job.status === 'running');
+  const stopTranslation = useCallback((jobID?: string) => {
+    const job = jobID
+      ? runningTranslationJobs.find((candidate) => candidate.id === jobID)
+      : runningTranslationJobs.find((candidate) => candidate.pageNumber === pageNumber) ?? runningTranslationJobs[0];
+    if (job) translationJobs.cancel(job.id);
+  }, [pageNumber, runningTranslationJobs]);
+
+  useEffect(() => translationJobs.subscribe(setTranslationJobSnapshots), []);
 
   useEffect(() => {
     if (!translationOpen) return;
@@ -573,19 +588,20 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       .slice(0, 3200);
   }, [pdf, pageNumber]);
 
-  const requestTranslation = useCallback(async (text: string, kind: ReaderTranslationKind): Promise<ReaderTranslationData> => {
+  const requestTranslation = useCallback(async (text: string, kind: ReaderTranslationKind, signal?: AbortSignal, jobID?: string): Promise<ReaderTranslationData> => {
     const source = text.trim();
     if (!source) throw new Error('Select some readable text first.');
     if (!translationModel) throw new Error('Choose an AI model in the Reading Companion panel before translating.');
     const requestStartedAt = Date.now();
     if (kind === 'page') setTranslationProgress((current) => ({ ...current, stage: 'reading-context', startedAt: current.startedAt || requestStartedAt }));
     const documentContext = await getTranslationContext(pageNumber);
+    if (signal?.aborted) throw signal.reason ?? new DOMException('Translation cancelled.', 'AbortError');
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
     const cachedPages = Array.from(pageTranslationCache.current.entries()).sort((left, right) => Number(left[0].split(':')[1]) - Number(right[0].split(':')[1]));
     for (const [cacheKey, data] of cachedPages) {
-      const [cachedBook, cachedPage, cachedLanguage, ...cachedModelParts] = cacheKey.split(':');
-      const cachedModel = cachedModelParts.join(':');
-      if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || cachedModel !== translationModel || Number(cachedPage) >= pageNumber) continue;
+      const [cachedBook, cachedPage, cachedLanguage] = cacheKey.split(':');
+      const cachedModelPrefix = `${cachedBook}:${cachedPage}:${cachedLanguage}:${translationModel}:`;
+      if (cachedBook !== bookID || cachedLanguage !== translationTargetLanguage || !cacheKey.startsWith(cachedModelPrefix) || Number(cachedPage) >= pageNumber) continue;
       for (const term of data.terms) {
         const termKey = normalizeTranslationMatch(term.source);
         if (!termKey) continue;
@@ -626,10 +642,12 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     });
     const mergeCompletedChunks = (parts: ReaderTranslationData[]) => mergeReaderTranslations(parts, chunkSeparators.slice(0, Math.max(0, parts.length - 1)));
     const results: Array<ReaderTranslationData | undefined> = Array.from({ length: chunks.length });
-    const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
-    const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
+    const sourceIdentity = translationSourceIdentity(contextRequest.pageText);
+    const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}:${sourceIdentity}`;
+    const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${sourceIdentity}`;
     const streamedPreviews: Array<ReaderTranslationData | undefined> = Array.from({ length: chunks.length });
     const updateProgress = (done: number, activePart = Math.min(chunks.length, done + 1)) => {
+      if (jobID) translationJobs.progress(jobID, done, chunks.length);
       if (kind === 'page' && translationPageInFlight.current === pageRequestKey) {
         setTranslationProgress((current) => ({
           ...current,
@@ -676,6 +694,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     // and delay the first visible translation. Completed chunks feed terminology forward.
     const maxConcurrentChunks = 1;
     for (let batchStart = 0; batchStart < chunks.length; batchStart += maxConcurrentChunks) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException('Translation cancelled.', 'AbortError');
       const batchIndexes = Array.from(
         { length: Math.min(maxConcurrentChunks, chunks.length - batchStart) },
         (_, offset) => batchStart + offset,
@@ -697,6 +716,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         const chunkRequest: ReaderTranslationRequest = {
           ...contextRequest,
           text: chunk,
+          signal,
           kind: chunks.length > 1 ? 'chunk' : kind,
           documentContext: [currentPageContinuity, contextRequest.documentContext].filter(Boolean).join('\n\n').slice(0, 5200),
           priorGlossary: batchGlossary,
@@ -723,6 +743,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           },
         };
         const completion = await onTranslateText(chunkRequest);
+        if (signal?.aborted) throw signal.reason ?? new DOMException('Translation cancelled.', 'AbortError');
         const parsed = parseReaderTranslation(completion.content, chunk);
         if (!parsed.translation) throw new Error('The selected model returned an empty translation. Try again or select another model.');
         streamedPreviews[index] = undefined;
@@ -793,7 +814,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [bookID, currentPageText, pageNumber, pageTranslation, pageTranslationBusy, requestTranslation, translationModel, translationPageKey, translationTargetLanguage]);
 
   const refreshPageTranslation = useCallback(() => {
-    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`);
+    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`);
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
@@ -801,7 +822,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
-  }, [bookID, pageNumber, translationModel, translationTargetLanguage]);
+  }, [bookID, currentPageText, pageNumber, translationModel, translationTargetLanguage]);
 
   const translateSelection = useCallback(async () => {
     const selected = selectedTextForAI.trim();
@@ -844,8 +865,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
 
   useEffect(() => {
     if (!translationOpen || !currentPageText.trim() || !pdf || !translationModel) return;
-    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
-    if ((translationPageKey === key && pageTranslation) || translationPageInFlight.current === key) return;
+    const key = currentPageTranslationKey;
+    if (translationPageKey === key && pageTranslation) return;
+    if (translationPageInFlight.current === key) return;
     const cachedTranslation = pageTranslationCache.current.get(key);
     if (cachedTranslation) {
       setPageTranslation(cachedTranslation);
@@ -853,35 +875,39 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       setPageTranslationBusy(false);
       return;
     }
+    const jobID = `shelf-page-${bookID}-${pageNumber}-${++translationJobSequence.current}`;
+    const signal = translationJobs.start({ id: jobID, bookID, pageNumber, totalParts: 0 });
     translationPageInFlight.current = key;
-    let active = true;
-    const requestID = ++translationRequestID.current;
     setPageTranslation(null);
     setPartialPageTranslation(null);
     setSelectionTranslation(null);
     setPageTranslationBusy(true);
     setTranslationProgress({ done: 0, total: 0, startedAt: Date.now(), stage: 'reading-context', activePart: 0, receivedCharacters: 0 });
     setTranslationError('');
-    void requestTranslation(currentPageText, 'page').then((translated) => {
-      if (!active || requestID !== translationRequestID.current) return;
-      setPageTranslation(translated);
-      setPartialPageTranslation(null);
+    void requestTranslation(currentPageText, 'page', signal, jobID).then((translated) => {
       pageTranslationCache.current.set(key, translated);
       if (pageTranslationCache.current.size > 40) {
         const oldestKey = pageTranslationCache.current.keys().next().value;
         if (oldestKey) pageTranslationCache.current.delete(oldestKey);
       }
-      setTranslationPageKey(key);
+      translationJobs.complete(jobID);
+      if (currentPageTranslationKeyRef.current === key) {
+        setPageTranslation(translated);
+        setPartialPageTranslation(null);
+        setTranslationPageKey(key);
+      }
     }).catch((cause) => {
-      if (active && requestID === translationRequestID.current) {
-        translationPageInFlight.current = '';
+      if (signal.aborted) translationJobs.cancel(jobID);
+      else translationJobs.fail(jobID, cause instanceof Error ? cause.message : 'Translation failed.');
+      if (currentPageTranslationKeyRef.current === key && !signal.aborted) {
         setTranslationError(cause instanceof Error ? cause.message : 'This page could not be translated.');
       }
     }).finally(() => {
-      if (active && requestID === translationRequestID.current) setPageTranslationBusy(false);
+      if (translationPageInFlight.current === key) translationPageInFlight.current = '';
+      if (currentPageTranslationKeyRef.current === key) setPageTranslationBusy(false);
     });
-    return () => { active = false; if (translationPageInFlight.current === key) translationPageInFlight.current = ''; };
-  }, [bookID, currentPageText, pageNumber, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
+    // No cleanup cancellation: hiding the companion does not cancel the background job.
+  }, [bookID, currentPageText, currentPageTranslationKey, pageNumber, pageTranslation, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
 
   useEffect(() => {
     if (!translationOpen || translationTab !== 'vocabulary' || !pageTranslation || !hoveredTextForAI.trim()) return;
@@ -1275,6 +1301,14 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
         </div>
       </div>
     </div>
+    {!translationOpen && runningTranslationJobs.length > 0 && <div className="shelf-pdf-reader__translation-jobs-status" role="status" aria-live="polite">
+      {runningTranslationJobs.map((job) => <div key={job.id} className="shelf-pdf-reader__translation-job-status">
+        <Languages size={14} />
+        <span>Translating page {job.pageNumber}{job.totalParts ? ` · ${job.completedParts}/${job.totalParts}` : ' · preparing'}</span>
+        <button type="button" onClick={() => stopTranslation(job.id)}>Stop</button>
+        <button type="button" onClick={() => { setPageNumber(job.pageNumber); setTranslationOpen(true); }}>Show</button>
+      </div>)}
+    </div>}
 
     <div className={`shelf-pdf-reader__body ${sidePanelOpen && sidePanelMode === 'discussion' ? 'shelf-pdf-reader__body--discussion' : sidePanelOpen && sidePanelMode === 'notes' ? '' : 'shelf-pdf-reader__body--wide'}`}>
       {translationOpen && createPortal(<div
@@ -1312,6 +1346,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           selectionBusy={selectionTranslationBusy}
           wordBusy={wordTranslationLoadingKey === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(hoveredTextForAI)}`}
           error={translationError}
+          onStopTranslation={() => stopTranslation()}
           onClose={() => setTranslationOpen(false)}
           onRetryTranslation={refreshPageTranslation}
           onTranslateSelection={() => void translateSelection()}

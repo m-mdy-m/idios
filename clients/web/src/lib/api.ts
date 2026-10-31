@@ -75,12 +75,14 @@ type AIChatRequest = {
 async function streamAIChat(
   body: AIChatRequest,
   onDelta: (text: string) => void,
+  signal?: AbortSignal,
 ): Promise<{ provider_id: string; model: string; content: string; duration_ms: number }> {
   const startedAt = performance.now();
   const response = await fetch('/api/ai/chat/stream', {
     method: 'POST',
     headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     let message = 'AI request failed (' + response.status + ')';
@@ -142,6 +144,9 @@ async function streamAIChat(
     }
     if (buffer.trim()) dispatch(buffer);
   } finally {
+    if (signal?.aborted) {
+      try { await reader.cancel(signal.reason); } catch { /* The stream may already be closed. */ }
+    }
     reader.releaseLock();
   }
   if (!completed) throw new Error('The AI stream ended before the provider confirmed completion. Any received text is still available for retry.');
