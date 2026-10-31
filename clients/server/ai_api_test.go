@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -232,6 +233,89 @@ func TestAIAdaptersEndpointListsBuiltInAdapters(t *testing.T) {
 	for _, adapterID := range []string{"openrouter", "openai-compatible", "ollama-native"} {
 		if !strings.Contains(response.Body.String(), `"id":"`+adapterID+`"`) {
 			t.Fatalf("adapter %q missing from catalogue: %s", adapterID, response.Body.String())
+		}
+	}
+}
+
+func TestAIChatStreamDeliversProviderTranslationDeltas(t *testing.T) {
+	const source = "The section headings and the index will guide the reader."
+
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		var input struct {
+			Stream   bool `json:"stream"`
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if !input.Stream {
+			http.Error(w, "stream=true is required", http.StatusBadRequest)
+			return
+		}
+		if len(input.Messages) == 0 || !strings.Contains(input.Messages[len(input.Messages)-1].Content, source) {
+			http.Error(w, "source passage missing", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		for _, delta := range []string{
+			`{"translation":"سرعنوان‌های بخش‌ها،`,
+			` و نمایه، خواننده را به مطالب کتاب راهنمایی می‌کنند.","segments":[],"terms":[],"grammar":[],"ielts":[]}`,
+		} {
+			payload, err := json.Marshal(map[string]any{
+				"choices": []any{map[string]any{"delta": map[string]string{"content": delta}}},
+			})
+			if err != nil {
+				return
+			}
+			_, _ = fmt.Fprintf(w, "data: %s", payload)
+			_, _ = w.Write([]byte{10, 10})
+			flusher.Flush()
+		}
+		_, _ = fmt.Fprint(w, "data: [DONE]")
+		_, _ = w.Write([]byte{10, 10})
+		flusher.Flush()
+	}))
+	defer providerServer.Close()
+
+	server := &Server{}
+	manager, err := server.aiManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ai.ProviderConfig{
+		ID: "reader-stream-test", Name: "Reader stream test", Type: ai.ProviderOpenAI,
+		BaseURL: providerServer.URL + "/v1", DefaultModel: "rawls-stream-test",
+		Enabled: true, TimeoutSeconds: 30, MaxConcurrent: 1, TrustedLocal: true,
+	}, false); err != nil {
+		t.Fatalf("configure mock provider: %v", err)
+	}
+
+	body := `{"provider_id":"reader-stream-test","model":"rawls-stream-test","task":"translation","timeout_seconds":30,"messages":[{"role":"user","content":"The section headings and the index will guide the reader."}]}`
+	request := httptest.NewRequest(http.MethodPost, "/api/ai/chat/stream", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	server.aiChatStream(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("stream status = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	stream := response.Body.String()
+	for _, expected := range []string{"event: start", "event: delta", "event: done", "سرعنوان‌های بخش‌ها", "راهنمایی می‌کنند"} {
+		if !strings.Contains(stream, expected) {
+			t.Fatalf("stream does not contain %q: %s", expected, stream)
 		}
 	}
 }

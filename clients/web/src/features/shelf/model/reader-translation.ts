@@ -13,6 +13,7 @@ export type ReaderTranslationRequest = {
   kind: ReaderTranslationKind;
   documentContext: string;
   priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
+  onStream?: (rawContent: string) => void;
 };
 
 export type ReaderTranslationWordAlignment = { source: string; translation: string };
@@ -47,6 +48,63 @@ function readString(value: unknown): string {
 
 export function normalizeTranslationMatch(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
+}
+
+/** Rebuild readable PDF text without joining line-end hyphenation into broken words. */
+export function extractReaderPDFText(items: readonly unknown[]): string {
+  const lines = items.map((item) => {
+    const record = asRecord(item);
+    const value = typeof record.str === 'string' ? record.str : '';
+    return value + (record.hasEOL ? '\n' : ' ');
+  }).join('');
+
+  return lines
+    .replace(/\u00ad/g, '')
+    .replace(/-\s*\r?\n\s*(?=\p{Ll})/gu, '')
+    .replace(/[ \t]*\r?\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Read the translation JSON string while it is still arriving over SSE.
+ * Returns null until the translation key starts; incomplete escape sequences
+ * are held back so the visible preview never displays broken JSON syntax.
+ */
+export function extractPartialReaderTranslation(raw: string): string | null {
+  const key = /"translation"\s*:\s*"/g;
+  const match = key.exec(raw);
+  if (!match) return null;
+  let output = '';
+  for (let index = match.index + match[0].length; index < raw.length; index += 1) {
+    const character = raw[index];
+    if (character === '"') return output;
+    if (character !== '\\') {
+      output += character;
+      continue;
+    }
+    const escaped = raw[index + 1];
+    if (escaped === undefined) break;
+    const simple: Record<string, string> = {
+      '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t',
+    };
+    if (Object.prototype.hasOwnProperty.call(simple, escaped)) {
+      output += simple[escaped];
+      index += 1;
+      continue;
+    }
+    if (escaped === 'u') {
+      const hex = raw.slice(index + 2, index + 6);
+      if (!/^[\da-f]{4}$/i.test(hex)) break;
+      output += String.fromCharCode(Number.parseInt(hex, 16));
+      index += 5;
+      continue;
+    }
+    output += escaped;
+    index += 1;
+  }
+  return output;
 }
 
 function containsAlignedPhrase(container: string, candidate: string): boolean {
@@ -163,7 +221,10 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
   const cleaned = stripCodeFence(fallbackText);
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
-  if (start < 0 || end <= start) return fallback;
+  if (start < 0 || end <= start) {
+    const partial = extractPartialReaderTranslation(cleaned)?.trim();
+    return partial ? { ...fallback, translation: partial, segments: [{ source: sourceText.trim(), translation: partial }] } : fallback;
+  }
 
   try {
     const parsed = asRecord(JSON.parse(cleaned.slice(start, end + 1)));
@@ -246,6 +307,7 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
       ...(readString(parsed.translatorNote) ? { translatorNote: readString(parsed.translatorNote) } : {}),
     };
   } catch {
-    return fallback;
+    const partial = extractPartialReaderTranslation(cleaned)?.trim();
+    return partial ? { ...fallback, translation: partial, segments: [{ source: sourceText.trim(), translation: partial }] } : fallback;
   }
 }

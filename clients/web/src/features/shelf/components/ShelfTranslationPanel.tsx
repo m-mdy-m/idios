@@ -12,11 +12,7 @@ export type ShelfTranslationTab = 'translate' | 'vocabulary' | 'grammar' | 'ielt
 const languages = [
   { value: 'fa', label: 'فارسی' },
   { value: 'en', label: 'English' },
-  { value: 'de', label: 'Deutsch' },
   { value: 'ar', label: 'العربية' },
-  { value: 'fr', label: 'Français' },
-  { value: 'es', label: 'Español' },
-  { value: 'tr', label: 'Türkçe' },
 ];
 
 const modes: Array<{ value: ShelfTranslationTab; label: string; description: string }> = [
@@ -112,7 +108,7 @@ export function ShelfTranslationPanel({
   onModelChange: (model: string) => void;
   timeoutSeconds: number;
   onTimeoutChange: (seconds: number) => void;
-  progress: { done: number; total: number; startedAt: number };
+  progress: { done: number; total: number; startedAt: number; stage: string; activePart: number; receivedCharacters: number };
 }) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -129,6 +125,25 @@ export function ShelfTranslationPanel({
   const pageTerm = pageData?.terms.find((term) => termMatches(term, hoveredWord));
   const currentTerm = pageTerm || wordData?.terms[0];
   const selectedWord = /^\p{L}[\p{L}\p{N}_’'-]*$/u.test(selectedText.trim());
+  const progressTitle = progress.stage === 'reading-context'
+    ? 'Reading earlier pages and book terminology'
+    : progress.stage === 'contacting-model'
+      ? 'Waiting for the selected model'
+      : progress.stage === 'receiving-translation'
+        ? (progress.total > 1 ? 'Translating part ' + progress.activePart + ' of ' + progress.total : 'Receiving translation')
+        : progress.total > 1
+          ? 'Translating ' + progress.done + ' of ' + progress.total + ' parts'
+          : 'Translating this page';
+  const progressDetail = progress.stage === 'reading-context'
+    ? 'Preparing book context · ' + elapsedLabel + ' elapsed'
+    : progress.stage === 'contacting-model'
+      ? 'Part ' + progress.activePart + ' of ' + progress.total + ' · request sent, waiting for first tokens · ' + elapsedLabel + ' elapsed'
+      : progress.stage === 'receiving-translation'
+        ? progress.receivedCharacters.toLocaleString() + ' characters received in this part · ' + elapsedLabel + ' elapsed'
+        : progress.total
+          ? progress.done + ' of ' + progress.total + ' parts complete · ' + elapsedLabel + ' elapsed'
+          : 'Preparing passage · ' + elapsedLabel + ' elapsed';
+
 
   return <aside className="shelf-translation-panel" aria-label="Reading translation companion">
     <header className="shelf-translation-panel__header">
@@ -208,8 +223,8 @@ export function ShelfTranslationPanel({
       {tab === 'translate' && <>
         {pageBusy && <div className="shelf-translation-panel__progress" role="status" aria-live="polite">
           <span className="shelf-translation-panel__progress-spinner"><LoaderCircle size={14} className="is-spinning" /></span>
-          <div><strong>{progress.total > 1 ? `Translating ${progress.done} of ${progress.total} parts` : 'Translating this page'}</strong><small>{progress.total ? `${progress.done} of ${progress.total} complete · ${elapsedLabel} elapsed` : `Preparing page text… · ${elapsedLabel} elapsed`}</small></div>
-          <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '5%' }} /></div>
+          <div><strong>{progressTitle}</strong><small>{progressDetail}</small></div>
+          <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? String(Math.min(100, (progress.done / progress.total) * 100)) + '%' : '5%' }} /></div>
         </div>}
         {selectionData && selectedText.trim() && <article className="shelf-translation-panel__selection-result">
           <small>SELECTED PASSAGE</small><TranslationMarkdown value={selectionData.translation} />
