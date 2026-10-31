@@ -464,36 +464,53 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
+type discussionDeadlineTestProvider struct {
+	deadlineCh chan time.Time
+}
+
+func (p *discussionDeadlineTestProvider) ID() string         { return "local" }
+func (p *discussionDeadlineTestProvider) Kind() ProviderKind { return ProviderOpenAI }
+func (p *discussionDeadlineTestProvider) Local() bool        { return true }
+func (p *discussionDeadlineTestProvider) ListModels(context.Context) ([]Model, error) {
+	return nil, nil
+}
+func (p *discussionDeadlineTestProvider) Generate(ctx context.Context, _ GenerateRequest) (GenerateResponse, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		p.deadlineCh <- deadline
+	} else {
+		p.deadlineCh <- time.Time{}
+	}
+	return GenerateResponse{
+		ProviderID: "local",
+		Model:      "test-model",
+		Content:    "Tutor explains the page's central idea in plain language and gives a concrete example. [source:page-1]",
+	}, nil
+}
+func (p *discussionDeadlineTestProvider) Stream(context.Context, GenerateRequest, func(string) error) error {
+	return nil
+}
+func (p *discussionDeadlineTestProvider) Health(context.Context) HealthStatus {
+	return HealthStatus{State: "healthy"}
+}
+
 func TestBookDiscussionBoundsEachAgentTurnIndependentlyOfWorkflowTimeout(t *testing.T) {
 	deadlineCh := make(chan time.Time, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		deadline, ok := r.Context().Deadline()
-		if !ok {
-			t.Error("discussion provider request has no context deadline")
-		} else {
-			deadlineCh <- deadline
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"model": "test-model",
-			"choices": []any{map[string]any{"message": map[string]string{
-				"content": "Tutor explains the page's central idea in plain language and gives a concrete example. [source:page-1]",
-			}}},
-		})
-	}))
-	defer server.Close()
-
 	manager, err := NewManager("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer manager.Close()
 	if _, err := manager.UpsertProvider(ProviderConfig{
-		ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: server.URL,
+		ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: "http://127.0.0.1:12345/v1",
 		DefaultModel: "test-model", Enabled: true, TimeoutSeconds: 600,
 	}, false); err != nil {
 		t.Fatal(err)
 	}
+	manager.mu.Lock()
+	manager.providerFactory = func(ProviderConfig) (Provider, error) {
+		return &discussionDeadlineTestProvider{deadlineCh: deadlineCh}, nil
+	}
+	manager.mu.Unlock()
 	config := manager.RuntimeConfig()
 	config.Mode = ModeLocalFirst
 	config.DefaultModel = "local/test-model"
@@ -517,11 +534,11 @@ func TestBookDiscussionBoundsEachAgentTurnIndependentlyOfWorkflowTimeout(t *test
 	select {
 	case deadline := <-deadlineCh:
 		remaining := time.Until(deadline)
-		if remaining <= 0 || remaining > discussionAgentTurnTimeout {
-			t.Fatalf("provider deadline remaining = %s, want a positive duration no greater than %s", remaining, discussionAgentTurnTimeout)
+		if deadline.IsZero() || remaining <= 0 || remaining > discussionAgentTurnTimeout {
+			t.Fatalf("provider deadline = %v (remaining %s), want a positive deadline no later than %s", deadline, remaining, discussionAgentTurnTimeout)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("provider request did not observe the bounded turn context")
+		t.Fatal("provider did not receive the bounded turn context")
 	}
 }
 
