@@ -36,7 +36,7 @@ jobs:
     name: Build, verify, and publish IDIOS release assets
     uses: m-mdy-m/pipeline/.github/workflows/release.yml@main
     with:
-      pipeline-ref: main
+      pipeline-ref: fix/release-target-ids-allow-underscore
       go-version: "1.25.0"
       setup-node: true
       node-version: "22"
