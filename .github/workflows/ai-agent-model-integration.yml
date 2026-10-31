@@ -23,12 +23,6 @@ on:
       - "tests/fixtures/rawls-a-theory-of-justice-page-21.txt"
       - "tests/examples/rawls-page-21-reading-session.md"
   workflow_dispatch:
-    inputs:
-      model:
-        description: "Ollama model tag to download for the integration test"
-        required: false
-        default: "qwen2.5:3b"
-        type: string
 
 permissions:
   contents: read
