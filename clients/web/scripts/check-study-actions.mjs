@@ -10,6 +10,8 @@ import {
 
 assert.equal(isExplicitHighlightRequest('Highlight this passage'), true);
 assert.equal(isExplicitHighlightRequest('این عبارت رو هایلایت کن'), true);
+assert.equal(isExplicitHighlightRequest('Please quote this exact passage'), true);
+assert.equal(isExplicitHighlightRequest('لطفاً یک نقل قول از این بخش استخراج کن'), true);
 assert.equal(isExplicitBookNoteRequest('Please save a note about this page'), true);
 assert.equal(isExplicitBookNoteRequest('برای این بخش یک یادداشت بنویس'), true);
 assert.equal(isBookMutationRequest('What does this highlighted sentence mean?'), false);
@@ -23,6 +25,14 @@ assert.equal(highlight.actions[0].type, 'highlight');
 assert.equal(highlight.actions[0].quote, 'small exact phrase');
 assert.equal(highlight.actions[0].page, 4);
 assert.equal(highlight.visible.trim(), '');
+
+const quoted = parseBookActionResponse(
+  '<idios_book_actions>{"actions":[{"type":"quote","page":4,"quote":"an exact sentence from this page"}]}</idios_book_actions>',
+  4,
+);
+assert.equal(quoted.actions.length, 1);
+assert.equal(quoted.actions[0].type, 'highlight', 'a model quote action must be kept as a PDF annotation');
+assert.equal(quoted.actions[0].quote, 'an exact sentence from this page');
 
 const note = parseBookActionResponse(
   'I made a useful note.\n<idios_book_actions>{"actions":[{"type":"note","title":"Key point","content":"A saved learning note.","labels":["reading"]}]}</idios_book_actions>',
@@ -81,6 +91,8 @@ assert.equal(assistantSource.includes('content: message.content'), true, 'conver
 assert.equal(assistantSource.includes('fitShelfRuntimeMessages(['), true, 'the runtime payload must be byte-budgeted');
 assert.equal(assistantSource.includes('if (separateNote && promptAskedForNote) annotationNote = separateNote.content;'), false, 'the standalone note must not overwrite the margin explanation');
 assert.equal(assistantSource.includes('A highlight persistence failure must not prevent a separately requested'), true);
+assert.equal(assistantSource.includes('needsNoteAction'), true, 'partial action envelopes must retry missing book notes');
+assert.equal(assistantSource.includes('focused retry'), true, 'missing notes must be reported rather than claimed saved');
 assert.equal(assistantSource.indexOf('for (const action of noteActions)') > assistantSource.indexOf('A highlight persistence failure must not prevent a separately requested'), true);
 
 const malformed = parseBookActionResponse('<idios_book_actions>{bad json}</idios_book_actions>', 1);

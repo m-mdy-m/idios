@@ -635,26 +635,40 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
       let answer = parsedAnswer.visible;
       if (bookMutationRequested) {
         let requestedActions = parsedAnswer.actions;
-        // A small repair pass helps weaker models that answered in prose instead of the action schema.
-        if (!requestedActions.length) {
-          try {
-            const repairMessages = fitShelfRuntimeMessages([
-                { role: 'system', content: `${coreReliabilitySkill.replace(/^---\s*[\s\S]*?---\s*/, '').trim()}\n\nConvert the reader's requested book edit into a valid action envelope only. Do not answer in prose. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions>. Valid actions: highlight {type, page:${turnPage}, quote exact and unique from current page, note, color purple}; note {type,title,content,labels}. This is an action plan for the app to execute, not a claim that it has already been saved. Use the supplied PDF reading context as source. A highlight must quote an exact unique passage from the requested page; if that page is not the current open page, return no highlight action rather than saving it on the wrong page. If no exact anchor can be identified, return {"actions":[]}.` },
-                { role: 'user', content: `Reader request: ${userPrompt}\n\nReading context and current page text:\n${turnContext.slice(-12000)}\n\nAuthoritative current PDF page text for highlight anchors (quotes must be copied exactly from here):\n${pageText.slice(0, 16000)}\n\nYour first answer (for intent only, do not copy its HIGHLIGHT:/NOTE: labels):\n${rawAnswer.slice(0, 2500)}` },
-              ]);
-            const repair = await runShelfAIThroughRuntime(targetModel, repairMessages, effectiveEffort);
-            const repairText = getContent(repair.choices?.[0]?.message?.content).trim();
-            const repaired = parseBookActionResponse(repairText, turnPage);
-            if (repaired.actions.length) requestedActions = repaired.actions;
-          } catch { /* The message below will clearly say that no book edit was made. */ }
-        }
-        const resultLines: string[] = [];
-        const promptAskedForHighlight = isExplicitHighlightRequest(userPrompt);
-        const promptAskedForNote = isExplicitBookNoteRequest(userPrompt);
+      const promptAskedForHighlight = isExplicitHighlightRequest(userPrompt);
+      const promptAskedForNote = isExplicitBookNoteRequest(userPrompt);
+      const selectedQuote = selectedText.trim();
+      const needsHighlightAction = promptAskedForHighlight && !selectedQuote
+        && !requestedActions.some((action) => action.type === 'highlight');
+      const needsNoteAction = promptAskedForNote
+        && !requestedActions.some((action) => action.type === 'note');
+
+      // Retry missing action types independently: a partial envelope must not suppress
+      // a separately requested note or highlight.
+      if (needsHighlightAction || needsNoteAction) {
+        const missingActionInstructions = [
+          needsHighlightAction
+            ? `Add one highlight action only: quote 1–8 exact, contiguous, unique words from page ${turnPage}; include a short margin note and purple color. Never invent a quote.`
+            : '',
+          needsNoteAction
+            ? `Add one standalone note action only: write a concise, useful note grounded in the current page and book context, with a title and content. Do not return an empty note.`
+            : '',
+        ].filter(Boolean).join('\\n');
+        try {
+          const repairMessages = fitShelfRuntimeMessages([
+            { role: 'system', content: `${coreReliabilitySkill.replace(/^---\\s*[\\s\\S]*?---\\s*/, '').trim()}\\n\\nYou are repairing only missing Shelf book actions. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions> containing only these missing action types:\\n${missingActionInstructions}\\nDo not duplicate or modify any action already present in the first response. This is an action plan for the app to execute, not a claim that anything has been saved. Use only the supplied PDF page and book context. If an exact highlight anchor cannot be identified, omit that highlight rather than inventing one.` },
+            { role: 'user', content: `Reader request: ${userPrompt}\\n\\nExisting actions already parsed (do not duplicate): ${JSON.stringify(requestedActions)}\\n\\nReading context:\\n${turnContext.slice(-12000)}\\n\\nAuthoritative current PDF page text:\\n${pageText.slice(0, 16000)}\\n\\nFirst answer (intent/context only):\\n${rawAnswer.slice(0, 2500)}` },
+          ]);
+          const repair = await runShelfAIThroughRuntime(targetModel, repairMessages, effectiveEffort);
+          const repairText = getContent(repair.choices?.[0]?.message?.content).trim();
+          const repaired = parseBookActionResponse(repairText, turnPage);
+          if (repaired.actions.length) requestedActions = [...requestedActions, ...repaired.actions];
+        } catch { /* Existing actions remain usable; missing writes are reported below. */ }
+      }
+      const resultLines: string[] = [];
         // A reader-selected phrase is authoritative. Always replace any model-generated
         // highlight anchor with the exact selection, even when the model returned an approximate
         // quote. Keep a separately requested note as its own shelf-note action.
-        const selectedQuote = selectedText.trim();
         const selectedWordCount = quoteWords(selectedQuote).length;
         if (selectedQuote && selectedWordCount > 0 && selectedWordCount <= 32 && promptAskedForHighlight) {
           const existingHighlight = requestedActions.find((action): action is Extract<RequestedBookAction, { type: 'highlight' }> => action.type === 'highlight');
@@ -722,6 +736,9 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
           } catch (cause) {
             resultLines.push(`I couldn’t save the book note: ${cause instanceof Error ? cause.message : 'the notes API returned an error'}.`);
           }
+        }
+        if (promptAskedForNote && !noteActions.length) {
+          resultLines.push('I couldn’t write or save the requested book note: the model returned no note content after a focused retry, so no note was created.');
         }
         answer = resultLines.length ? resultLines.join('\n\n') : 'I didn’t change the book because I couldn’t identify a safe, exact action from the response. Try selecting the phrase first, or ask me to mark a short phrase on this page.';
       } else {

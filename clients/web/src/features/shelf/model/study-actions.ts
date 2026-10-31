@@ -2,16 +2,17 @@ import type { RequestedBookAction, RequestedBookHighlight } from './study-types'
 
 export function isBookMutationRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
-  const explicitHighlight = /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\s+(?:it|them|these|those)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,22}[“"' \x60]/i.test(text)
+  const explicitHighlight = /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+\S/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+(?:it|them|these|those)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,22}[“"' \x60]/i.test(text)
     || /\b(?:add|create|save|make|put|leave|write)\b.{0,70}\b(?:highlight|highlights|annotation|annotations|marked passage)\b/i.test(text);
   const explicitNoteAction = isExplicitBookNoteRequest(prompt);
   const farsiIntent = /(?:هایلایت|علامت\s*(?:گذاری)?).{0,70}(?:کن|بزن|بنویس|بذار|بزار|ثبت|اضافه|روی|برا)/u.test(text)
     || /(?:یادداشت|نوت).{0,70}(?:بنویس|بذار|بزار|ثبت|اضافه|کن|روی|برا)/u.test(text)
-    || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت|هایلایت)/u.test(text);
+    || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت|هایلایت)/u.test(text)
+    || /(?:نقل\s*قول|نقل‌قول|استخراج).{0,70}(?:کن|بذار|بزار|ثبت|اضافه|روی|برا)/u.test(text);
   const beginsAsQuestion = /^\s*(?:what does|what is|what's|explain|tell me about|why does|why is|what do you mean by|معنی|توضیح بده)/i.test(text);
   // Mentioning an existing note/highlight while asking what it means is not permission to edit the book.
   if (beginsAsQuestion && !explicitHighlight && !explicitNoteAction && !farsiIntent) return false;
@@ -19,11 +20,12 @@ export function isBookMutationRequest(prompt: string): boolean {
 }
 export function isExplicitHighlightRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
-  return /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag)\s+(?:it|them|these|those)\b/i.test(text)
-    || /(?:هایلایت|علامت\s*(?:گذاری)?).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text);
+  return /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+\S/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+(?:it|them|these|those)\b/i.test(text)
+    || /(?:هایلایت|علامت\s*(?:گذاری)?).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text)
+    || /(?:نقل\s*قول|نقل‌قول|استخراج).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text);
 }
 
 export function isExplicitBookNoteRequest(prompt: string): boolean {
@@ -38,7 +40,7 @@ export function isExplicitBookNoteRequest(prompt: string): boolean {
 export function isBroadPageAnnotationRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase();
   const action = /\b(?:highlight|mark|annotate|underline|note|notes|write|add|save)\b/i.test(text)
-    || /(?:هایلایت|علامت|یادداشت|نوت|بنویس|اضافه کن|ثبت کن)/u.test(text);
+    || /(?:هایلایت|علامت|یادداشت|نوت|بنویس|اضافه کن|ثبت کن|نقل\s*قول|نقل‌قول|استخراج)/u.test(text);
   const pageWideTarget = /\b(?:this page|current page|on the page|main ideas?|key ideas?|important (?:parts?|phrases?|words?|terms?|concepts?|ideas?|points?)|key (?:parts?|phrases?|words?|terms?|concepts?|points?)|main (?:concepts?|terms?|points?))\b/i.test(text)
     || /(?:این صفحه|صفحه|نکته(?:های)? مهم|مفهوم(?:های)? اصلی|عبارت(?:های)? مهم|کلمات مهم|نکات کلیدی)/u.test(text);
   return action && pageWideTarget;
@@ -58,7 +60,7 @@ export function normalizeRequestedActions(value: unknown, page: number): Request
     const itemPage = Number.isFinite(Number(item.page)) ? Number(item.page) : page;
     const colorValue = String(item.color ?? 'purple').toLowerCase();
     const color = (['yellow', 'green', 'blue', 'pink', 'purple'].includes(colorValue) ? colorValue : 'purple') as RequestedBookHighlight['color'];
-    if ((type.includes('highlight') || type.includes('mark') || type.includes('annotat') || (type === 'note' && quote)) && quote) {
+    if ((type.includes('highlight') || type.includes('mark') || type.includes('annotat') || type === 'quote' || type === 'quotation' || type === 'extract_quote' || (type === 'note' && quote)) && quote) {
       actions.push({ type: 'highlight', quote, note, page: itemPage, color });
       continue;
     }

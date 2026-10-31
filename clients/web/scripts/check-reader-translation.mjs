@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import { extractPartialReaderTranslation, extractReaderPDFText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
+import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
 const readerPageSource = await readFile(new URL('../src/features/shelf/ShelfPDFReaderPage.tsx', import.meta.url), 'utf8');
@@ -71,6 +71,21 @@ const rawlsPage21Source = [
 ].join('\n');
 const fullPageItems = rawlsPage21Source.split('\n').map((str) => ({ str, hasEOL: true }));
 const extractedFullPage = extractReaderPDFText(fullPageItems);
+assert.equal(normalizeReaderSelectionText('  superflu-\\nous\\u00ad  argument  '), 'superfluous argument',
+  'AI-facing selections must join line-end hyphenation and remove soft hyphens');
+const positionedItems = [
+  { str: 'A careful', transform: [10, 0, 0, 10, 50, 700], width: 44, height: 10, hasEOL: false },
+  { str: 'reader follows', transform: [10, 0, 0, 10, 98, 700], width: 72, height: 10, hasEOL: true },
+  { str: 'the argument', transform: [10, 0, 0, 10, 50, 688], width: 66, height: 10, hasEOL: false },
+  { str: ',', transform: [10, 0, 0, 10, 117, 688], width: 2, height: 10, hasEOL: false },
+  { str: ' clearly.', transform: [10, 0, 0, 10, 120, 688], width: 40, height: 10, hasEOL: true },
+  { str: 'Next paragraph starts here.', transform: [10, 0, 0, 10, 50, 650], width: 160, height: 10, hasEOL: true },
+];
+assert.equal(
+  extractReaderPDFText(positionedItems),
+  'A careful reader follows\\nthe argument, clearly.\\n\\nNext paragraph starts here.',
+  'geometric extraction must reconstruct spaces, lines, punctuation and paragraph gaps',
+);
 for (const repaired of ['superfluous', 'digression', 'innumerable', 'necessary', 'forcefully']) {
   assert.ok(extractedFullPage.includes(repaired), 'PDF extraction must repair the split word: ' + repaired);
 }
