@@ -203,7 +203,7 @@ export function ShelfTranslationPanel({
           <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? `${Math.min(100, (progress.done / progress.total) * 100)}%` : '5%' }} /></div>
         </div>}
         {selectionData && selectedText.trim() && <article className="shelf-translation-panel__selection-result">
-          <small>SELECTED PASSAGE</small><p>{selectionData.translation}</p>
+          <small>SELECTED PASSAGE</small><TranslationMarkdown value={selectionData.translation} />
         </article>}
         {selectedText.trim() && !selectedWord && !selectionData && <button type="button" className="shelf-translation-panel__selection-action" onClick={onTranslateSelection} disabled={selectionBusy}>
           {selectionBusy ? <LoaderCircle size={13} className="is-spinning" /> : <Sparkles size={13} />} Translate selected passage
