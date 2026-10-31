@@ -13,6 +13,8 @@ assert.equal(isExplicitHighlightRequest('Highlight this passage'), true);
 assert.equal(isExplicitHighlightRequest('این عبارت رو هایلایت کن'), true);
 assert.equal(isExplicitQuoteRequest('Please quote this exact passage'), true);
 assert.equal(isExplicitQuoteRequest('لطفاً یک نقل قول از این بخش استخراج کن'), true);
+assert.equal(isBookMutationRequest('Please quote this exact passage'), true);
+assert.equal(isBookMutationRequest('لطفاً یک نقل قول از این بخش استخراج کن'), true);
 assert.equal(isExplicitHighlightRequest('Please quote this exact passage'), false);
 assert.equal(isExplicitBookNoteRequest('Please save a note about this page'), true);
 assert.equal(isExplicitBookNoteRequest('برای این بخش یک یادداشت بنویس'), true);
