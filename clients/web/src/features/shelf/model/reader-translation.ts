@@ -57,7 +57,7 @@ export function normalizeTranslationMatch(value: string): string {
 export function extractReaderPDFText(items: readonly unknown[]): string {
   type PositionedItem = {
     text: string; x: number; y: number; width: number; height: number;
-    hasEOL: boolean; positioned: boolean;
+    direction: 'ltr' | 'rtl'; hasEOL: boolean; positioned: boolean;
   };
   const parsed: PositionedItem[] = items.map((item) => {
     const record = asRecord(item);
@@ -78,6 +78,7 @@ export function extractReaderPDFText(items: readonly unknown[]): string {
       y: Number.isFinite(y) ? y : 0,
       width: Number.isFinite(width) ? Math.max(0, Math.abs(width)) : 0,
       height,
+      direction: record.dir === 'rtl' ? 'rtl' : 'ltr',
       hasEOL: record.hasEOL === true,
       positioned: transform.length >= 6 && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(width),
     };
@@ -87,17 +88,19 @@ export function extractReaderPDFText(items: readonly unknown[]): string {
   let output = '';
   let previous: PositionedItem | null = null;
   const openingPunctuation = /^[\s([{«“‘‹]/u;
-  const closingPunctuation = /^[,.;:!?%)\]}»”’›]/u;
+  const closingPunctuation = /^[,.;:!?%)\]}»”’›،؛؟]/u;
 
   for (const item of parsed) {
     if (previous) {
       if (geometryAvailable) {
         const fontHeight = Math.max(1, Math.min(previous.height, item.height));
         const verticalDistance = Math.abs(previous.y - item.y);
-        if (verticalDistance > fontHeight * 0.58) {
+        if (previous.hasEOL || verticalDistance > fontHeight * 0.58) {
           output += verticalDistance > fontHeight * 1.48 ? '\n\n' : '\n';
         } else {
-          const horizontalGap = item.x - (previous.x + previous.width);
+          const horizontalGap = item.direction === 'rtl'
+            ? previous.x - (item.x + item.width)
+            : item.x - (previous.x + previous.width);
           const needsSpace = horizontalGap > Math.max(1, fontHeight * 0.18);
           if (needsSpace && !closingPunctuation.test(item.text) && !openingPunctuation.test(previous.text.slice(-1))) {
             output += ' ';
