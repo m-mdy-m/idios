@@ -260,7 +260,6 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const pageLearningCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const wordTranslationInFlight = useRef<Set<string>>(new Set());
   const translationPageInFlight = useRef('');
-  const translationRequestID = useRef(0);
   const [translationJobSnapshots, setTranslationJobSnapshots] = useState<TranslationJobSnapshot[]>(() => translationJobs.list());
   const translationJobSequence = useRef(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState('');
