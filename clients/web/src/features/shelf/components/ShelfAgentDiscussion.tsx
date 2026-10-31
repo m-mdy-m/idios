@@ -53,28 +53,39 @@ const defaultQuestion = '';
 
 function array<T>(value: T[] | undefined | null): T[] { return Array.isArray(value) ? value : []; }
 const roleModelCandidates: Record<string, string[]> = {
-  reader: ['qwen2.5:3b', 'qwen2.5:7b'],
-  tutor: ['qwen3:1.7b', 'qwen2.5:3b', 'deepseek-r1:1.5b', 'qwen2.5:7b'],
-  translator: ['translategemma:4b', 'qwen2.5:3b', 'qwen2.5:7b'],
+  reader: ['qwen2.5:7b', 'qwen2.5:3b'],
+  tutor: ['qwen2.5:7b', 'qwen3:8b', 'qwen3:1.7b', 'qwen2.5:3b', 'deepseek-r1:1.5b'],
+  translator: ['translategemma:4b', 'qwen2.5:7b', 'qwen2.5:3b'],
   'note-writer': ['qwen2.5:3b', 'qwen2.5:7b'],
-  reviewer: ['qwen2.5:7b', 'qwen2.5:3b'],
-  'concept-connector': ['qwen2.5:3b', 'qwen2.5:7b'],
-  'socratic-questioner': ['deepseek-r1:1.5b', 'qwen2.5:3b'],
-  'counterexample-tester': ['qwen2.5:7b', 'qwen2.5:3b', 'deepseek-r1:1.5b'],
-  'context-keeper': ['qwen2.5:3b', 'qwen3:0.6b', 'qwen2.5:7b'],
-  'example-builder': ['qwen2.5:3b', 'qwen2.5:7b'],
+  reviewer: ['qwen2.5:14b', 'qwen2.5:7b', 'qwen2.5:3b'],
+  'concept-connector': ['qwen2.5:7b', 'qwen2.5:3b'],
+  'socratic-questioner': ['qwen2.5:7b', 'deepseek-r1:1.5b', 'qwen2.5:3b'],
+  'counterexample-tester': ['qwen2.5:14b', 'qwen2.5:7b', 'deepseek-r1:8b', 'qwen2.5:3b'],
+  'context-keeper': ['qwen2.5:3b', 'qwen2.5:7b', 'qwen3:0.6b'],
+  'example-builder': ['qwen2.5:7b', 'qwen2.5:3b'],
   'discussion-chair': ['qwen2.5:14b', 'qwen3:8b', 'qwen2.5:7b', 'qwen2.5:3b'],
-  'evidence-auditor': ['qwen2.5:7b', 'qwen2.5:3b'],
-  'ambiguity-scout': ['translategemma:4b', 'qwen2.5:3b', 'qwen2.5:7b'],
-  steelman: ['qwen2.5:3b', 'qwen2.5:7b', 'deepseek-r1:1.5b'],
-  'scope-keeper': ['qwen3:0.6b', 'qwen2.5:3b', 'qwen2.5:7b'],
+  'evidence-auditor': ['qwen2.5:14b', 'qwen2.5:7b', 'qwen2.5:3b'],
+  'ambiguity-scout': ['translategemma:4b', 'qwen2.5:7b', 'qwen2.5:3b'],
+  steelman: ['qwen2.5:14b', 'qwen2.5:7b', 'deepseek-r1:8b', 'qwen2.5:3b'],
+  'scope-keeper': ['qwen2.5:7b', 'qwen2.5:3b', 'qwen3:0.6b'],
   'code-cartographer': ['qwen2.5-coder:latest', 'qwen2.5:7b'],
-  'signal-scout': ['qwen3:0.6b', 'qwen2.5:3b'],
+  'signal-scout': ['qwen2.5:3b', 'qwen3:0.6b'],
 };
+function modelPerformancePreference(model: AIModel): number {
+  const performance = model.performance;
+  if (!performance) return 0;
+  return (performance.tokens_per_second ?? 0)
+    - (performance.time_to_first_token_ms ?? 0) / 10000
+    - (performance.load_duration_ms ?? 0) / 30000;
+}
 function rolePreferredModel(agentID: string, providers: AIProvider[], models: AIModel[]): string | undefined {
   for (const candidate of roleModelCandidates[agentID] ?? []) {
-    const model = models.find((item) => item.id.toLocaleLowerCase() === candidate.toLocaleLowerCase() && item.availability === 'available' && providers.some((provider) => provider.id === item.provider_id && provider.enabled && (provider.local || provider.type === 'ollama')));
-    if (model) return `${model.provider_id}/${model.id}`;
+    const matching = models
+      .filter((item) => item.id.toLocaleLowerCase() === candidate.toLocaleLowerCase()
+        && item.availability === 'available'
+        && providers.some((provider) => provider.id === item.provider_id && provider.enabled && (provider.local || provider.type === 'ollama')))
+      .sort((left, right) => modelPerformancePreference(right) - modelPerformancePreference(left));
+    if (matching[0]) return `${matching[0].provider_id}/${matching[0].id}`;
   }
   return undefined;
 }
@@ -490,7 +501,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
         {!turns.length ? <textarea aria-label="Your opening thought" rows={2} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Start the discussion…" disabled={busy || starting} /> : <textarea aria-label="Your reply" rows={2} value={readerReply} onChange={(event) => setReaderReply(event.target.value)} placeholder="Reply to an agent…" disabled={busy || starting} />}
         <div className="shelf-agent-room__composer-options" aria-label="Discussion settings">
           <label title="More rounds permit deeper critique but make the discussion slower."><span>Depth</span><select aria-label="Discussion depth" value={discussionRounds} onChange={(event) => setRequestedRounds(Number(event.target.value))} disabled={busy || starting}>{Array.from({ length: maxDiscussionRounds }, (_, index) => index + 1).filter((value) => value >= 2 || maxDiscussionRounds === 1).map((value) => <option key={value} value={value}>{value} {value === 1 ? 'round' : 'rounds'}</option>)}</select></label>
-          <label title={hasThinkingSupport ? (nativeThinkingOnly ? 'Enables native thinking for supported Ollama models; unsupported selected models ignore it.' : 'Reasoning effort is sent only to selected models that support it.') : 'The selected models do not advertise native thinking support.'}><span>Thinking</span><select aria-label={nativeThinkingOnly ? 'Native thinking' : 'Thinking effort'} value={effectiveThinking} onChange={(event) => setThinkingEffort(event.target.value as 'off' | 'low' | 'medium' | 'high')} disabled={!hasThinkingSupport || busy || starting}><option value="off">Off</option>{nativeThinkingOnly ? <option value="high">On</option> : <><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></>}</select></label>
+          <label title={hasThinkingSupport ? (nativeThinkingOnly ? 'Optional native reasoning for models that advertise it. Ordinary translation never uses this setting.' : 'Reasoning effort is sent only to selected models that advertise support.') : 'The selected models do not advertise native thinking support.'}><span>Thinking</span><select aria-label={nativeThinkingOnly ? 'Native thinking' : 'Thinking effort'} value={effectiveThinking} onChange={(event) => setThinkingEffort(event.target.value as 'off' | 'low' | 'medium' | 'high')} disabled={!hasThinkingSupport || busy || starting}><option value="off">Off</option>{nativeThinkingOnly ? <option value="high">On</option> : <><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></>}</select></label>
           <span className="shelf-agent-room__source-hint" title="Only the current page and saved notes are evidence; web results are not automatically injected into the discussion.">Page {pageNumber} · {annotations.length} notes</span>
         </div>
         {!chairReady && <p className="shelf-agent-room__source-hint" role="status">MIMI · Chair is required. Assign it an available Ollama Local model in Settings → AI Runtime to start or continue this discussion.</p>}

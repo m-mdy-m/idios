@@ -572,8 +572,8 @@ func TestBookDiscussionRunsSequentiallySharesEarlierTurnsAndSkipsSynthesis(t *te
 	for _, message := range captured[1].Messages {
 		secondPrompt += message.Content + "\n"
 	}
-	if !strings.Contains(secondPrompt, "Reader found one central claim") {
-		t.Fatalf("second agent did not receive the first agent's turn: %s", secondPrompt)
+	if strings.Contains(secondPrompt, "Reader found one central claim") {
+		t.Fatalf("Round 1 specialist analysis must be independent; Tutor saw Reader's answer: %s", secondPrompt)
 	}
 	chairPrompt := ""
 	for _, message := range captured[2].Messages {
@@ -1079,11 +1079,11 @@ func TestDiscussionModelRoutingUsesRoleAndPreservesExplicitPreference(t *testing
 	}{
 		{AgentDefinition{ID: "discussion-chair"}, "global/model", "ollama-local/qwen2.5:14b"},
 		{AgentDefinition{ID: "translator"}, "global/model", "ollama-local/translategemma:4b"},
-		{AgentDefinition{ID: "tutor"}, "global/model", "ollama-local/qwen2.5:3b"},
-		{AgentDefinition{ID: "socratic-questioner"}, "global/model", "ollama-local/deepseek-r1:1.5b"},
+		{AgentDefinition{ID: "tutor"}, "global/model", "ollama-local/qwen2.5:7b"},
+		{AgentDefinition{ID: "socratic-questioner"}, "global/model", "ollama-local/qwen2.5:7b"},
 		{AgentDefinition{ID: "code-cartographer"}, "global/model", "ollama-local/qwen2.5-coder:latest"},
-		{AgentDefinition{ID: "signal-scout"}, "global/model", "ollama-local/qwen3:0.6b"},
-		{AgentDefinition{ID: "scope-keeper"}, "global/model", "ollama-local/qwen3:0.6b"},
+		{AgentDefinition{ID: "signal-scout"}, "global/model", "ollama-local/qwen2.5:3b"},
+		{AgentDefinition{ID: "scope-keeper"}, "global/model", "ollama-local/qwen2.5:7b"},
 		{AgentDefinition{ID: "discussion-chair", PreferredModel: "ollama-local/custom-model"}, "global/model", "ollama-local/custom-model"},
 		{AgentDefinition{ID: "unknown-role"}, "global/model", "global/model"},
 	}
@@ -1092,15 +1092,8 @@ func TestDiscussionModelRoutingUsesRoleAndPreservesExplicitPreference(t *testing
 			t.Errorf("discussionModelForAgent(%q) = %q, want %q", tc.agent.ID, got, tc.want)
 		}
 	}
-	manager.mu.Lock()
-	for i := range manager.state.Models {
-		if manager.state.Models[i].ID == "qwen3:1.7b" {
-			manager.state.Models[i].Availability = "available"
-		}
-	}
-	manager.mu.Unlock()
-	if got := manager.discussionModelForAgent(AgentDefinition{ID: "tutor"}, "global/model"); got != "ollama-local/qwen3:1.7b" {
-		t.Fatalf("tutor did not adopt the newly available reasoning model: %q", got)
+	if got := manager.discussionModelForAgent(AgentDefinition{ID: "tutor"}, "global/model"); got != "ollama-local/qwen2.5:7b" {
+		t.Fatalf("tutor did not preserve the stronger available general-purpose model: %q", got)
 	}
 }
 
@@ -1791,6 +1784,90 @@ func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
 	large := compactDiscussionExcerpt(manyMarkers, 50)
 	if len([]rune(large)) > 50 {
 		t.Fatalf("excerpt with many markers contains %d runes, want at most 50", len([]rune(large)))
+	}
+}
+
+
+func TestNormalizeReasoningForModelNeverThinksDuringTranslation(t *testing.T) {
+	translation := GenerateRequest{Task: "translation", ReasoningEffort: "low", DisableThinking: true}
+	got := normalizeReasoningForModel(translation, true)
+	if got.ReasoningEffort != "" || got.DisableThinking {
+		t.Fatalf("translation request retained thinking controls: %#v", got)
+	}
+	unsupported := GenerateRequest{Task: "book_discussion", ReasoningEffort: "medium", DisableThinking: true}
+	got = normalizeReasoningForModel(unsupported, false)
+	if got.ReasoningEffort != "" || got.DisableThinking {
+		t.Fatalf("unsupported model retained reasoning controls: %#v", got)
+	}
+	supported := GenerateRequest{Task: "book_discussion", ReasoningEffort: "high"}
+	got = normalizeReasoningForModel(supported, true)
+	if got.ReasoningEffort != "high" {
+		t.Fatalf("capable model lost explicit reasoning preference: %#v", got)
+	}
+}
+
+func TestDiscussionPeerTargetsFollowAgentSpecialty(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "Reader claim. [source:page-1]"},
+		{AgentID: "tutor", AgentName: "Sage · Tutor", Status: "completed", Content: "Tutor explanation. [source:page-1]"},
+		{AgentID: "steelman", AgentName: "Atlas · Steelman", Status: "completed", Content: "Steelman challenge. [source:page-1]"},
+		{AgentID: "ambiguity-scout", AgentName: "Lex · Ambiguity Scout", Status: "completed", Content: "Lex ambiguity. [source:page-1]"},
+	}
+	connector := discussionTargetPeers(previous, "concept-connector", 1)
+	if len(connector) != 1 || connector[0].AgentID != "reader" {
+		t.Fatalf("Concept Connector target = %#v, want Reader rather than the latest speaker", connector)
+	}
+	chair := discussionTargetPeers(previous, "discussion-chair", 2)
+	if len(chair) != 2 || chair[0].AgentID != "reader" || chair[1].AgentID != "steelman" {
+		t.Fatalf("Chair targets = %#v, want the central reading and strongest challenge", chair)
+	}
+}
+
+func TestDiscussionQualityWarningsDetectParaphrasedArgumentEcho(t *testing.T) {
+	peer := AgentContribution{
+		AgentID: "reader", AgentName: "Orion · Reader", Status: "completed",
+		Content: "The author says Chapters IV–VIII are not peripheral; they test how a theory of justice orders considered judgments across many questions. [source:page-21]",
+	}
+	answer := "Chapters IV–VIII matter because they test a theory's ability to bring order and system to considered judgments across different questions. [source:page-21]"
+	similarity, shared := discussionEchoSimilarity(answer, peer.Content)
+	if shared < 4 || similarity < 0.46 {
+		t.Fatalf("paraphrased echo similarity = %.2f with %d shared terms, want advisory overlap signal", similarity, shared)
+	}
+	warnings := discussionQualityWarnings(answer, map[string]bool{"page-21": true}, []ContextPassage{{ID: "page-21", Text: "A theory of justice."}}, []AgentContribution{peer}, "tutor", false)
+	found := false
+	for _, warning := range warnings {
+		found = found || strings.Contains(warning, "Possible argument echo")
+	}
+	if !found {
+		t.Fatalf("paraphrased echo did not produce an advisory quality warning: %#v", warnings)
+	}
+}
+
+func TestDiscussionModelRoutingUsesRoleQualityAndMeasuredProviderPerformance(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	manager.mu.Lock()
+	manager.state.Providers = []ProviderConfig{
+		{ID: "ollama-slow", Name: "Ollama slow", Type: ProviderOllama, BaseURL: "http://127.0.0.1:11434", Enabled: true},
+		{ID: "ollama-fast", Name: "Ollama fast", Type: ProviderOllama, BaseURL: "http://127.0.0.1:11435", Enabled: true},
+	}
+	manager.state.Models = []Model{
+		{ProviderID: "ollama-slow", ID: "qwen2.5:14b", Availability: "available", Performance: &ModelPerformance{TokensPerSecond: 1.2, TimeToFirstTokenMS: 4000}},
+		{ProviderID: "ollama-fast", ID: "qwen2.5:14b", Availability: "available", Performance: &ModelPerformance{TokensPerSecond: 7.5, TimeToFirstTokenMS: 500}},
+		{ProviderID: "ollama-fast", ID: "qwen2.5:7b", Availability: "available", Performance: &ModelPerformance{TokensPerSecond: 22}},
+	}
+	manager.mu.Unlock()
+	if got := manager.discussionModelForAgent(AgentDefinition{ID: "discussion-chair"}, "global/model"); got != "ollama-fast/qwen2.5:14b" {
+		t.Fatalf("Chair route = %q, want fastest measured provider for its preferred model", got)
+	}
+	if got := manager.discussionModelForAgent(AgentDefinition{ID: "tutor"}, "global/model"); got != "ollama-fast/qwen2.5:7b" {
+		t.Fatalf("Tutor route = %q, want its first available preferred model", got)
+	}
+	if got := manager.discussionModelForAgent(AgentDefinition{ID: "discussion-chair", PreferredModel: "ollama-custom/model"}, "global/model"); got != "ollama-custom/model" {
+		t.Fatalf("explicit preferred model was not preserved: %q", got)
 	}
 }
 

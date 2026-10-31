@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop sending native thinking requests for Shelf translation and enforce model reasoning capabilities in the shared generation and streaming runtime; unsupported reasoning parameters now degrade to ordinary generation instead of failing translation.
+- Make fresh Shelf discussions independent in their opening specialist analysis, then use role-relevant peer selection for later critique and MIMI's final adjudication.
+- Detect likely paraphrased argument echoes as advisory quality warnings, increase bounded contribution budgets, and route demanding reasoning roles to stronger available local models while preferring the fastest measured provider for duplicate model installations.
+
 ### Added
 
 - Added an installable PWA shell with an app-shell service worker while keeping API requests network-only.
