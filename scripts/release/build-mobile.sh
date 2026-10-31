@@ -66,12 +66,31 @@ case "$target" in
       npx cap sync ios
     )
     case "$target" in
-      ios-arm64) sdk="iphoneos"; arch="arm64"; destination="generic/platform=iOS" ;;
-      ios-simulator-arm64) sdk="iphonesimulator"; arch="arm64"; destination="generic/platform=iOS Simulator" ;;
-      ios-simulator-x86_64) sdk="iphonesimulator"; arch="x86_64"; destination="generic/platform=iOS Simulator" ;;
+      ios-arm64)
+        sdk="iphoneos"
+        expected_arch="arm64"
+        destination="generic/platform=iOS"
+        ;;
+      ios-simulator-arm64)
+        sdk="iphonesimulator"
+        expected_arch="arm64"
+        destination="generic/platform=iOS Simulator"
+        ;;
+      ios-simulator-x86_64)
+        sdk="iphonesimulator"
+        expected_arch="x86_64"
+        destination="generic/platform=iOS Simulator"
+        ;;
     esac
+    runner_arch="$(uname -m)"
+    [[ "$runner_arch" == "$expected_arch" ]] || {
+      echo "Target $target requires an $expected_arch macOS runner, but this runner reports $runner_arch." >&2
+      exit 1
+    }
     derived="$ROOT/dist/mobile/$target"
-    xcodebuild -project "$mobile_root/ios/App/App.xcodeproj" -scheme App -configuration Release -sdk "$sdk" -arch "$arch" -destination "$destination" -derivedDataPath "$derived" CODE_SIGNING_ALLOWED=NO build
+    # The generic Xcode destination selects the simulator/device architecture.
+    # Passing -arch at the same time is rejected by Xcode ("destination implies architecture").
+    xcodebuild -project "$mobile_root/ios/App/App.xcodeproj" -scheme App -configuration Release -sdk "$sdk" -destination "$destination" -derivedDataPath "$derived" CODE_SIGNING_ALLOWED=NO build
     app="$derived/Build/Products/Release-$sdk/App.app"
     [[ -d "$app" && -f "$app/Info.plist" ]] || { echo "Xcode did not produce App.app for $target." >&2; exit 1; }
     ditto -c -k --sequesterRsrc --keepParent "$app" "$output_dir/idios-$release_tag-$target-unsigned.app.zip"
