@@ -7,10 +7,6 @@
 - Added an installable PWA shell with an app-shell service worker while keeping API requests network-only.
 - Added Capacitor build targets for Android ABI-specific APKs and iOS device/simulator app bundles, plus post-download mobile artifact checks.
 
-### Changed
-
-- Added mobile release targets and user-selectable E2E setup/test commands to the shared Pipeline release contract; native clients require an HTTPS IDIOS endpoint and do not weaken the loopback-only backend default.
-
 ### Fixed
 
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
@@ -24,6 +20,7 @@
 - Translate pages in bounded 1,800-character chunks and resume completed chunks from the reader-session cache.
 - Use earlier pages and a compact book glossary for terminology continuity without fetching unrelated notes or annotations for direct page translation.
 - Limit reader translation targets to Persian, English, and Arabic, with fluent-language and philosophical terminology guidance.
+- Added mobile release targets and user-selectable E2E setup/test commands to the shared Pipeline release contract; native clients require an HTTPS IDIOS endpoint and do not weaken the loopback-only backend default.
 
 ## [3.2.2] - 2026-10-31
 
