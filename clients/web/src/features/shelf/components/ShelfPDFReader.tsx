@@ -599,7 +599,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       documentContext,
       priorGlossary,
     };
-    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1050);
+    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1600);
     if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
     const chunkRanges: Array<{ start: number; end: number }> = [];
     let sourceCursor = 0;
