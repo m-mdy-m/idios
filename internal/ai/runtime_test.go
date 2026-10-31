@@ -783,6 +783,10 @@ func TestRequiredDiscussionSourceMarkerUsesOnlyOneSuppliedPassage(t *testing.T) 
 	if !strings.HasSuffix(got, "[source:rawls-page-21]") {
 		t.Fatalf("single supplied passage was not attached as an exact source marker: %q", got)
 	}
+	withQuestion := ensureRequiredDiscussionSourceMarker(content+" Question for you: Which reading follows?", passage, "discussion-chair", true)
+	if strings.Index(withQuestion, "[source:rawls-page-21]") > strings.Index(withQuestion, "Question for you:") {
+		t.Fatalf("source marker should qualify the conclusion before the reader question: %q", withQuestion)
+	}
 	if got := ensureRequiredDiscussionSourceMarker(content, append(passage, ContextPassage{ID: "page-22", Text: "Other text."}), "evidence-auditor", false); got != content {
 		t.Fatalf("multiple passages must not receive an arbitrary citation: %q", got)
 	}
@@ -796,7 +800,7 @@ func TestFinalChairPeerAttributionLedgerQuotesActualCompletedPositions(t *testin
 		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "The chapters test whether a theory can introduce order and system into considered judgments. [source:rawls-page-21]"},
 		{AgentID: "steelman", AgentName: "Atlas · Steelman", Status: "completed", Content: "The chapters are not peripheral applications; their conclusions modify the proposed view. [source:rawls-page-21]"},
 	}
-	content := "The page rejects the peripheral reading and distinguishes reader choice from the importance of the chapters. [source:rawls-page-21]"
+	content := "The page rejects the peripheral reading and distinguishes reader choice from the importance of the chapters. [source:rawls-page-21] Question for you: Which reading follows?"
 	if problem := discussionPeerResponseProblem(content, previous, "discussion-chair", true); problem == "" {
 		t.Fatal("test setup must require the two named peer positions")
 	}
@@ -808,6 +812,9 @@ func TestFinalChairPeerAttributionLedgerQuotesActualCompletedPositions(t *testin
 		if !strings.Contains(got, name) {
 			t.Errorf("Chair ledger omitted %s: %q", name, got)
 		}
+	}
+	if !strings.HasSuffix(got, "Question for you: Which reading follows?") {
+		t.Fatalf("the reader question must remain the final line after peer evidence is added: %q", got)
 	}
 	if strings.Contains(ensureFinalChairPeerAttributions(content, previous, "tutor", true), "Peer positions reviewed:") {
 		t.Fatal("peer ledger should be exclusive to the final Chair")
