@@ -21,7 +21,6 @@ The translation feature is organized around four boundaries:
 
 Maintain reviewed passages from philosophy, science and technical writing. Review against proposition coverage, negation/qualifier preservation, terminology consistency, paragraph structure and unsupported additions. Do not infer quality from provider/model names or fluency alone.
 
-
 ## Quality benchmark
 
 The sibling `benchmarks.ts` module contains deterministic source/reference candidates for:
