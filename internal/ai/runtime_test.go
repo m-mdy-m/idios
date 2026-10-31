@@ -1898,6 +1898,168 @@ func TestDiscussionPeerResponseRequiresNamesAndRejectsExactEcho(t *testing.T) {
 	}
 }
 
+func TestDiscussionRepairPromptIncludesOnlyCompletedPeerInventory(t *testing.T) {
+	previous := []AgentContribution{
+		{AgentID: "concept-connector", AgentName: "Concept Connector", Status: "completed", Content: "Chapters IV–VIII matter because the theory must organize considered judgments. [source:rawls-page-21]"},
+		{AgentID: "lex", AgentName: "Lex · Ambiguity Scout", Status: "failed", Error: &Error{Code: "provider_unavailable", Message: "timeout"}},
+	}
+	prompt := discussionRepairInstructionWithPeers("the response does not identify an actual completed peer", map[string]bool{"rawls-page-21": true}, false, true, previous, "steelman")
+	if !strings.Contains(prompt, "Concept Connector") || !strings.Contains(prompt, "organize considered judgments") {
+		t.Fatalf("repair prompt omitted the exact completed peer and its claim: %s", prompt)
+	}
+	if strings.Contains(prompt, "Ambiguity Scout") {
+		t.Fatalf("repair prompt included a failed/non-peer contribution: %s", prompt)
+	}
+}
+
+func TestDiscussionQualityDefectsAreWarningsButUntrustedChapterClaimsRemainHardFailures(t *testing.T) {
+	allowed := map[string]bool{"rawls-page-21": true}
+	passages := []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: "Chapters IV–VIII are not peripheral; they test how a theory orders considered judgments."}}
+	previous := []AgentContribution{{
+		AgentID: "concept-connector", AgentName: "Concept Connector", Status: "completed",
+		Content: "The chapters test a theory across many questions. [source:rawls-page-21]",
+	}}
+	answer := "The passage says the theory should introduce order and system into considered judgments."
+	if problem := discussionHardResponseProblem(answer, allowed, passages); problem != "" {
+		t.Fatalf("a complete answer with a soft citation/attribution defect was treated as hard-invalid: %s", problem)
+	}
+	warnings := discussionQualityWarnings(answer, allowed, passages, previous, "steelman", false)
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, "without an exact source marker") {
+		t.Fatalf("missing citation was not surfaced as a warning: %#v", warnings)
+	}
+	if !strings.Contains(joined, "participant by name") {
+		t.Fatalf("missing peer attribution was not surfaced as a warning: %#v", warnings)
+	}
+	unseen := "Later Chapter IX resolves the argument. [source:rawls-page-21]"
+	if problem := discussionHardResponseProblem(unseen, allowed, passages); !strings.Contains(problem, "chapter") {
+		t.Fatalf("an unsupported chapter reference was not rejected: %q", problem)
+	}
+}
+
+func TestDiscussionTimeoutUsesProviderSettingsWithLocalWarmupFloor(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "ollama-short", Name: "Ollama short", Type: ProviderOllama,
+		BaseURL: "http://127.0.0.1:11434", DefaultModel: "qwen2.5:3b",
+		Enabled: true, TimeoutSeconds: 60, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "cloud", Name: "Cloud", Type: ProviderOpenAI,
+		BaseURL: "https://example.invalid", DefaultModel: "test",
+		Enabled: true, TimeoutSeconds: 90, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.discussionTimeoutForProvider("ollama-short"); got != 240*time.Second {
+		t.Fatalf("local discussion timeout = %s, want 4-minute cold-start floor", got)
+	}
+	if got := manager.discussionTimeoutForProvider("cloud"); got != 90*time.Second {
+		t.Fatalf("cloud discussion timeout = %s, want provider-configured 90s", got)
+	}
+}
+
+func TestOllamaBookDiscussionIntegration(t *testing.T) {
+	if os.Getenv("IDIOS_OLLAMA_INTEGRATION") != "1" {
+		t.Skip("set IDIOS_OLLAMA_INTEGRATION=1 to run the downloaded local-model integration test")
+	}
+	model := strings.TrimSpace(os.Getenv("IDIOS_OLLAMA_MODEL"))
+	if model == "" {
+		model = "qwen2.5:3b"
+	}
+	baseURL := strings.TrimSpace(os.Getenv("IDIOS_OLLAMA_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:11434"
+	}
+	page, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "rawls-a-theory-of-justice-page-21.txt"))
+	if err != nil {
+		t.Fatalf("read Rawls page-21 fixture: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	const providerID = "ollama-ci"
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: providerID, Name: "Ollama CI", Type: ProviderOllama, BaseURL: baseURL,
+		DefaultModel: model, Enabled: true, TimeoutSeconds: 240, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatalf("configure local Ollama provider: %v", err)
+	}
+	config := manager.RuntimeConfig()
+	config.Mode = ModeLocalFirst
+	config.AllowCloudFallback = false
+	config.MaxConcurrent = 1
+	config.MaxQueued = 4
+	config.WorkflowTimeoutSeconds = 900
+	config.MaxAgents = 5
+	config.MaxDiscussionRounds = 1
+	config.DefaultModel = providerID + "/" + model
+	config.TaskModels["book_discussion"] = providerID + "/" + model
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatalf("configure local-only discussion runtime: %v", err)
+	}
+	agentIDs := []string{"reader", "tutor", "steelman", "discussion-chair"}
+	assigned := map[string]bool{}
+	for _, agent := range manager.Agents() {
+		if !containsString(agentIDs, agent.ID) {
+			continue
+		}
+		agent.PreferredModel = providerID + "/" + model
+		if _, err := manager.UpsertAgent(agent); err != nil {
+			t.Fatalf("assign %s to %s: %v", agent.Name, model, err)
+		}
+		assigned[agent.ID] = true
+	}
+	for _, id := range agentIDs {
+		if !assigned[id] {
+			t.Fatalf("required integration-test agent %q was not configured", id)
+		}
+	}
+	result, err := manager.runDiscussion(ctx, DiscussionRequest{
+		BookID: "rawls-a-theory-of-justice",
+		BookTitle: "A Theory of Justice: Revised Edition",
+		Question: "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, respond to the preceding agents, and preserve the qualification that readers may follow their preferences.",
+		PageStart: 21, PageEnd: 21,
+		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
+		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
+	}, "")
+	if err != nil {
+		t.Fatalf("Qwen discussion failed: %v; contributions: %#v", err, result.Contributions)
+	}
+	if len(result.Contributions) != len(agentIDs) {
+		t.Fatalf("discussion returned %d turns, want %d: %#v", len(result.Contributions), len(agentIDs), result.Contributions)
+	}
+	for i, contribution := range result.Contributions {
+		if contribution.Status != "completed" || strings.TrimSpace(contribution.Content) == "" {
+			t.Errorf("agent %s did not return a usable contribution: status=%s error=%#v", contribution.AgentName, contribution.Status, contribution.Error)
+		}
+		t.Logf("round=%d agent=%s model=%s/%s status=%s warnings=%v\n%s",
+			contribution.Round, contribution.AgentName, contribution.ProviderID, contribution.Model,
+			contribution.Status, contribution.Warnings, contribution.Content)
+		if i > 0 && contribution.Status == "completed" {
+			prior := result.Contributions[:i]
+			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, i == len(agentIDs)-1)
+			if peerProblem != "" && len(contribution.Warnings) == 0 {
+				t.Errorf("agent %s has an unreported peer-attribution quality defect: %s", contribution.AgentName, peerProblem)
+			}
+		}
+	}
+	last := result.Contributions[len(result.Contributions)-1]
+	if last.AgentID != "discussion-chair" || last.Status != "completed" {
+		t.Fatalf("MIMI did not complete the final moderation turn: %#v", last)
+	}
+}
+
 func TestFinalChairMustNameActualPositions(t *testing.T) {
 	previous := []AgentContribution{
 		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "Reader's claim is supported. [source:page-1]"},
