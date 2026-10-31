@@ -1787,7 +1787,6 @@ func TestCompactDiscussionExcerptPreservesSourceMarkers(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeReasoningForModelNeverThinksDuringTranslation(t *testing.T) {
 	translation := GenerateRequest{Task: "translation", ReasoningEffort: "low", DisableThinking: true}
 	got := normalizeReasoningForModel(translation, true)
