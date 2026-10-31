@@ -1923,6 +1923,10 @@ func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinctio
 	if problem := discussionLogicalForceProblem(faithful, passages); problem != "" {
 		t.Fatalf("the source's own negated alternatives were incorrectly flagged: %s", problem)
 	}
+	rejectedReading := "Rawls explicitly rejects describing Chapters IV–VIII as peripheral or merely applications; reader preference concerns which questions to approach first, not their importance. [source:rawls-page-21]"
+	if problem := discussionLogicalForceProblem(rejectedReading, passages); problem != "" {
+		t.Fatalf("an explicit rejection of the downgrade was incorrectly flagged: %s", problem)
+	}
 	negated := "The passage does not call Chapters IV–VIII optional; it explicitly rejects a peripheral reading. [source:rawls-page-21]"
 	if problem := discussionLogicalForceProblem(negated, passages); problem != "" {
 		t.Fatalf("a correctly negated downgrade was rejected: %s", problem)
