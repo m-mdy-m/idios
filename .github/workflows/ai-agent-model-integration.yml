@@ -1,0 +1,49 @@
+name: IDIOS Local AI Agent Integration
+
+on:
+  push:
+    branches: ["main", "fix/**"]
+    paths:
+      - ".github/workflows/ai-agent-model-integration.yml"
+      - "internal/ai/**"
+      - "clients/web/src/features/shelf/**"
+      - "clients/web/scripts/check-study-actions.mjs"
+      - "pipeline.toml"
+      - "scripts/test-ai-agent-ollama.sh"
+      - "tests/fixtures/rawls-a-theory-of-justice-page-21.txt"
+      - "tests/examples/rawls-page-21-reading-session.md"
+  pull_request:
+    paths:
+      - ".github/workflows/ai-agent-model-integration.yml"
+      - "internal/ai/**"
+      - "clients/web/src/features/shelf/**"
+      - "clients/web/scripts/check-study-actions.mjs"
+      - "pipeline.toml"
+      - "scripts/test-ai-agent-ollama.sh"
+      - "tests/fixtures/rawls-a-theory-of-justice-page-21.txt"
+      - "tests/examples/rawls-page-21-reading-session.md"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Ollama model tag to download for the integration test"
+        required: false
+        default: "qwen2.5:3b"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idios-local-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-agent-integration:
+    name: Download Qwen and test the real sequential discussion
+    uses: m-mdy-m/pipeline/.github/workflows/ci.yml@main
+    with:
+      language: go
+      go-version: "1.25.0"
+      setup-node: false
+      pipeline-task: ai-agent-model-integration
+      pipeline-ref: main
