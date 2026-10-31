@@ -695,9 +695,16 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
         const noteActions = requestedActions.filter((action): action is Extract<RequestedBookAction, { type: 'note' }> => action.type === 'note');
         if (highlightActions.length) {
           if (onApplyBookHighlights) {
-            const outcome = await onApplyBookHighlights(highlightActions);
-            outcome.saved.forEach((summary) => resultLines.push(`Saved in the book: ${summary}`));
-            outcome.failed.forEach((item) => resultLines.push(`I couldn’t mark “${item.quote}”: ${item.reason}`));
+            try {
+              const outcome = await onApplyBookHighlights(highlightActions);
+              outcome.saved.forEach((summary) => resultLines.push(`Saved in the book: ${summary}`));
+              outcome.failed.forEach((item) => resultLines.push(`I couldn’t mark “${item.quote}”: ${item.reason}`));
+            } catch (cause) {
+              // A highlight persistence failure must not prevent a separately requested
+              // Shelf note from being attempted and saved below.
+              const reason = cause instanceof Error ? cause.message : 'annotation saving returned an error';
+              highlightActions.forEach((item) => resultLines.push(`I couldn’t mark “${item.quote}”: ${reason}`));
+            }
           } else {
             highlightActions.forEach((item) => resultLines.push(`I couldn’t save “${item.quote}” because the PDF reader isn’t connected to annotation saving in this view.`));
           }
