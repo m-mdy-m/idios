@@ -164,3 +164,23 @@
   .shelf-agent-room__composer-options select { min-width:58px; }
   .shelf-agent-room__source-hint { width:100%; margin-left:0; }
 }
+/* A run-level check separates execution/validation signals from semantic truth. */
+.shelf-agent-room__run-check { flex:none; padding:8px 9px; border:1px solid var(--room-line); border-radius:8px; background:color-mix(in srgb,var(--room-text) 2%,var(--room-surface)); color:var(--room-text); }
+.shelf-agent-room__run-check.is-running { border-color:color-mix(in srgb,var(--room-accent) 38%,var(--room-line)); }
+.shelf-agent-room__run-check.is-passed { border-color:color-mix(in srgb,#398e72 40%,var(--room-line)); }
+.shelf-agent-room__run-check.is-review { border-color:color-mix(in srgb,#b98324 48%,var(--room-line)); }
+.shelf-agent-room__run-check.is-problem { border-color:color-mix(in srgb,#c34242 48%,var(--room-line)); }
+.shelf-agent-room__run-check-head { display:flex; min-width:0; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 9px; }
+.shelf-agent-room__run-check-head strong { font-size:10px; font-weight:750; }
+.shelf-agent-room__run-check-head span { color:var(--room-muted); font-size:9px; font-weight:650; }
+.shelf-agent-room__run-check p { margin:5px 0 0; color:var(--room-muted); font-size:9px; line-height:1.5; }
+.shelf-agent-room__run-check details { margin-top:5px; color:var(--room-muted); font-size:9px; }
+.shelf-agent-room__run-check summary { width:max-content; max-width:100%; cursor:pointer; }
+.shelf-agent-room__run-check ul { display:grid; gap:3px; margin:5px 0 0; padding-left:17px; }
+.shelf-agent-room__run-check li { overflow-wrap:anywhere; line-height:1.45; }
+.shelf-agent-room__message-head .is-runtime-checked { color:color-mix(in srgb,#398e72 78%,var(--room-text)); }
+.shelf-agent-room__message-head .is-review-needed { color:#b98324; }
+.shelf-agent-room__guided-prompt { display:inline-flex; min-height:24px; align-items:center; margin-top:5px; padding:3px 7px; border:1px solid var(--room-line); border-radius:6px; background:transparent; color:var(--room-accent); font-size:9px; cursor:pointer; }
+.shelf-agent-room__guided-prompt:hover:not(:disabled) { background:color-mix(in srgb,var(--room-accent) 7%,var(--room-surface)); }
+.shelf-agent-room__guided-prompt:disabled { opacity:.45; cursor:not-allowed; }
+.shelf-agent-room__process-hint { margin-top:5px; color:var(--room-muted); font-size:9px; line-height:1.45; }
