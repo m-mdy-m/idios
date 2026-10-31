@@ -2136,8 +2136,9 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 							// A poor repair must not destroy an otherwise complete, grounded answer.
 							contributionWarnings = append(contributionWarnings, "The correction attempt introduced a hard validation error; the original complete response was retained.")
 						}
-					} else if originalHardProblem == "" {
-						// A repair timeout is a quality warning, not a reason to discard a usable turn.
+					} else if originalHardProblem == "" && originalRequiredCitationProblem == "" {
+						// A repair timeout is a quality warning only when the original turn
+						// already meets every role-mandated citation requirement.
 						contributionWarnings = append(contributionWarnings, "The correction attempt did not finish ("+safeMessage(repairErr)+"); the original complete response was retained for peer review.")
 					} else {
 						repairFailure = repairReason + "; correction attempt failed: " + safeMessage(repairErr)
