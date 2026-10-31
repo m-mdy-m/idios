@@ -1940,7 +1940,7 @@ func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinctio
 func TestDiscussionLogicalForceRepairInstructionExplainsTheExactDistinction(t *testing.T) {
 	reason := "logical-force contradiction: the source rejects a peripheral reading while separately granting reader preference"
 	instruction := discussionRepairInstruction(reason, map[string]bool{"rawls-page-21": true}, false, false)
-	for _, required := range []string{"distinguish the importance of material", "reader's freedom to choose a reading path", "Do not call the material optional"} {
+	for _, required := range []string{"distinguish the importance of material", "reader's freedom to choose a reading path", "Do not call the material optional", "Rawls explicitly rejects calling Chapters IV–VIII peripheral or merely applications"} {
 		if !strings.Contains(instruction, required) {
 			t.Errorf("logical-force repair instruction is missing %q: %s", required, instruction)
 		}
@@ -1963,6 +1963,33 @@ func TestReaderClaimsRequireAnExactSuppliedSourceMarker(t *testing.T) {
 		t.Fatalf("a transparent evidence limitation should not require a citation: %s", problem)
 	}
 }
+func TestEvidenceAuditorAndFinalChairRequireExactSuppliedSourceMarker(t *testing.T) {
+	passages := []ContextPassage{{ID: "rawls-page-21", Page: 21, Text: "The author rejects calling Chapters IV–VIII peripheral or merely applications."}}
+	allowed := map[string]bool{"rawls-page-21": true}
+	uncited := "A focused audit distinguishes the author's claim from the reader's choice of reading order."
+	for _, tc := range []struct {
+		name      string
+		agentID   string
+		finalTurn bool
+	}{
+		{name: "Evidence Auditor opening", agentID: "evidence-auditor"},
+		{name: "MIMI final adjudication", agentID: "discussion-chair", finalTurn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if problem := validateDiscussionContribution(uncited, allowed, passages, nil, tc.agentID, tc.finalTurn); problem != missingCitationProblem {
+				t.Fatalf("uncited %s = %q, want missing-citation repair", tc.name, problem)
+			}
+			grounded := uncited + " [source:rawls-page-21]"
+			if problem := validateDiscussionContribution(grounded, allowed, passages, nil, tc.agentID, tc.finalTurn); problem != "" {
+				t.Fatalf("correctly cited %s was rejected: %s", tc.name, problem)
+			}
+		})
+	}
+	if problem := discussionRequiredCitationProblem(uncited, passages, "discussion-chair", false); problem != "" {
+		t.Fatalf("a non-final Chair turn should not be forced to adjudicate the page: %s", problem)
+	}
+}
+
 func TestDiscussionOpeningIndependenceBoundary(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1996,7 +2023,7 @@ func TestRawlsDiscussionRolesPreserveNegationAndAuditEvidence(t *testing.T) {
 		want []string
 	}{
 		{role: "Steelman", text: steelman, want: []string{"do not infer that the material is optional", "Preserve explicit negations"}},
-		{role: "Evidence Auditor", text: auditor, want: []string{"On an opening turn with no peer positions", "against the supplied passage"}},
+		{role: "Evidence Auditor", text: auditor, want: []string{"On an opening turn with no peer positions", "against the supplied passage", "reader's freedom to follow preferences concerns which problems to approach first, not the chapters' importance."}},
 		{role: "MIMI Chair", text: chair, want: []string{"decisive source sentences", "reading discretion is not evidence", "optional, peripheral, or unimportant"}},
 	} {
 		for _, phrase := range required.want {
