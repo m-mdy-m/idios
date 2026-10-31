@@ -28,7 +28,8 @@ import {
   quoteWords, rememberReadPage, runShelfAIThroughRuntime, settingsKey, threadKey,
   userFacingAIError, validatedCompanionMarks,
 } from '../model/study-storage';
-import { fitShelfRuntimeMessages, makeStudyContext } from '../model/study-context';
+import { makeStudyContext } from '../model/study-context';
+import { fitShelfRuntimeMessages } from '../model/study-request-budget';
 import { renderAnswer } from '../model/study-answer';
 
 const promptModes: PromptMode[] = [
