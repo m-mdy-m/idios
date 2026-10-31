@@ -1904,6 +1904,29 @@ func TestDiscussionOpeningPromptUsesRoleSpecificDeliverableWithoutForcingAnInter
 	}
 }
 
+func TestDiscussionOpeningIndependenceBoundary(t *testing.T) {
+	tests := []struct {
+		name            string
+		round           int
+		hasPriorDebate  bool
+		finalTurn       bool
+		wantIndependent bool
+	}{
+		{name: "fresh first-round specialist", round: 1, wantIndependent: true},
+		{name: "final Chair sees opening positions", round: 1, finalTurn: true},
+		{name: "resumed discussion sees prior history", round: 1, hasPriorDebate: true},
+		{name: "later-round specialist sees debate history", round: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := discussionIsIndependentOpening(test.round, test.hasPriorDebate, test.finalTurn)
+			if got != test.wantIndependent {
+				t.Fatalf("discussionIsIndependentOpening(%d, %t, %t) = %t, want %t", test.round, test.hasPriorDebate, test.finalTurn, got, test.wantIndependent)
+			}
+		})
+	}
+}
+
 func TestDiscussionRoleFocusIsDistinctAndInjected(t *testing.T) {
 	readerFocus := discussionRoleFocus("reader")
 	tutorFocus := discussionRoleFocus("tutor")
@@ -2153,7 +2176,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	result, err := manager.runDiscussion(ctx, DiscussionRequest{
 		BookID:    "rawls-a-theory-of-justice",
 		BookTitle: "A Theory of Justice: Revised Edition",
-		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, respond to the preceding agents, and preserve the qualification that readers may follow their preferences.",
+		Question:  "Assess why the author says Chapters IV–VIII are not peripheral. Distinguish the page's stated claim from interpretation, and preserve the qualification that readers may follow their preferences. Each specialist should provide an independent role-specific opening analysis; MIMI should evaluate the completed positions.",
 		PageStart: 21, PageEnd: 21,
 		AgentIDs: agentIDs, Parallel: false, Rounds: 1, SkipSynthesis: true,
 		Context: []ContextPassage{{ID: "rawls-page-21", BookID: "rawls-a-theory-of-justice", Page: 21, Text: string(page)}},
@@ -2171,7 +2194,11 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		t.Logf("round=%d agent=%s model=%s/%s status=%s warnings=%v\n%s",
 			contribution.Round, contribution.AgentName, contribution.ProviderID, contribution.Model,
 			contribution.Status, contribution.Warnings, contribution.Content)
-		if i > 0 && contribution.Status == "completed" {
+		// The fresh first-round specialist pass is deliberately independent; only
+		// MIMI receives those positions in a one-round discussion. Later rounds and
+		// resumed sessions are peer-facing, so keep the name/position check there.
+		needsPeerReview := !discussionIsIndependentOpening(contribution.Round, false, i == len(agentIDs)-1)
+		if needsPeerReview && contribution.Status == "completed" {
 			prior := result.Contributions[:i]
 			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, i == len(agentIDs)-1)
 			if peerProblem != "" {
