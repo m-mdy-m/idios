@@ -18,13 +18,13 @@ Send MIMI this request:
 
 Expected application behavior:
 
-- MIMI returns one exact highlight action anchored to the selected page text.
+- The Shelf action pipeline creates one exact highlight action from the reader-selected phrase. If the model proposes an approximate quote, the selected text replaces it.
 - MIMI returns one separate note action with a useful title and a short explanation.
 - The reader executes the highlight through the PDF annotation persistence path.
 - The reader executes the note through the Shelf notes API.
 - The UI reports each saved result independently. A model response alone is never shown as a successful save.
 
-Illustrative action envelope (the model must still quote the actual selected page text):
+Illustrative normalized action envelope after the Shelf client combines MIMI’s note proposal with the reader’s authoritative selection:
 
 ```json
 {
@@ -59,7 +59,7 @@ Use this discussion prompt:
 
 > Why does Rawls insist that Chapters IV–VIII are not peripheral or merely applications? Explain how the test of a theory relates to considered judgments, and preserve the qualification that readers may follow the problems that most concern them. Each agent should assess a real earlier contribution; MIMI should compare the actual positions rather than count agreement.
 
-The source passage is supplied as `[source:rawls-page-21]`. The integration test uses the complete fixture and checks that all four sequential turns finish. It also logs model names, warnings, and each contribution for CI review.
+The source passage is supplied as `[source:rawls-page-21]`. The integration test uses the complete fixture, downloads Qwen through Ollama, checks that all four sequential discussion turns finish, then asks the same local model to generate MIMI’s standalone note as JSON. It validates the note title/content and verifies the selected phrase is an exact, unique page-21 anchor. CI logs model names, warnings, every contribution, and the note output.
 
 ## 3. Run locally
 
