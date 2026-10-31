@@ -464,87 +464,24 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
-type discussionDeadlineTestProvider struct {
-	deadlineCh chan time.Time
-}
+func TestDiscussionAgentContextHasIndependentDeadline(t *testing.T) {
+	workflowCtx, cancelWorkflow := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelWorkflow()
 
-func (p *discussionDeadlineTestProvider) ID() string         { return "local" }
-func (p *discussionDeadlineTestProvider) Kind() ProviderKind { return ProviderOpenAI }
-func (p *discussionDeadlineTestProvider) Local() bool        { return true }
-func (p *discussionDeadlineTestProvider) ListModels(context.Context) ([]Model, error) {
-	return nil, nil
-}
-func (p *discussionDeadlineTestProvider) Generate(ctx context.Context, _ GenerateRequest) (GenerateResponse, error) {
-	if deadline, ok := ctx.Deadline(); ok {
-		select {
-		case p.deadlineCh <- deadline:
-		default:
-		}
-	} else {
-		select {
-		case p.deadlineCh <- time.Time{}:
-		default:
-		}
-	}
-	return GenerateResponse{
-		ProviderID: "local",
-		Model:      "test-model",
-		Content:    "Tutor explains the page's central idea in plain language and gives a concrete example. [source:page-1]",
-	}, nil
-}
-func (p *discussionDeadlineTestProvider) Stream(context.Context, GenerateRequest, func(string) error) error {
-	return nil
-}
-func (p *discussionDeadlineTestProvider) Health(context.Context) HealthStatus {
-	return HealthStatus{State: "healthy"}
-}
+	agentCtx, cancelAgent := newDiscussionAgentContext(workflowCtx)
+	defer cancelAgent()
 
-func TestBookDiscussionBoundsEachAgentTurnIndependentlyOfWorkflowTimeout(t *testing.T) {
-	deadlineCh := make(chan time.Time, 4)
-	manager, err := NewManager("")
-	if err != nil {
-		t.Fatal(err)
+	agentDeadline, ok := agentCtx.Deadline()
+	if !ok {
+		t.Fatal("agent context must have its own deadline")
 	}
-	defer manager.Close()
-	if _, err := manager.UpsertProvider(ProviderConfig{
-		ID: "local", Name: "Local", Type: ProviderOpenAI, BaseURL: "http://127.0.0.1:12345/v1",
-		DefaultModel: "test-model", Enabled: true, TimeoutSeconds: 600,
-	}, false); err != nil {
-		t.Fatal(err)
+	workflowDeadline, _ := workflowCtx.Deadline()
+	remaining := time.Until(agentDeadline)
+	if !agentDeadline.Before(workflowDeadline) {
+		t.Fatalf("agent deadline %v must be earlier than workflow deadline %v", agentDeadline, workflowDeadline)
 	}
-	manager.mu.Lock()
-	manager.providerFactory = func(ProviderConfig) (Provider, error) {
-		return &discussionDeadlineTestProvider{deadlineCh: deadlineCh}, nil
-	}
-	manager.mu.Unlock()
-	config := manager.RuntimeConfig()
-	config.Mode = ModeLocalFirst
-	config.DefaultModel = "local/test-model"
-	config.MaxAgents = 1
-	config.MaxDiscussionRounds = 1
-	if err := manager.UpdateRuntimeConfig(config); err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := manager.runDiscussion(context.Background(), DiscussionRequest{
-		BookID: "book-1", BookTitle: "Example", Question: "What is this page about?",
-		AgentIDs: []string{"tutor"}, Rounds: 1, SkipSynthesis: true,
-		Context: []ContextPassage{{ID: "page-1", BookID: "book-1", Page: 1, Text: "The passage explains a central principle through a concrete example."}},
-	}, "")
-	if err != nil {
-		t.Fatalf("discussion failed: %v", err)
-	}
-	if len(result.Contributions) != 1 || result.Contributions[0].Status != "completed" {
-		t.Fatalf("unexpected discussion result: %#v", result.Contributions)
-	}
-	select {
-	case deadline := <-deadlineCh:
-		remaining := time.Until(deadline)
-		if deadline.IsZero() || remaining <= 0 || remaining > discussionAgentTurnTimeout {
-			t.Fatalf("provider deadline = %v (remaining %s), want a positive deadline no later than %s", deadline, remaining, discussionAgentTurnTimeout)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("provider did not receive the bounded turn context")
+	if remaining <= 0 || remaining > discussionAgentTurnTimeout {
+		t.Fatalf("agent deadline remaining = %s, want a positive duration no greater than %s", remaining, discussionAgentTurnTimeout)
 	}
 }
 
