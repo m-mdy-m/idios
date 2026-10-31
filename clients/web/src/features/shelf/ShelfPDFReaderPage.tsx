@@ -512,8 +512,10 @@ export function ShelfPDFReaderPage() {
         'Target language: ' + targetLanguageName,
         scope,
         'Use the subject and local terminology of this book to choose accurate equivalents. Keep the author’s tone and register.',
-        'Return only the complete translation text. Do not return JSON, headings, explanations, source text, vocabulary lists, grammar notes or IELTS notes.',
-        'Before responding, check that every sentence and clause is translated and that nothing has been added or removed.',
+        'Return ONLY valid JSON with this exact shape: {"translation":"complete target-language passage","segments":[{"source":"one exact source sentence or clause","translation":"its complete target-language translation"}],"terms":[],"grammar":[],"ielts":[],"translatorNote":""}.',
+        'Split segments at sentence boundaries (or at a complete clause only when a sentence is unusually long). Copy each source segment exactly, in source order, and translate it fully. The UI displays only the translation field; the source field exists solely to synchronize hover highlights with the PDF.',
+        'The translation field must contain only the complete target-language text. Do not put source-language text, introductions, headings, explanations, vocabulary lessons or IELTS notes in it.',
+        'Before responding, compare every segment against the source. Preserve all propositions, clauses, paragraph breaks, sentence order, negation, quantifiers, conditions, comparisons, actors, tense and uncertainty. Never summarize, invent, repeat or omit content.',
       ].join('\n\n');
     } else if (request.kind === 'word') {
       systemPrompt = [
@@ -545,7 +547,7 @@ export function ShelfPDFReaderPage() {
       task: 'translation',
       reasoning_effort: 'low',
       timeout_seconds: Math.min(600, Math.max(45, request.timeoutSeconds ?? selectedOption.timeoutSeconds)),
-      max_tokens: directTranslation ? 1800 : learningAnalysis ? 1100 : 700,
+      max_tokens: directTranslation ? 2400 : learningAnalysis ? 1100 : 700,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'BOOK CONTEXT\n' + (bookContext || 'No additional book context.') + '\n\nEXACT SOURCE\n' + request.text },
