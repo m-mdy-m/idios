@@ -1177,13 +1177,7 @@ func (m *Manager) generateWith(parent context.Context, cfg ProviderConfig, req G
 	if err := m.checkProviderExecutionPolicy(cfg, req); err != nil {
 		return GenerateResponse{}, err
 	}
-	m.mu.RLock()
-	providerFactory := m.providerFactory
-	m.mu.RUnlock()
-	if providerFactory == nil {
-		providerFactory = newProvider
-	}
-	provider, err := providerFactory(cfg)
+	provider, err := newProvider(cfg)
 	if err != nil {
 		return GenerateResponse{}, err
 	}
@@ -1766,6 +1760,10 @@ func discussionRoleFocus(agentID string) string {
 	}
 }
 
+func newDiscussionAgentContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, discussionAgentTurnTimeout)
+}
+
 func discussionAgentPriority(id string) int {
 	priority := map[string]int{
 		// Reuse the common 3B model for the opening analysis and first critique.
@@ -1870,7 +1868,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 			// The provider's configured timeout may be as long as ten minutes. Bound
 			// one discussion turn (including its single repair attempt) separately so
 			// a stalled model cannot leave every later agent waiting indefinitely.
-			agentCtx, cancelAgent := context.WithTimeout(ctx, discussionAgentTurnTimeout)
+			agentCtx, cancelAgent := newDiscussionAgentContext(ctx)
 			defer cancelAgent()
 			contribution := AgentContribution{Round: round, AgentID: agent.ID, AgentName: agent.Name, Status: "running"}
 			runtimeConfig := m.RuntimeConfig()
