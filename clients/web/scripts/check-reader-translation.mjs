@@ -2,6 +2,18 @@ import assert from 'node:assert/strict';
 import { extractPartialReaderTranslation, extractReaderPDFText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
+const rawlsTitlePage = [
+  'A THEORY OF JUSTICE',
+  'Revised Edition',
+  'JOHN RAWLS',
+  'the belknap press of',
+  'harvard university press',
+  'cambridge, massachusetts',
+].join('\n');
+const titlePageChunks = splitReaderTranslationText(rawlsTitlePage, 1800);
+assert.equal(titlePageChunks.length, 1, 'a short title page must use one lightweight translation request');
+assert.equal(titlePageChunks[0].replace(/\s+/g, ' '), rawlsTitlePage.replace(/\s+/g, ' '), 'the title page must retain its title, author, publisher and location');
+
 
 const rawPDFItems = [
   { str: 'The section headings, the remarks that preface each chapter, and the', hasEOL: true },
