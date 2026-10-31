@@ -1,33 +1,39 @@
 import type { RequestedBookAction, RequestedBookHighlight } from './study-types';
 
+export function isExplicitQuoteRequest(prompt: string): boolean {
+  const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
+  return /^\s*(?:please\s+)?(?:quote|extract|capture)\s+(?:(?:a|an|the|short|useful|key|memorable|important)\s+)*(?:quote|passage|sentence|line|phrase|this|that|it|from)\b/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:quote|extract|capture)\b/i.test(text)
+    || /\b(?:save|add|keep|store)\b.{0,60}\bquote\b/i.test(text)
+    || /(?:نقل\s*قول|نقل‌قول).{0,70}(?:استخراج|ذخیره|ثبت|اضافه|بذار|بزار|کن|بنویس)/u.test(text)
+    || /(?:استخراج|ذخیره|ثبت|اضافه).{0,70}(?:نقل\s*قول|نقل‌قول)/u.test(text);
+}
+
 export function isBookMutationRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
-  const explicitHighlight = /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+\S/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+(?:it|them|these|those)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,22}[“"' \x60]/i.test(text)
+  const explicitHighlight = /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\s+(?:it|them|these|those)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,22}[“"' \x60]/i.test(text)
     || /\b(?:add|create|save|make|put|leave|write)\b.{0,70}\b(?:highlight|highlights|annotation|annotations|marked passage)\b/i.test(text);
   const explicitNoteAction = isExplicitBookNoteRequest(prompt);
+  const explicitQuoteAction = isExplicitQuoteRequest(prompt);
   const farsiIntent = /(?:هایلایت|علامت\s*(?:گذاری)?).{0,70}(?:کن|بزن|بنویس|بذار|بزار|ثبت|اضافه|روی|برا)/u.test(text)
     || /(?:یادداشت|نوت).{0,70}(?:بنویس|بذار|بزار|ثبت|اضافه|کن|روی|برا)/u.test(text)
-    || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت|هایلایت)/u.test(text)
-    || /(?:نقل\s*قول|نقل‌قول|استخراج).{0,70}(?:کن|بذار|بزار|ثبت|اضافه|روی|برا)/u.test(text);
+    || /(?:بنویس|بذار|بزار|ثبت کن|اضافه کن).{0,70}(?:نوت|یادداشت|هایلایت)/u.test(text);
   const beginsAsQuestion = /^\s*(?:what does|what is|what's|explain|tell me about|why does|why is|what do you mean by|معنی|توضیح بده)/i.test(text);
-  // Mentioning an existing note/highlight while asking what it means is not permission to edit the book.
-  if (beginsAsQuestion && !explicitHighlight && !explicitNoteAction && !farsiIntent) return false;
-  return explicitHighlight || explicitNoteAction || farsiIntent || isBroadPageAnnotationRequest(prompt);
+  if (beginsAsQuestion && !explicitHighlight && !explicitNoteAction && !farsiIntent && !explicitQuoteAction) return false;
+  return explicitHighlight || explicitNoteAction || explicitQuoteAction || farsiIntent || isBroadPageAnnotationRequest(prompt);
 }
 export function isExplicitHighlightRequest(prompt: string): boolean {
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
-  return /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+\S/i.test(text)
-    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
-    || /\b(?:highlight|mark|annotate|underline|flag|quote|extract|capture)\s+(?:it|them|these|those)\b/i.test(text)
-    || /(?:هایلایت|علامت\s*(?:گذاری)?).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text)
-    || /(?:نقل\s*قول|نقل‌قول|استخراج).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text);
+  return /^\s*(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\s+\S/i.test(text)
+    || /\b(?:please|can you|could you|would you|i want you to|i'd like you to)\s+(?:please\s+)?(?:highlight|mark|annotate|underline|flag)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\b.{0,70}\b(?:this|that|these|those|the|important|key|main|phrase|word|text|passage|sentence|idea|concept|term|line|part|page|above|selected)\b/i.test(text)
+    || /\b(?:highlight|mark|annotate|underline|flag)\s+(?:it|them|these|those)\b/i.test(text)
+    || /(?:هایلایت|علامت\s*(?:گذاری)?).{0,50}(?:کن|بزن|ثبت|اضافه)/u.test(text);
 }
-
 export function isExplicitBookNoteRequest(prompt: string): boolean {
   // A leading assistant/persona address is still an explicit reader instruction.
   const text = prompt.normalize('NFKC').toLocaleLowerCase().replace(/^\s*mimi\s*[:,—-]\s*/u, '');
@@ -60,7 +66,19 @@ export function normalizeRequestedActions(value: unknown, page: number): Request
     const itemPage = Number.isFinite(Number(item.page)) ? Number(item.page) : page;
     const colorValue = String(item.color ?? 'purple').toLowerCase();
     const color = (['yellow', 'green', 'blue', 'pink', 'purple'].includes(colorValue) ? colorValue : 'purple') as RequestedBookHighlight['color'];
-    if ((type.includes('highlight') || type.includes('mark') || type.includes('annotat') || type === 'quote' || type === 'quotation' || type === 'extract_quote' || (type === 'note' && quote)) && quote) {
+    if (type === 'quote' || type === 'quotation' || type === 'extract_quote') {
+      const text = String(item.text ?? item.quote ?? item.content ?? '').trim().replace(/^[“”"'\x60]+|[“”"'\x60]+$/g, '');
+      if (text) actions.push({
+        type: 'quote',
+        text,
+        author: String(item.author ?? '').trim() || undefined,
+        source: String(item.source ?? '').trim() || undefined,
+        source_url: String(item.source_url ?? item.sourceUrl ?? '').trim() || undefined,
+        category: String(item.category ?? 'Reading').trim() || 'Reading',
+      });
+      continue;
+    }
+    if ((type.includes('highlight') || type.includes('mark') || type.includes('annotat') || (type === 'note' && quote)) && quote) {
       actions.push({ type: 'highlight', quote, note, page: itemPage, color });
       continue;
     }
@@ -71,7 +89,11 @@ export function normalizeRequestedActions(value: unknown, page: number): Request
   }
   const seen = new Set<string>();
   return actions.filter((action) => {
-    const key = action.type === 'highlight' ? `h:${action.page}:${action.quote.toLocaleLowerCase()}` : `n:${action.title}:${action.content}`;
+    const key = action.type === 'highlight'
+      ? `h:${action.page}:${action.quote.toLocaleLowerCase()}`
+      : action.type === 'note'
+        ? `n:${action.title}:${action.content}`
+        : `q:${action.text.toLocaleLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -98,17 +120,25 @@ export function parseBookActionResponse(raw: string, page: number): { visible: s
   // Recover those only in the client; never show them as if they were a normal answer.
   const lines = source.split(/\r?\n/);
   const markLines: Array<{ index: number; value: string }> = [];
+  const quoteLines: Array<{ index: number; value: string }> = [];
   const noteLines: Array<{ index: number; value: string }> = [];
   lines.forEach((line, index) => {
-    const mark = line.match(/^\s*(?:[-*•]\s*)?(?:HIGHLIGHT(?:\s+(?:QUOTE|TEXT))?|MARK|QUOTE)\s*[:=—-]\s*(.+?)\s*$/i);
+    const mark = line.match(/^\s*(?:[-*•]\s*)?(?:HIGHLIGHT(?:\s+(?:QUOTE|TEXT))?|MARK)\s*[:=—-]\s*(.+?)\s*$/i);
+    const quoteLine = line.match(/^\s*(?:[-*•]\s*)?QUOTE\s*[:=—-]\s*(.+?)\s*$/i);
     const note = line.match(/^\s*(?:[-*•]\s*)?(?:MARGIN\s+)?NOTE(?:\s+\d+)?\s*[:=—-]\s*(.+?)\s*$/i);
     if (mark) {
       const value = mark[1].trim();
       const quoted = value.match(/[“"]([^”"]+)[”"]/);
-      markLines.push({ index, value: (quoted?.[1] || value).replace(/^[“”"'`]+|[“”"'`]+$/g, '').trim() });
+      markLines.push({ index, value: (quoted?.[1] || value).replace(/^[“”"'\x60]+|[“”"'\x60]+$/g, '').trim() });
     }
-    if (note) noteLines.push({ index, value: note[1].replace(/^[“”"'`]+|[“”"'`]+$/g, '').trim() });
+    if (quoteLine) quoteLines.push({ index, value: quoteLine[1].replace(/^[“”"'\x60]+|[“”"'\x60]+$/g, '').trim() });
+    if (note) noteLines.push({ index, value: note[1].replace(/^[“”"'\x60]+|[“”"'\x60]+$/g, '').trim() });
   });
+  if (quoteLines.length) {
+    quoteLines.slice(0, 3).forEach((item) => {
+      if (item.value) actions.push({ type: 'quote', text: item.value, category: 'Reading' });
+    });
+  }
   if (markLines.length) {
     markLines.slice(0, 3).forEach((mark, index) => {
       if (mark.value) actions.push({ type: 'highlight', quote: mark.value, note: noteLines[index]?.value || noteLines[0]?.value || '', page, color: 'purple' });
@@ -117,7 +147,7 @@ export function parseBookActionResponse(raw: string, page: number): { visible: s
     const content = noteLines.map((item) => item.value).filter(Boolean).join('\n');
     if (content) actions.push({ type: 'note', title: `Reading note · page ${page}`, content, labels: ['reading-companion'] });
   }
-  const removeIndexes = new Set([...markLines.map((item) => item.index), ...noteLines.map((item) => item.index)]);
+  const removeIndexes = new Set([...markLines.map((item) => item.index), ...quoteLines.map((item) => item.index), ...noteLines.map((item) => item.index)]);
   const visible = lines.filter((_, index) => !removeIndexes.has(index)).join('\n')
     .replace(/```(?:json)?\s*[\s\S]*?```/gi, (fence) => /idios_book_actions|"actions"|HIGHLIGHT\s*:/i.test(fence) ? '' : fence)
     .replace(/^\s*(?:BOOK\s+)?ACTIONS?\s*:\s*.*$/gim, '')
