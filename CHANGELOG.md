@@ -11,8 +11,6 @@
 
 - Added mobile release targets and user-selectable E2E setup/test commands to the shared Pipeline release contract; native clients require an HTTPS IDIOS endpoint and do not weaken the loopback-only backend default.
 
-## [Unreleased]
-
 ### Fixed
 
 - Bound each sequential Shelf discussion agent turn, including its single correction attempt, to 120 seconds so an unresponsive model cannot keep the remaining agents waiting indefinitely.
