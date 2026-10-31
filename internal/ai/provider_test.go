@@ -51,7 +51,7 @@ func TestOllamaTranslationPayloadDisablesOnlyAdvertisedThinking(t *testing.T) {
 	capable := normalizeReasoningForModel(GenerateRequest{
 		Model: "qwen3:1.7b", Task: "translation", ReasoningEffort: "low",
 		Messages: []Message{{Role: "user", Content: "Translate this passage."}},
-	}, true)
+	}, true, true)
 	capablePayload := ollamaPayload(capable, false)
 	if got, ok := capablePayload["think"].(bool); !ok || got {
 		t.Fatalf("capable translation payload think = %#v, want false", capablePayload["think"])
@@ -60,7 +60,7 @@ func TestOllamaTranslationPayloadDisablesOnlyAdvertisedThinking(t *testing.T) {
 	ordinary := normalizeReasoningForModel(GenerateRequest{
 		Model: "qwen2.5:3b", Task: "translation", ReasoningEffort: "low",
 		Messages: []Message{{Role: "user", Content: "Translate this passage."}},
-	}, false)
+	}, false, true)
 	ordinaryPayload := ollamaPayload(ordinary, false)
 	if _, exists := ordinaryPayload["think"]; exists {
 		t.Fatalf("unsupported model translation payload must omit think, got %#v", ordinaryPayload["think"])
