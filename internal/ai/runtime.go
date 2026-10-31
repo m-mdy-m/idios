@@ -63,6 +63,8 @@ const (
 	maxPreviousDiscussionTurns      = 40
 	maxPreviousDiscussionTurnBytes  = 5000
 	maxPreviousDiscussionTotalBytes = 48000
+	// Keep one stalled discussion model from monopolizing the entire workflow timeout.
+	discussionAgentTurnTimeout = 120 * time.Second
 )
 
 var sourceMarker = regexp.MustCompile(`\[source:([^\]\s]+)\]`)
@@ -1859,6 +1861,11 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 		pauseForReader := false
 		currentRound := make([]AgentContribution, len(chosen))
 		runAgent := func(index int, agent AgentDefinition, finalTurn bool) {
+			// The provider's configured timeout may be as long as ten minutes. Bound
+			// one discussion turn (including its single repair attempt) separately so
+			// a stalled model cannot leave every later agent waiting indefinitely.
+			agentCtx, cancelAgent := context.WithTimeout(ctx, discussionAgentTurnTimeout)
+			defer cancelAgent()
 			contribution := AgentContribution{Round: round, AgentID: agent.ID, AgentName: agent.Name, Status: "running"}
 			runtimeConfig := m.RuntimeConfig()
 			fallbackModel := runtimeConfig.TaskModels["book_discussion"]
@@ -1908,7 +1915,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					disableThinking = true
 				}
 			}
-			response, err := m.Generate(ctx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: messages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+			response, err := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: messages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 			repairFailure := ""
 			var contributionWarnings []string
 			if err == nil {
@@ -1922,7 +1929,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 						Message{Role: "assistant", Content: response.Content},
 						Message{Role: "user", Content: discussionRepairInstruction(repairReason, allowedSources, finalTurn, hasPeer)},
 					)
-					repaired, repairErr := m.Generate(ctx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
+					repaired, repairErr := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 					if repairErr == nil {
 						repairProblem := validateDiscussionContribution(repaired.Content, allowedSources, req.Context, priorTurns, agent.ID, finalTurn)
 						if repairProblem == "" {
