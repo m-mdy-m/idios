@@ -182,3 +182,17 @@
 }
 .shelf-translation-panel__error button:hover { background:#47463e; }
 .shelf-translation-panel__error button:disabled { opacity:.5; cursor:wait; }
+
+
+.shelf-translation-panel__linked-segment {
+  border-radius: 3px;
+  transition: background-color .12s ease, color .12s ease;
+}
+.shelf-translation-panel__linked-segment.is-linked {
+  color: #fff;
+  background: rgb(93 145 232 / 28%);
+  box-shadow: 0 0 0 2px rgb(93 145 232 / 28%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelf-translation-panel__linked-segment { transition: none; }
+}
