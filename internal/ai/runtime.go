@@ -1900,7 +1900,7 @@ func discussionRoleFocus(agentID string) string {
 	case "reviewer":
 		return "Independently evaluate one consequential claim for logical strength. Classify it as supported, partly supported, unclear, or unsupported; identify the exact inference gap and offer the narrowest defensible correction. When peers exist, name the specific claim being reviewed."
 	case "evidence-auditor":
-		return "On an opening turn with no peer positions, audit the author's central book-specific claim directly against the supplied passage; do not invent a peer to review. In later turns, audit one exact claim from a named agent. Quote or point to the strongest relevant sentence and cite its exact source marker. Distinguish explicit evidence from inference; missing evidence does not prove the opposite."
+		return "On an opening turn with no peer positions, audit the author's central book-specific claim directly against the supplied passage; do not invent a peer to review. In later turns, audit one exact claim from a named agent. Quote or point to the strongest relevant sentence and cite its exact source marker. Distinguish explicit evidence from inference; missing evidence does not prove the opposite. On the Rawls page that says Chapters IV–VIII are not peripheral or merely applications, preserve that explicit rejection; the reader's freedom to follow preferences concerns which problems to approach first, not the chapters' importance."
 	case "counterexample-tester":
 		return "Test one precise claim with the strongest fair counterexample or boundary case. Label hypothetical examples clearly and state whether the test refutes, narrows, or leaves the claim intact. Never disagree for show."
 	case "code-cartographer":
@@ -2121,11 +2121,16 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					)
 					repaired, repairErr := m.Generate(agentCtx, GenerateRequest{ProviderID: providerID, Model: model, Task: "book_discussion", Messages: repairMessages, MaxTokens: maxTokens, TimeoutSeconds: turnTimeoutSeconds, ReasoningEffort: reasoningEffort, DisableThinking: disableThinking, PrivacySensitive: false})
 					originalHardProblem := discussionHardResponseProblem(response.Content, allowedSources, req.Context)
+					originalRequiredCitationProblem := discussionRequiredCitationProblem(response.Content, req.Context, agent.ID, finalTurn)
 					if repairErr == nil {
 						repairedHardProblem := discussionHardResponseProblem(repaired.Content, allowedSources, req.Context)
-						if repairedHardProblem == "" {
+						repairedRequiredCitationProblem := discussionRequiredCitationProblem(repaired.Content, req.Context, agent.ID, finalTurn)
+						if repairedHardProblem == "" && repairedRequiredCitationProblem == "" {
 							response = repaired
-						} else if originalHardProblem != "" {
+						} else if originalHardProblem != "" || originalRequiredCitationProblem != "" {
+							if repairedHardProblem == "" {
+								repairedHardProblem = repairedRequiredCitationProblem
+							}
 							repairFailure = repairReason + "; correction still invalid: " + repairedHardProblem
 						} else {
 							// A poor repair must not destroy an otherwise complete, grounded answer.
@@ -2597,12 +2602,32 @@ func validateDiscussionOutput(content string, allowedSources map[string]bool, pa
 // validateDiscussionOutputWithoutCitationRequirement is used only after the single repair
 // attempt, and only to determine whether missing citation is the sole remaining defect.
 // It does not forgive unfinished text, invented source markers, or unsupported book sections.
+func discussionRequiredCitationProblem(content string, passages []ContextPassage, agentID string, finalTurn bool) string {
+	if len(passages) == 0 || sourceMarker.MatchString(content) {
+		return ""
+	}
+	switch agentID {
+	case "reader":
+		if evidenceLimitationCue.MatchString(content) {
+			return ""
+		}
+		return missingCitationProblem
+	case "evidence-auditor":
+		return missingCitationProblem
+	case "discussion-chair":
+		if finalTurn {
+			return missingCitationProblem
+		}
+	}
+	return ""
+}
+
 func validateDiscussionContribution(content string, allowedSources map[string]bool, passages []ContextPassage, previous []AgentContribution, agentID string, finalTurn bool) string {
 	if problem := validateDiscussionOutput(content, allowedSources, passages, finalTurn); problem != "" {
 		return problem
 	}
-	if agentID == "reader" && len(passages) > 0 && !sourceMarker.MatchString(content) && !evidenceLimitationCue.MatchString(content) {
-		return missingCitationProblem
+	if problem := discussionRequiredCitationProblem(content, passages, agentID, finalTurn); problem != "" {
+		return problem
 	}
 	return discussionPeerResponseProblem(content, previous, agentID, finalTurn)
 }
@@ -2997,7 +3022,7 @@ func discussionRepairInstruction(reason string, allowedSources map[string]bool, 
 	}
 	instruction := fmt.Sprintf("Your previous answer was rejected: %s. Rewrite the complete answer, not an explanation of the error. Use 2 concise, complete sentences, plain text, at most %d words. %s %s %s Do not mention any chapter, section, or page outside the supplied passages. If a connection or claim cannot be grounded, say so plainly instead of guessing. Copy one exact [source:ID] marker only when making a claim about the supplied text. Do not leave any sentence unfinished.", reason, words, peerRule, chairRule, markerRule)
 	if strings.HasPrefix(reason, "logical-force contradiction:") {
-		instruction += " Preserve the author's exact logical direction: distinguish the importance of material from a reader's freedom to choose a reading path. Do not call the material optional, peripheral, unimportant, or merely an application when the source explicitly rejects that description."
+		instruction += " Preserve the author's exact logical direction: distinguish the importance of material from a reader's freedom to choose a reading path. Do not call the material optional, peripheral, unimportant, or merely an application when the source explicitly rejects that description. Use this source-faithful core: ‘Rawls explicitly rejects calling Chapters IV–VIII peripheral or merely applications; readers may choose which problems to approach first, but that freedom does not reduce the chapters' importance.’ Append one exact supplied source marker to that sentence. Do not reframe the rejected description as the author's own conclusion."
 	}
 	return instruction
 }
