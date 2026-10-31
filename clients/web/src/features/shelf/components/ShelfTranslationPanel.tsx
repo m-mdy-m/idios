@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   BookOpen, ChevronDown, GraduationCap, Languages, Lightbulb,
   LoaderCircle, Settings2, Sparkles, X,
@@ -25,6 +25,33 @@ const modes: Array<{ value: ShelfTranslationTab; label: string; description: str
   { value: 'grammar', label: 'Grammar', description: 'Grammar patterns from this page' },
   { value: 'ielts', label: 'IELTS', description: 'Academic language and useful expressions' },
 ];
+
+function renderMarkdownInline(value: string): ReactNode[] {
+  return value.split(/(\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|\x60[^\x60]+\x60)/g).filter(Boolean).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function TranslationMarkdown({ value }: { value: string }) {
+  const blocks = value.replace(/\\r/g, '').trim().split(/\\n\\s*\\n/).filter(Boolean);
+  return <div className="shelf-translation-panel__markdown">
+    {blocks.map((block, index) => {
+      const lines = block.split('\\n').map((line) => line.trim()).filter(Boolean);
+      const heading = lines[0]?.match(/^#{1,3}\\s+(.+)$/);
+      if (heading && lines.length === 1) return <h3 key={index}>{renderMarkdownInline(heading[1])}</h3>;
+      if (lines.length && lines.every((line) => /^[-*]\\s+/.test(line))) {
+        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^[-*]\\s+/, ''))}</li>)}</ul>;
+      }
+      if (lines.length && lines.every((line) => /^\\d+[.)]\\s+/.test(line))) {
+        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(line.replace(/^\\d+[.)]\\s+/, ''))}</li>)}</ol>;
+      }
+      return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderMarkdownInline(line)}</span>)}</p>;
+    })}
+  </div>;
+}
 
 function termMatches(term: ReaderTranslationTerm, word: string): boolean {
   const needle = normalizeTranslationMatch(word);
@@ -191,7 +218,7 @@ export function ShelfTranslationPanel({
               onMouseEnter={() => onSelectTerm(segment.source)}
               title={segment.source}
             >{segment.translation}{index < pageData.segments.length - 1 ? ' ' : ''}</span>;
-          })}</p> : <p>{pageData.translation}</p>}
+          })}</p>  : <TranslationMarkdown value={pageData.translation} />}
         </article> : !pageBusy && <div className="shelf-translation-panel__empty">
           <Languages size={21} />
           <strong>{translationModel ? 'No translation available' : 'Choose an AI model'}</strong>
