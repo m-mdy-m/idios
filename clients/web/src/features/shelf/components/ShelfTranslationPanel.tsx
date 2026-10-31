@@ -22,12 +22,19 @@ const modes: Array<{ value: ShelfTranslationTab; label: string; description: str
   { value: 'ielts', label: 'IELTS', description: 'Academic language and useful expressions' },
 ];
 
+function renderTextWithBidi(value: string, keyPrefix: string): ReactNode[] {
+  const parts = value.split(/([A-Za-z][A-Za-z0-9_’'–—-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_’'–—-]*)*)/g).filter(Boolean);
+  return parts.map((part, index) => /[A-Za-z]/.test(part)
+    ? <bdi key={keyPrefix + ':' + index} dir="ltr">{part}</bdi>
+    : <span key={keyPrefix + ':' + index}>{part}</span>);
+}
+
 function renderMarkdownInline(value: string): ReactNode[] {
   return value.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\x60[^\x60]+\x60)/g).filter(Boolean).map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
-    if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
-    return <span key={index}>{part}</span>;
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{renderTextWithBidi(part.slice(2, -2), 'strong-' + index)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{renderTextWithBidi(part.slice(1, -1), 'em-' + index)}</em>;
+    if (part.startsWith('\x60') && part.endsWith('\x60')) return <code key={index}><bdi dir="ltr">{part.slice(1, -1)}</bdi></code>;
+    return <span key={index}>{renderTextWithBidi(part, 'text-' + index)}</span>;
   });
 }
 
@@ -75,7 +82,7 @@ export function ShelfTranslationPanel({
   pageNumber, targetLanguage, onTargetLanguageChange, tab, onTabChange,
   pageData, selectionData, wordData, selectedText, hoveredWord,
   pageBusy, analysisBusy, selectionBusy, wordBusy, error,
-  onClose, onRetryTranslation, onTranslateSelection, onExplainWord, onSelectTerm, onAnalyzePage,
+  onClose, onRetryTranslation, onTranslateSelection, onExplainWord, onSelectTerm, onAnalyzePage, onStopTranslation,
   translationModel, modelOptions, modelsLoading, modelError, lastUsedModel, onModelChange,
   timeoutSeconds, onTimeoutChange, progress,
 }: {
@@ -100,6 +107,7 @@ export function ShelfTranslationPanel({
   onExplainWord: () => void;
   onSelectTerm: (term: string) => void;
   onAnalyzePage: (kind: 'grammar' | 'ielts') => void;
+  onStopTranslation: () => void;
   translationModel: string;
   modelOptions: Array<{ value: string; label: string; availability: 'available' | 'unknown'; local: boolean }>;
   modelsLoading: boolean;
@@ -145,7 +153,7 @@ export function ShelfTranslationPanel({
           : 'Preparing passage · ' + elapsedLabel + ' elapsed';
 
 
-  return <aside className="shelf-translation-panel" aria-label="Reading translation companion">
+  return <aside className="shelf-translation-panel" dir={targetLanguage === 'fa' || targetLanguage === 'ar' ? 'rtl' : 'ltr'} lang={targetLanguage} aria-label="Reading translation companion">
     <header className="shelf-translation-panel__header">
       <div className="shelf-translation-panel__brand">
         <span className="shelf-translation-panel__brand-icon"><Languages size={16} /></span>
@@ -224,6 +232,7 @@ export function ShelfTranslationPanel({
         {pageBusy && <div className="shelf-translation-panel__progress" role="status" aria-live="polite">
           <span className="shelf-translation-panel__progress-spinner"><LoaderCircle size={14} className="is-spinning" /></span>
           <div><strong>{progressTitle}</strong><small>{progressDetail}</small></div>
+          <button type="button" className="shelf-translation-panel__stop" onClick={onStopTranslation}>Stop</button>
           <div className="shelf-translation-panel__progress-track"><i style={{ width: progress.total ? String(Math.min(100, (progress.done / progress.total) * 100)) + '%' : '5%' }} /></div>
         </div>}
         {selectionData && selectedText.trim() && <article className="shelf-translation-panel__selection-result">

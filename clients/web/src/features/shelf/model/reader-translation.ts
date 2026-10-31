@@ -10,6 +10,7 @@ export type ReaderTranslationRequest = {
   targetLanguage: string;
   modelRef: string;
   timeoutSeconds?: number;
+  signal?: AbortSignal;
   kind: ReaderTranslationKind;
   documentContext: string;
   priorGlossary: Array<{ source: string; translation: string; meaning: string }>;
@@ -44,6 +45,11 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Lossless identity for exact extracted source text. */
+export function translationSourceIdentity(value: string): string {
+  return value.length + ':' + encodeURIComponent(value);
 }
 
 export function normalizeTranslationMatch(value: string): string {

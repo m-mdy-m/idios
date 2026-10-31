@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText } from '../src/features/shelf/model/reader-translation.ts';
+import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText, translationSourceIdentity } from '../src/features/shelf/model/reader-translation.ts';
+import { buildFaithfulTranslationInstructions, buildTranslationContext, validateRawTranslationAlignment, validateTranslationIntegrity, translationBenchmarkFixtures, translationBenchmarkRubric, translationJobs } from '../src/features/shelf/model/translation/index.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
 const readerPageSource = await readFile(new URL('../src/features/shelf/ShelfPDFReaderPage.tsx', import.meta.url), 'utf8');
@@ -222,4 +223,69 @@ assert.equal(merged.translation, 'ترجمه یک. ترجمه دو.');
 assert.equal(merged.segments.length, 2);
 assert.equal(merged.terms.length, 2, 'merged glossary entries should be deduplicated');
 
+
+const architectureContext = buildTranslationContext({
+  bookTitle: 'A Theory of Justice',
+  pageNumber: 21,
+  previousContext: 'The author distinguishes justice from utility.',
+  glossary: [{ source: 'primary goods', translation: 'خیرهای اولیه', meaning: 'وسایلی که برای تحقق طرح‌های زندگی لازم‌اند.' }],
+});
+assert.ok(architectureContext.includes('خیرهای اولیه'));
+assert.ok(architectureContext.includes('interpretation only'));
+assert.ok(buildFaithfulTranslationInstructions('fa').includes('negation'));
+assert.ok(buildFaithfulTranslationInstructions('fa').includes('paragraph boundary'));
+assert.equal(validateTranslationIntegrity(source, valid).valid, true);
+const rawValid = validateRawTranslationAlignment(JSON.stringify({ translation: valid.translation, segments: valid.segments }), source);
+assert.equal(rawValid.valid, true);
+assert.equal(rawValid.verified, true);
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A sentence that belongs to another page.', translation: 'x' }] }), source).reason, 'source-mismatch');
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'The result is not guaranteed.', translation: 'x' }, { source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-order');
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-coverage');
+assert.equal(validateRawTranslationAlignment('{"translation":"broken", "segments":[', source).reason, 'malformed-structured-response');
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [] }), source).reason, 'missing-segments');
+const plain = validateRawTranslationAlignment('یک ترجمهٔ متنی ساده', source);
+assert.equal(plain.valid, true);
+assert.equal(plain.verified, false);
+assert.notEqual(translationSourceIdentity('same page'), translationSourceIdentity('same page '));
+assert.notEqual(translationSourceIdentity('a:b'), translationSourceIdentity('a%3Ab'));
+assert.equal(translationSourceIdentity(source), translationSourceIdentity(source));
+const manager = translationJobs;
+const runningSignal = manager.start({ id: 'translation-check-job', bookID: 'book-check', pageNumber: 21, totalParts: 2 });
+assert.equal(runningSignal.aborted, false);
+manager.progress('translation-check-job', 1);
+assert.equal(manager.get('translation-check-job')?.completedParts, 1);
+manager.complete('translation-check-job');
+assert.equal(manager.get('translation-check-job')?.status, 'completed');
+const cancelSignal = manager.start({ id: 'translation-check-cancel', bookID: 'book-check', pageNumber: 22, totalParts: 2 });
+manager.cancel('translation-check-cancel');
+assert.equal(cancelSignal.aborted, true);
+manager.progress('translation-check-cancel', 2);
+manager.complete('translation-check-cancel');
+assert.equal(manager.get('translation-check-cancel')?.status, 'cancelled');
+assert.equal(manager.get('translation-check-cancel')?.completedParts, 0);
+for (let index = 0; index < 60; index += 1) {
+  const id = 'translation-history-' + index;
+  manager.start({ id, bookID: 'book-check', pageNumber: index + 1, totalParts: 1 });
+  manager.complete(id);
+}
+assert.ok(manager.list().length <= 40);
+assert.equal(translationBenchmarkFixtures.length, 3);
+assert.equal(translationBenchmarkRubric.length, 6);
+for (const fixture of translationBenchmarkFixtures) {
+  assert.equal(fixture.proposedPersianReference.split(/\n\s*\n/).length, fixture.source.split(/\n\s*\n/).length);
+  assert.equal(fixture.reviewStatus, 'maintainer-review-required');
+  for (const marker of fixture.requiredMeaningChecks) assert.ok(fixture.source.includes(marker));
+  for (const term of fixture.terminology) {
+    assert.ok(fixture.source.toLocaleLowerCase().includes(term.source.toLocaleLowerCase()));
+    assert.ok(fixture.proposedPersianReference.includes(term.preferred));
+  }
+}
+const readerSource = await readFile(new URL('../src/features/shelf/components/ShelfPDFReader.tsx', import.meta.url), 'utf8');
+const companionSource = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.tsx', import.meta.url), 'utf8');
+assert.ok(readerSource.includes('translationJobs.subscribe(setTranslationJobSnapshots)'));
+assert.ok(readerSource.includes("requestTranslation(currentPageText, 'page', signal, jobID)"));
+assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
+assert.ok(readerSource.includes('normalizeReaderSelectionText'));
+assert.ok(companionSource.includes('dir={targetLanguage'));
+assert.ok(companionSource.includes('onStopTranslation'));
 console.log('Reader translation checks passed.');
