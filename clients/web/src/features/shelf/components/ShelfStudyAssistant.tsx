@@ -653,11 +653,24 @@ export function ShelfStudyAssistant({ bookID, bookTitle, pageNumber, pageText, s
           needsNoteAction
             ? `Add one standalone note action only: write a concise, useful note grounded in the current page and book context, with a title and content. Do not return an empty note.`
             : '',
-        ].filter(Boolean).join('\\n');
+        ].filter(Boolean).join('\n');
         try {
           const repairMessages = fitShelfRuntimeMessages([
-            { role: 'system', content: `${coreReliabilitySkill.replace(/^---\\s*[\\s\\S]*?---\\s*/, '').trim()}\\n\\nYou are repairing only missing Shelf book actions. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions> containing only these missing action types:\\n${missingActionInstructions}\\nDo not duplicate or modify any action already present in the first response. This is an action plan for the app to execute, not a claim that anything has been saved. Use only the supplied PDF page and book context. If an exact highlight anchor cannot be identified, omit that highlight rather than inventing one.` },
-            { role: 'user', content: `Reader request: ${userPrompt}\\n\\nExisting actions already parsed (do not duplicate): ${JSON.stringify(requestedActions)}\\n\\nReading context:\\n${turnContext.slice(-12000)}\\n\\nAuthoritative current PDF page text:\\n${pageText.slice(0, 16000)}\\n\\nFirst answer (intent/context only):\\n${rawAnswer.slice(0, 2500)}` },
+            {
+              role: 'system',
+              content: coreReliabilitySkill.replace(/^---\s*[\s\S]*?---\s*/, '').trim()
+                + '\n\nYou are repairing only missing Shelf book actions. Return exactly <idios_book_actions>{"actions":[...]}</idios_book_actions> containing only these missing action types:\n'
+                + missingActionInstructions
+                + '\nDo not duplicate or modify any action already present in the first response. This is an action plan for the app to execute, not a claim that anything has been saved. Use only the supplied PDF page and book context. If an exact highlight anchor cannot be identified, omit that highlight rather than inventing one.',
+            },
+            {
+              role: 'user',
+              content: 'Reader request: ' + userPrompt
+                + '\n\nExisting actions already parsed (do not duplicate): ' + JSON.stringify(requestedActions)
+                + '\n\nReading context:\n' + turnContext.slice(-12000)
+                + '\n\nAuthoritative current PDF page text:\n' + pageText.slice(0, 16000)
+                + '\n\nFirst answer (intent/context only):\n' + rawAnswer.slice(0, 2500),
+            },
           ]);
           const repair = await runShelfAIThroughRuntime(targetModel, repairMessages, effectiveEffort);
           const repairText = getContent(repair.choices?.[0]?.message?.content).trim();

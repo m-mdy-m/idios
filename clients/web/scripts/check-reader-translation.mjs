@@ -71,8 +71,11 @@ const rawlsPage21Source = [
 ].join('\n');
 const fullPageItems = rawlsPage21Source.split('\n').map((str) => ({ str, hasEOL: true }));
 const extractedFullPage = extractReaderPDFText(fullPageItems);
-assert.equal(normalizeReaderSelectionText('  superflu-\\nous\\u00ad  argument  '), 'superfluous argument',
-  'AI-facing selections must join line-end hyphenation and remove soft hyphens');
+assert.equal(
+  normalizeReaderSelectionText('  superflu-' + String.fromCharCode(10) + 'ous' + String.fromCharCode(0x00ad) + '  argument  '),
+  'superfluous argument',
+  'AI-facing selections must join line-end hyphenation and remove soft hyphens',
+);
 const positionedItems = [
   { str: 'A careful', transform: [10, 0, 0, 10, 50, 700], width: 44, height: 10, hasEOL: false },
   { str: 'reader follows', transform: [10, 0, 0, 10, 98, 700], width: 72, height: 10, hasEOL: true },
@@ -83,7 +86,7 @@ const positionedItems = [
 ];
 assert.equal(
   extractReaderPDFText(positionedItems),
-  'A careful reader follows\\nthe argument, clearly.\\n\\nNext paragraph starts here.',
+  ['A careful reader follows', 'the argument, clearly.', '', 'Next paragraph starts here.'].join(String.fromCharCode(10)),
   'geometric extraction must reconstruct spaces, lines, punctuation and paragraph gaps',
 );
 for (const repaired of ['superfluous', 'digression', 'innumerable', 'necessary', 'forcefully']) {
