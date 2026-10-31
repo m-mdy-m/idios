@@ -475,7 +475,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
             <div className="shelf-agent-room__message-avatar">{(turn.agent_name || 'AI').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
             <div className="shelf-agent-room__message-body">
               <div className="shelf-agent-room__message-head"><strong>{turn.agent_name}</strong>{profile?.role && <small className="shelf-agent-room__role">{profile.role}</small>}{status && <small>{status}</small>}</div>
-              <p>{turn.status === 'running' ? 'Reading the page…' : turn.content ? visibleTurnText(turn.content) || turn.content : turn.error?.message || 'No response returned.'}</p>
+              <p>{turn.status === 'running' ? 'Waiting for the model response…' : turn.content ? visibleTurnText(turn.content) || turn.content : turn.error?.message || 'No response returned.'}</p>
               {turn.warnings?.map((warning) => <div className="shelf-agent-room__turn-warning" key={warning} role="note">{warning}</div>)}
               {q && <div className="shelf-agent-room__question"><CircleHelp size={13} /><span>{q}{answeredQuestionKeys.includes(turn.threadKey) ? ' · answered' : ''}</span></div>}
               {turn.status === 'completed' && turn.agent_id !== 'reader-input' && <details className="shelf-agent-room__turn-details"><summary>Model details</summary><span>{turn.model || 'Configured model'}{turn.provider_id ? ` · ${turn.provider_id}` : ''}{turn.local ? ' · local' : ''}</span></details>}
