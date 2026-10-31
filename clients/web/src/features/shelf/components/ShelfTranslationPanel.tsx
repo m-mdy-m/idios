@@ -209,12 +209,19 @@ export function ShelfTranslationPanel({
           {selectionBusy ? <LoaderCircle size={13} className="is-spinning" /> : <Sparkles size={13} />} Translate selected passage
         </button>}
         {pageData?.translation ? <article className="shelf-translation-panel__translation-document" aria-live="polite">
-          {pageData.segments.length > 1 ? <p>{(() => {
+          {pageData.segments.length > 1 ? (() => {
             let cursor = 0;
-            const aligned = pageData.segments.map((segment, index) => {
+            const positions = pageData.segments.map((segment) => {
               const position = pageData.translation.indexOf(segment.translation, cursor);
-              const before = position >= cursor ? pageData.translation.slice(cursor, position) : (index ? ' ' : '');
               if (position >= cursor) cursor = position + segment.translation.length;
+              return position;
+            });
+            if (positions.some((position) => position < 0)) return <TranslationMarkdown value={pageData.translation} />;
+            let renderCursor = 0;
+            return <p>{pageData.segments.map((segment, index) => {
+              const position = positions[index];
+              const before = pageData.translation.slice(renderCursor, position);
+              renderCursor = position + segment.translation.length;
               const source = normalizeTranslationMatch(segment.source);
               const active = Boolean(hoveredWord && source.split(' ').includes(normalizeTranslationMatch(hoveredWord)));
               return <span key={`${index}:${segment.source}`}>{before}<span
@@ -222,9 +229,8 @@ export function ShelfTranslationPanel({
                 onMouseEnter={() => onSelectTerm(segment.source)}
                 title={segment.source}
               >{segment.translation}</span></span>;
-            });
-            return <>{aligned}{pageData.translation.slice(cursor)}</>;
-          })()}</p> : <TranslationMarkdown value={pageData.translation} />}
+            })}{pageData.translation.slice(renderCursor)}</p>;
+          })()} : <TranslationMarkdown value={pageData.translation} />}
         </article> : !pageBusy && <div className="shelf-translation-panel__empty">
           <Languages size={21} />
           <strong>{translationModel ? 'No translation available' : 'Choose an AI model'}</strong>
