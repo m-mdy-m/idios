@@ -2,6 +2,8 @@ name: IDIOS Release
 
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
   workflow_dispatch:
@@ -10,7 +12,7 @@ on:
         description: Build and verify every release target without publishing a GitHub Release
         required: false
         type: boolean
-        default: false
+        default: true
       e2e-setup-command:
         description: Optional command to boot the target emulator/simulator or prepare the native E2E environment
         required: false
@@ -44,8 +46,9 @@ jobs:
       artifact-path: dist/release/*
       artifact-test-command: bash scripts/release/test-artifacts.sh
       changelog-path: CHANGELOG.md
-      # `inputs` exists only for workflow_dispatch; tag pushes must publish.
-      dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true' }}
+      # Every branch push is a non-publishing matrix run. A version-tag push
+      # is the only automatic event that may publish a GitHub Release.
+      dry-run: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true' }}
       e2e-setup-command: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['e2e-setup-command'] || '' }}
       e2e-test-command: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['e2e-test-command'] || '' }}
       build-matrix-json: >-
@@ -66,4 +69,7 @@ jobs:
           {"id":"ios-simulator-x86_64","os":"macos-15-intel","target_os":"ios-simulator","architecture":"x86_64","abi":"simulator","platform":"mobile","test_command":"bash scripts/release/verify-mobile.sh ios-simulator-x86_64","build_command":"bash scripts/release/build.sh ios-simulator-x86_64","artifact_path":"dist/release/*","artifact_test_command":"bash scripts/release/test-mobile-artifacts.sh"}
         ]}
     secrets:
-      mobile-server-url: ${{ secrets.IDIOS_MOBILE_SERVER_URL }}
+      # Branch/manual dry-runs need no deployment secret. The .invalid TLD is
+      # reserved and the resulting mobile artifacts are only verification output.
+      # A real tag release always receives the configured production endpoint.
+      mobile-server-url: ${{ ((github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true')) && 'https://idios-dry-run.invalid' || secrets.IDIOS_MOBILE_SERVER_URL }}
