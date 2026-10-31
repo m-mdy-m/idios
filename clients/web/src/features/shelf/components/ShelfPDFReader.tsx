@@ -599,8 +599,21 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       documentContext,
       priorGlossary,
     };
-    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1050);
+    const chunks = kind === 'word' || kind === 'grammar' || kind === 'ielts' ? [source] : splitReaderTranslationText(source, 1600);
     if (!chunks.length) throw new Error('No readable text was extracted from this passage.');
+    const chunkRanges: Array<{ start: number; end: number }> = [];
+    let sourceCursor = 0;
+    for (const chunk of chunks) {
+      const start = source.indexOf(chunk, sourceCursor);
+      if (start < 0) throw new Error('The page text could not be aligned safely for chunked translation.');
+      chunkRanges.push({ start, end: start + chunk.length });
+      sourceCursor = start + chunk.length;
+    }
+    const chunkSeparators = chunkRanges.slice(0, -1).map((range, index) => {
+      const gap = source.slice(range.end, chunkRanges[index + 1].start);
+      return /\r?\n\s*\r?\n/.test(gap) ? '\n\n' : /\r?\n/.test(gap) ? '\n' : ' ';
+    });
+    const mergeCompletedChunks = (parts: ReaderTranslationData[]) => mergeReaderTranslations(parts, chunkSeparators.slice(0, Math.max(0, parts.length - 1)));
     const results: ReaderTranslationData[] = [];
     const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}`;
     const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
@@ -617,7 +630,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       const cached = translationChunkCache.current.get(cacheKey);
       if (cached) {
         results.push(cached);
-        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeReaderTranslations(results));
+        if (kind === 'page' && translationPageInFlight.current === `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`) setPartialPageTranslation(mergeCompletedChunks(results));
         for (const term of cached.terms) {
           const key = normalizeTranslationMatch(term.source);
           if (key) glossary.set(key, { source: term.source, translation: term.translation, meaning: term.meaning });
@@ -645,7 +658,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       updateProgress(index + 1, chunks.length);
     }
     updateProgress(chunks.length, chunks.length);
-    const combined = results.length === 1 ? results[0] : mergeReaderTranslations(results);
+    const combined = results.length === 1 ? results[0] : mergeCompletedChunks(results);
     return combined;
   }, [bookID, currentPageText, getTranslationContext, onTranslateText, pageNumber, translationModel, translationTargetLanguage, translationTimeoutSeconds]);
 
@@ -854,6 +867,22 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setHoveredTextForAI('');
     setSelectedTextForAI('');
   }, [pageNumber, pdfURL]);
+
+  // Link the active translation segment back to the transparent PDF text layer.
+  // This is DOM-local: it never changes the PDF text or saved annotations.
+  useEffect(() => {
+    const layer = textLayerRef.current;
+    if (!layer) return;
+    const needle = normalizeTranslationMatch(hoveredTextForAI);
+    const spans = Array.from(layer.querySelectorAll('span'));
+    for (const span of spans) {
+      span.classList.remove('shelf-pdf-reader__ai-hover-match');
+      const value = normalizeTranslationMatch(span.textContent ?? '');
+      if (needle && value && (value === needle || value.split(' ').includes(needle) || needle.split(' ').some((part) => part.length > 2 && value.split(' ').includes(part)))) {
+        span.classList.add('shelf-pdf-reader__ai-hover-match');
+      }
+    }
+  }, [hoveredTextForAI, pageNumber, textLayerLoading]);
   const visiblePageLabel = pageCount ? `${pageNumber} / ${pageCount}` : '—';
 
   const captureSelection = useCallback(() => {
@@ -1054,16 +1083,11 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
               setTranslationOpen(false);
               return;
             }
-            const mascot = document.querySelector('.shelf-study-mascot__character')?.getBoundingClientRect();
-            const width = Math.min(560, window.innerWidth - 24);
-            const availableAboveMascot = mascot ? mascot.top - 26 : window.innerHeight - 110;
-            const height = Math.min(600, window.innerHeight - 32, Math.max(300, availableAboveMascot));
-            const left = mascot
-              ? Math.max(12, Math.min(window.innerWidth - width - 12, mascot.right - width))
-              : Math.max(12, window.innerWidth - width - 24);
-            const top = mascot
-              ? Math.max(12, mascot.top - height - 14)
-              : Math.max(12, window.innerHeight - height - 100);
+            const width = Math.min(translationPanelWidth, window.innerWidth - 24);
+            const height = Math.min(translationPanelHeight, window.innerHeight - 24);
+            // Keep the companion docked to the left edge of the reader viewport.
+            const left = 12;
+            const top = Math.max(12, Math.round((window.innerHeight - height) / 2));
             setTranslationPanelWidth(width);
             setTranslationPanelHeight(height);
             setTranslationPanelPosition({ left, top });
