@@ -227,3 +227,15 @@
   color: #e4d9b8;
   font-size: .88em;
 }
+
+
+.shelf-translation-panel__linked-segment:hover {
+  color: #fff;
+  background: rgb(93 145 232 / 28%);
+  box-shadow: 0 0 0 2px rgb(93 145 232 / 28%);
+}
+.shelf-translation-panel__selection-result .shelf-translation-panel__markdown {
+  max-width: none;
+  font-size: 12px;
+  line-height: 1.8;
+}
