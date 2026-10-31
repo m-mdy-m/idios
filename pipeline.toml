@@ -57,6 +57,11 @@ command = ["make", "smoke"]
 depends_on = ["build"]
 timeout_seconds = 900
 
+[tasks.ai-agent-format-preview]
+description = "Print gofmt diffs for the Shelf agent reliability patch"
+command = ["bash", "-c", "gofmt -d internal/ai/runtime.go internal/ai/runtime_test.go"]
+timeout_seconds = 120
+
 [tasks.ai-agent-model-integration]
 description = "Pull the local Qwen model with Ollama and run the real sequential Shelf discussion integration test"
 command = ["bash", "scripts/test-ai-agent-ollama.sh"]
