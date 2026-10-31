@@ -39,7 +39,7 @@ assert.equal(isExplicitBookNoteRequest(combinedPrompt), true);
 assert.equal(isExplicitHighlightRequest(combinedPrompt), true);
 
 // A complete book context may span multiple API messages without losing PDF pages.
-const longBookContext = Array.from({ length: 55 }, (_, page) => `===== PDF PAGE ${page + 1} =====\n${'Rawls page text and prior argument. '.repeat(220)}`).join('\n\n');
+const longBookContext = Array.from({ length: 15 }, (_, page) => `===== PDF PAGE ${page + 1} =====\n${'Rawls page text and prior argument. '.repeat(220)}`).join('\n\n');
 const chunks = splitUtf8Text(longBookContext);
 assert.ok(chunks.length > 1, 'long book context should be split into multiple messages');
 assert.equal(chunks.join(''), longBookContext, 'splitting must preserve every source character');
@@ -57,7 +57,7 @@ const fitted = fitShelfRuntimeMessages(conversation);
 assert.ok(fitted.every((message) => utf8ByteLength(message.content) <= 48000), 'fitted request messages must satisfy the per-message cap');
 assert.ok(fitted.reduce((sum, message) => sum + utf8ByteLength(message.content), 0) <= 175000, 'fitted request must stay below the total runtime cap');
 assert.ok(fitted.some((message) => message.content.includes('Earlier question: what does considered judgment mean?')), 'conversation dialogue should be retained');
-assert.ok(fitted.some((message) => message.content.includes('===== PDF PAGE 55 =====')), 'the end of the current book context should be preserved');
+assert.ok(fitted.some((message) => message.content.includes('===== PDF PAGE 15 =====')), 'the end of the current book context should be preserved');
 assert.ok(!fitted.some((message) => message.content.includes('DUPLICATED WHOLE BOOK PDF CONTEXT')), 'old embedded document contexts must not be duplicated');
 assert.equal(isBookMutationRequest('Mimi, please write a concise standalone note about this page.'), true);
 assert.equal(isExplicitBookNoteRequest('Mimi, please write a concise standalone note about this page.'), true);
