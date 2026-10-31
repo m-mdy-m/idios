@@ -83,7 +83,7 @@ func NewManager(path string) (*Manager, error) {
 		tasks:           make(map[string]Task),
 		running:         make(map[string]context.CancelFunc),
 		state: persistedState{
-			Config: RuntimeConfig{Mode: ModeLocalFirst, MaxConcurrent: 2, MaxQueued: 16, WorkflowTimeoutSeconds: 600, MaxAgents: 5, MaxDiscussionRounds: 5, TaskModels: map[string]string{}},
+			Config: RuntimeConfig{Mode: ModeLocalFirst, MaxConcurrent: 2, MaxQueued: 16, WorkflowTimeoutSeconds: 600, MaxAgents: 6, MaxDiscussionRounds: 5, TaskModels: map[string]string{}},
 			Health: map[string]HealthStatus{},
 			Agents: builtinAgents(),
 		},
@@ -157,7 +157,7 @@ func (m *Manager) normalizeStateLocked() {
 		m.state.Config.WorkflowTimeoutSeconds = 600
 	}
 	if m.state.Config.MaxAgents < 1 || m.state.Config.MaxAgents > 8 {
-		m.state.Config.MaxAgents = 5
+		m.state.Config.MaxAgents = 6
 	}
 	if m.state.Config.MaxDiscussionRounds < 1 || m.state.Config.MaxDiscussionRounds > 5 {
 		m.state.Config.MaxDiscussionRounds = 5
