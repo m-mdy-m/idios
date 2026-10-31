@@ -2070,6 +2070,89 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 	if last.AgentID != "discussion-chair" || last.Status != "completed" {
 		t.Fatalf("MIMI did not complete the final moderation turn: %#v", last)
 	}
+
+	// Exercise MIMI's separate Shelf-note proposal with the same downloaded model.
+	// The selected highlight phrase is reader-provided and remains the exact anchor;
+	// the model is responsible for writing a useful, standalone note.
+	const selectedQuote = "order and system"
+	type actionItem struct {
+		Type    string
+		Page    int
+		Quote   string
+		Title   string
+		Content string
+		Labels  []string
+	}
+	var noteEnvelope struct {
+		Actions []actionItem
+	}
+	actionSystem := "You are MIMI, the careful reading companion for A Theory of Justice. Write one useful standalone book note grounded only in the supplied page. Return only a JSON object with an actions array containing exactly one note action: {\"actions\":[{\"type\":\"note\",\"title\":\"...\",\"content\":\"...\",\"labels\":[\"reading-companion\"]}]}. Do not invent chapters, claims, quotations, or page references. The application will create the highlight separately from the reader's exact selected phrase."
+	actionUser := "The reader asks: “Please write a concise standalone note about the central argument on this page, and highlight the selected phrase ‘order and system’. Add a short margin explanation to the highlight. Save both the highlight and the separate note to this book.”\n\nReader-selected exact highlight phrase (do not alter): “" + selectedQuote + "”\n\nPage 21 source text:\n" + string(page)
+	noteRequest := GenerateRequest{
+		ProviderID: providerID, Model: model, Task: "book_discussion",
+		Messages: []Message{{Role: "system", Content: actionSystem}, {Role: "user", Content: actionUser}},
+		MaxTokens: 520, TimeoutSeconds: 240, PrivacySensitive: false,
+		ResponseFormat: &ResponseFormat{Type: "json_object"},
+	}
+	noteResponse, noteErr := manager.Generate(ctx, noteRequest)
+	if noteErr != nil {
+		t.Fatalf("MIMI local note generation failed: %v", noteErr)
+	}
+	decodeNote := func(raw string) error {
+		raw = strings.TrimSpace(raw)
+		raw = strings.TrimPrefix(raw, "\x60\x60\x60json")
+		raw = strings.TrimSuffix(raw, "\x60\x60\x60")
+		raw = strings.TrimSpace(raw)
+		if start := strings.Index(raw, "<idios_book_actions>"); start >= 0 {
+			raw = raw[start+len("<idios_book_actions>"):]
+			if end := strings.Index(raw, "</idios_book_actions>"); end >= 0 {
+				raw = raw[:end]
+			}
+		}
+		return json.Unmarshal([]byte(strings.TrimSpace(raw)), &noteEnvelope)
+	}
+	noteProblem := func() string {
+		if len(noteEnvelope.Actions) != 1 {
+			return fmt.Sprintf("got %d actions, want exactly one separate note action", len(noteEnvelope.Actions))
+		}
+		action := noteEnvelope.Actions[0]
+		if action.Type != "note" || strings.TrimSpace(action.Title) == "" || len(strings.Fields(action.Content)) < 20 {
+			return "note action must have type=note, a title, and at least 20 useful content words"
+		}
+		if !strings.Contains(strings.ToLower(action.Content), "judgment") && !strings.Contains(strings.ToLower(action.Content), "judgement") {
+			return "note does not preserve the page's central idea of considered judgments"
+		}
+		return ""
+	}
+	parseErr := decodeNote(noteResponse.Content)
+	problem := "invalid JSON: " + fmt.Sprint(parseErr)
+	if parseErr == nil {
+		problem = noteProblem()
+	}
+	if problem != "" {
+		repairRequest := noteRequest
+		repairRequest.Messages = append(append([]Message(nil), noteRequest.Messages...),
+			Message{Role: "assistant", Content: noteResponse.Content},
+			Message{Role: "user", Content: "Repair the action output. " + problem + ". Return only valid JSON with exactly one standalone note action, title, and at least 20 words in content. Ground the note in the supplied page, explicitly explain the idea of bringing order/system to considered judgments, and do not include a highlight action because the application adds the reader-selected exact phrase separately."},
+		)
+		repaired, repairErr := manager.Generate(ctx, repairRequest)
+		if repairErr != nil {
+			t.Fatalf("MIMI note repair failed after %s: %v", problem, repairErr)
+		}
+		noteEnvelope = struct{ Actions []actionItem }{}
+		if err := decodeNote(repaired.Content); err != nil {
+			t.Fatalf("MIMI repaired note is not valid JSON: %v; response=%s", err, repaired.Content)
+		}
+		if problem := noteProblem(); problem != "" {
+			t.Fatalf("MIMI did not produce a usable standalone note after one repair: %s; response=%s", problem, repaired.Content)
+		}
+		noteResponse = repaired
+	}
+	if !strings.Contains(string(page), selectedQuote) || strings.Count(string(page), selectedQuote) != 1 {
+		t.Fatal("reader-selected highlight anchor must occur exactly once on the supplied page")
+	}
+	t.Logf("MIMI shelf note model=%s/%s title=%q content=%s", noteResponse.ProviderID, noteResponse.Model, noteEnvelope.Actions[0].Title, noteEnvelope.Actions[0].Content)
+	t.Logf("MIMI exact separate highlight anchor: page=21 quote=%q; note action and highlight action are persisted independently by the Shelf client.", selectedQuote)
 }
 
 func TestFinalChairMustNameActualPositions(t *testing.T) {
