@@ -494,7 +494,7 @@ export function ShelfPDFReaderPage() {
       currentBook.summary?.trim() ? 'Book subject: ' + currentBook.summary.trim().slice(0, 600) : '',
       currentBook.tags?.length ? 'Subject tags: ' + currentBook.tags.join(', ') : '',
       'PDF page: ' + request.pageNumber,
-      request.documentContext.trim() ? 'Earlier pages (for continuity and terminology only):\n' + request.documentContext.slice(0, directTranslation ? 3200 : 4200) : '',
+      request.documentContext.trim() ? 'Previous-page and earlier-part context (for continuity and terminology only):\n' + request.documentContext.slice(0, directTranslation ? 3200 : 4200) : '',
       glossaryLines ? 'Established book terminology; keep these equivalents consistent when the sense matches:\n' + glossaryLines : '',
       !directTranslation && annotationLines ? 'Reader annotations (supporting context only):\n' + annotationLines : '',
       !directTranslation && noteLines ? 'Reader notes (supporting context only):\n' + noteLines : '',
