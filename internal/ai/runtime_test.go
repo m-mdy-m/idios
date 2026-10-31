@@ -1937,10 +1937,10 @@ func TestDiscussionQualityDefectsAreWarningsButUntrustedChapterClaimsRemainHardF
 	}
 	warnings := discussionQualityWarnings(answer, allowed, passages, previous, "steelman", false)
 	joined := strings.Join(warnings, "\n")
-	if !strings.Contains(joined, "without an exact source marker") {
+	if !strings.Contains(joined, "lacks an exact source marker") {
 		t.Fatalf("missing citation was not surfaced as a warning: %#v", warnings)
 	}
-	if !strings.Contains(joined, "participant by name") {
+	if !strings.Contains(joined, "participant name") {
 		t.Fatalf("missing peer attribution was not surfaced as a warning: %#v", warnings)
 	}
 	unseen := "Later Chapter IX resolves the argument. [source:rawls-page-21]"
