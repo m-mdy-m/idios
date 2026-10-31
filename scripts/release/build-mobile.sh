@@ -27,7 +27,14 @@ PY
 
 idios_prepare_web
 command -v npm >/dev/null 2>&1 || { echo "npm is required for the pinned Capacitor toolchain." >&2; exit 1; }
-(cd "$mobile_root" && npm install --no-package-lock --no-audit --no-fund)
+(
+  cd "$mobile_root"
+  # Capacitor loads capacitor.config.ts through the project's TypeScript
+  # installation. Explicitly include devDependencies even on runners that
+  # inherit NODE_ENV=production, then fail early with a clear toolchain check.
+  npm install --include=dev --no-package-lock --no-audit --no-fund
+  npm ls typescript --depth=0
+)
 
 case "$target" in
   android-*)
