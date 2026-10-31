@@ -2659,7 +2659,15 @@ func ensureRequiredDiscussionSourceMarker(content string, passages []ContextPass
 	if sourceID == "" {
 		return content
 	}
-	return trimmed + " [source:" + sourceID + "]"
+	marker := " [source:" + sourceID + "]"
+	if questionIndex := strings.Index(strings.ToLower(trimmed), "question for you:"); questionIndex >= 0 {
+		prefix := strings.TrimSpace(trimmed[:questionIndex])
+		question := strings.TrimSpace(trimmed[questionIndex:])
+		if prefix != "" {
+			return prefix + marker + "\n" + question
+		}
+	}
+	return trimmed + marker
 }
 
 func ensureFinalChairPeerAttributions(content string, previous []AgentContribution, agentID string, finalTurn bool) string {
@@ -2675,8 +2683,7 @@ func ensureFinalChairPeerAttributions(content string, previous []AgentContributi
 		return content
 	}
 	var ledger strings.Builder
-	ledger.WriteString(strings.TrimSpace(content))
-	ledger.WriteString("\n\nPeer positions reviewed: ")
+	ledger.WriteString("Peer positions reviewed: ")
 	for index, target := range targets {
 		if index > 0 {
 			ledger.WriteString("; ")
@@ -2684,7 +2691,16 @@ func ensureFinalChairPeerAttributions(content string, previous []AgentContributi
 		fmt.Fprintf(&ledger, "%s — “%s”", strings.TrimSpace(target.AgentName), compactDiscussionExcerpt(target.Content, 105))
 	}
 	ledger.WriteByte('.')
-	return ledger.String()
+	ledgerText := ledger.String()
+	trimmed := strings.TrimSpace(content)
+	if questionIndex := strings.Index(strings.ToLower(trimmed), "question for you:"); questionIndex >= 0 {
+		prefix := strings.TrimSpace(trimmed[:questionIndex])
+		question := strings.TrimSpace(trimmed[questionIndex:])
+		if prefix != "" {
+			return prefix + "\n\n" + ledgerText + "\n" + question
+		}
+	}
+	return trimmed + "\n\n" + ledgerText
 }
 
 func discussionPeerResponseProblem(content string, previous []AgentContribution, agentID string, finalTurn bool) string {
