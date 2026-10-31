@@ -46,7 +46,6 @@ func TestProviderHTTPClientAllowsRuntimeBoundedLongRequests(t *testing.T) {
 	}
 }
 
-
 func TestOllamaTranslationPayloadDisablesOnlyAdvertisedThinking(t *testing.T) {
 	capable := normalizeReasoningForModel(GenerateRequest{
 		Model: "qwen3:1.7b", Task: "translation", ReasoningEffort: "low",
