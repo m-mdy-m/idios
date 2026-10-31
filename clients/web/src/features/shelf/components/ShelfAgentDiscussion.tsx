@@ -418,16 +418,20 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
   const runContributions = array(activeRun?.workflow?.contributions);
   const runCompletedCount = runContributions.filter((item) => item.status === 'completed').length;
   const runFailedCount = runContributions.filter((item) => item.status === 'failed').length;
+  const runNotStartedCount = runContributions.filter((item) => item.status === 'not_run' || item.status === 'waiting').length;
   const runWarningAgents = runContributions.filter((item) => array(item.warnings).length > 0);
   const showExecutionCheck = Boolean(activeRun && runContributions.length > 0);
-  const executionTone = runFailedCount > 0 || activeRun?.status === 'failed' ? 'problem' : runWarningAgents.length > 0 ? 'review' : activeRun?.status === 'completed' ? 'passed' : 'running';
+  const executionTone = runFailedCount > 0 || runNotStartedCount > 0 || activeRun?.status === 'failed' ? 'problem' : runWarningAgents.length > 0 || activeRun?.status === 'partially_completed' ? 'review' : activeRun?.status === 'completed' ? 'passed' : 'running';
+  const incompleteHeadline = runNotStartedCount > 0 ? ` · ${runNotStartedCount} not run` : '';
   const executionHeadline = runFailedCount > 0
-    ? `${runCompletedCount}/${runContributions.length} completed · ${runFailedCount} failed`
+    ? `${runCompletedCount}/${runContributions.length} completed · ${runFailedCount} failed${incompleteHeadline}`
     : runWarningAgents.length > 0
-      ? `${runCompletedCount}/${runContributions.length} completed · ${runWarningAgents.length} need review`
+      ? `${runCompletedCount}/${runContributions.length} completed · ${runWarningAgents.length} need review${incompleteHeadline}`
       : activeRun?.status === 'completed'
         ? `${runCompletedCount}/${runContributions.length} completed · no runtime warnings`
-        : `${runCompletedCount}/${runContributions.length} completed · discussion running`;
+        : activeRun?.status === 'partially_completed' || activeRun?.status === 'failed' || activeRun?.status === 'cancelled'
+          ? `${runCompletedCount}/${runContributions.length} completed${incompleteHeadline}`
+          : `${runCompletedCount}/${runContributions.length} completed · discussion running`;
 
   if (!open) return null;
   const chairReady = usableIDs.includes('discussion-chair') && agentIDs.includes('discussion-chair');
@@ -507,7 +511,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
           const q = questionFrom(turn.content ?? '');
           const profile = agents.find((agent) => agent.id === turn.agent_id);
           const previousRound = visibleTurns[turnIndex - 1]?.round;
-          const status = turn.status === 'running' ? 'thinking' : turn.status === 'waiting' ? 'waiting for you' : turn.status === 'resumed' ? 'continued' : turn.status === 'failed' ? 'failed' : turn.status === 'not_run' ? 'queued' : '';
+          const status = turn.status === 'running' ? 'thinking' : turn.status === 'waiting' ? 'waiting for you' : turn.status === 'resumed' ? 'continued' : turn.status === 'failed' ? 'failed' : turn.status === 'not_run' ? (activeRun && terminalStatuses.has(activeRun.status) ? 'not run' : 'queued') : '';
           return <Fragment key={turn.threadKey}>
             {turn.round !== previousRound && <div className="shelf-agent-room__round-heading"><span /> Round {turn.round ?? 1} <span /></div>}
             <article className={`shelf-agent-room__message profile-${turn.agent_id.replace(/[^a-z0-9-]/gi, '-')} ${turn.agent_id === 'reader-input' ? 'is-reader-reply' : ''} ${turn.status === 'running' ? 'is-running' : ''} ${turn.status === 'failed' ? 'is-failed' : ''}`}>
