@@ -2165,6 +2165,20 @@ func TestDiscussionQualityDefectsAreWarningsButUntrustedChapterClaimsRemainHardF
 	}
 }
 
+func TestNewRuntimeDefaultsSupportSixAgentShelfRoundtable(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	config := manager.RuntimeConfig()
+	if config.MaxAgents != 6 {
+		t.Fatalf("new runtime max agents = %d, want six roles", config.MaxAgents)
+	}
+	if config.MaxDiscussionRounds < 2 {
+		t.Fatalf("new runtime max discussion rounds = %d, want at least two", config.MaxDiscussionRounds)
+	}
+}
 func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
