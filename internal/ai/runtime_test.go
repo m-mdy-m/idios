@@ -1919,6 +1919,9 @@ func TestDiscussionRepairPromptIncludesOnlyCompletedPeerInventory(t *testing.T) 
 	if !strings.Contains(prompt, "Concept Connector") || !strings.Contains(prompt, "organize considered judgments") {
 		t.Fatalf("repair prompt omitted the exact completed peer and its claim: %s", prompt)
 	}
+	if !strings.Contains(prompt, "Regarding Concept Connector's point,") {
+		t.Fatalf("repair prompt did not require the exact named peer opening: %s", prompt)
+	}
 	if strings.Contains(prompt, "Ambiguity Scout") {
 		t.Fatalf("repair prompt included a failed/non-peer contribution: %s", prompt)
 	}
@@ -2061,8 +2064,8 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		if i > 0 && contribution.Status == "completed" {
 			prior := result.Contributions[:i]
 			peerProblem := discussionPeerResponseProblem(contribution.Content, prior, contribution.AgentID, i == len(agentIDs)-1)
-			if peerProblem != "" && len(contribution.Warnings) == 0 {
-				t.Errorf("agent %s has an unreported peer-attribution quality defect: %s", contribution.AgentName, peerProblem)
+			if peerProblem != "" {
+				t.Errorf("agent %s did not address the required actual peer by name: %s; output=%q warnings=%v", contribution.AgentName, peerProblem, contribution.Content, contribution.Warnings)
 			}
 		}
 	}
@@ -2152,7 +2155,7 @@ func TestOllamaBookDiscussionIntegration(t *testing.T) {
 		t.Fatal("reader-selected highlight anchor must occur exactly once on the supplied page")
 	}
 	t.Logf("MIMI shelf note model=%s/%s title=%q content=%s", noteResponse.ProviderID, noteResponse.Model, noteEnvelope.Actions[0].Title, noteEnvelope.Actions[0].Content)
-	t.Logf("MIMI exact separate highlight anchor: page=21 quote=%q; note action and highlight action are persisted independently by the Shelf client.", selectedQuote)
+	t.Logf("MIMI exact separate highlight anchor: page=21 quote=%q; client contract tests verify independent highlight and Shelf-note persistence paths.", selectedQuote)
 }
 
 func TestFinalChairMustNameActualPositions(t *testing.T) {
