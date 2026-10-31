@@ -2275,6 +2275,7 @@ func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtOneHour(t
 		t.Fatalf("maximum discussion budget = %s, want %s", got, time.Hour)
 	}
 }
+
 func TestDiscussionTimeoutUsesProviderSettingsWithLocalWarmupFloor(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
