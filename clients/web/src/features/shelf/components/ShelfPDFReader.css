@@ -314,12 +314,6 @@
 
 
 /* Cross-reference highlight for the source text linked from the translation companion. */
-.shelf-pdf-reader .textLayer .shelf-pdf-reader__ai-hover-match {
-  color: transparent;
-  background: rgb(105 166 255 / 48%);
-  outline: 1px solid rgb(73 139 241 / 72%);
-  border-radius: 2px;
-}
 .shelf-pdf-reader__translation-popover::after { display: none; }
 .shelf-pdf-reader__translation-popover {
   border-radius: 12px;
