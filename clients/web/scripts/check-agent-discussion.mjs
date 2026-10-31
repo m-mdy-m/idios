@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   buildDiscussionHistory,
   MAX_DISCUSSION_HISTORY_BYTES,
@@ -50,3 +51,17 @@ assert.ok(aggregateBytes <= MAX_DISCUSSION_HISTORY_BYTES, 'aggregate history mus
 assert.ok(aggregate.omittedCount > 0 || aggregate.truncatedCount > 0, 'aggregate clipping must be reported');
 
 console.log('OK agent discussion history: ordered carry-over, failed-turn filtering, UTF-8 byte bounds, citation preservation, and truncation reporting.');
+
+// Keep the browser's round-table instructions aligned with the runtime's staged protocol.
+const discussionUI = await readFile(new URL('../src/features/shelf/components/ShelfAgentDiscussion.tsx', import.meta.url), 'utf8').catch(async () => {
+  const { readFile } = await import('node:fs/promises');
+  return readFile(new URL('../src/features/shelf/components/ShelfAgentDiscussion.tsx', import.meta.url), 'utf8');
+});
+assert.match(discussionUI, /This is a fresh discussion: in Round 1[\s\S]*?independently perform their configured role/, 'fresh opening specialists must be told to work independently');
+assert.match(discussionUI, /From Round 2 onward[\s\S]*?actual completed peer claim/, 'later rounds must explicitly require real peer review');
+assert.match(discussionUI, /Execution check/, 'the UI must expose a run-level execution summary');
+assert.match(discussionUI, /not whether an interpretation is true/, 'the UI must distinguish runtime validation from semantic correctness');
+assert.match(discussionUI, /Use a guided page-analysis prompt/, 'the UI must offer a useful guided discussion prompt');
+assert.doesNotMatch(discussionUI, /Every agent after the first must address one actual earlier claim/, 'the old contradictory first-round peer instruction must not return');
+
+console.log('OK agent discussion UI: staged opening/peer-review contract, visible execution diagnostics, and guided prompt.');
