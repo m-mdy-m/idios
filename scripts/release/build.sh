@@ -4,16 +4,35 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=common.sh
 source "$ROOT/scripts/release/common.sh"
 target="${1:?target required}"
-idios_prepare_target "$target"
-cd "$ROOT"
-: "${GITHUB_REF_NAME:?GITHUB_REF_NAME must identify the GitHub ref}"
-# Prefer the canonical release identity resolved by src/pipeline. This keeps
-# branch dry-runs from leaking the CI branch name into published asset names.
-release_tag="${PIPELINE_RELEASE_TAG:-$GITHUB_REF_NAME}"
+# The shared Pipeline supplies a canonical tag for both release tags and branch dry-runs.
+release_tag="${PIPELINE_RELEASE_TAG:-${GITHUB_REF_NAME:-v${IDIOS_VERSION:-3.2.2}}}"
 version="${release_tag#v}"
-idios_prepare_web
-idios_build_binary "$target"
-mkdir -p dist/release
+cd "$ROOT"
+
+case "$target" in
+  pwa-web)
+    idios_prepare_web
+    mkdir -p dist/release
+    (cd clients/web/dist && zip -qr "$ROOT/dist/release/idios-$release_tag-pwa-web.zip" .)
+    ;;
+  android-*|ios-*)
+    bash scripts/release/build-mobile.sh "$target"
+    ;;
+  *)
+    idios_prepare_target "$target"
+    idios_prepare_web
+    idios_build_binary "$target"
+    mkdir -p dist/release
+    ;;
+esac
+
+case "$target" in
+  pwa-web|android-*|ios-*)
+    printf 'Built %s for %s\n' "$target" "$release_tag"
+    find dist/release -maxdepth 1 -type f -name "idios-$release_tag-*" -print
+    exit 0
+    ;;
+esac
 
 case "$target" in
   linux-amd64|linux-arm64)

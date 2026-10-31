@@ -47,6 +47,17 @@ make check
 - [ ] **Layering:** `domain` stays pure; `cli` does not write SQL and the Web UI does not bypass Application (see `AGENTS.md`)
 - [ ] **Docs and `CHANGELOG.md`** updated for anything users will notice
 
+## Mobile / PWA and release matrix (when applicable)
+
+- [ ] PWA manifest, service worker, install icons and offline shell checked
+- [ ] Android ABI(s) and APK(s) checked
+- [ ] iOS device/simulator architecture checked
+- [ ] Signing / provisioning requirements documented
+- [ ] E2E setup command:
+- [ ] E2E test command:
+- [ ] Runner OS/architecture and emulator/device used:
+- [ ] API endpoint is HTTPS and protected; loopback-only server policy is unchanged
+
 ## Screenshots / terminal output
 
 <!-- CLI output changes: before and after. Use a plain-text block, and also check with `--no-color`. -->

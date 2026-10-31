@@ -24,7 +24,7 @@ endif
 CLI_LDFLAGS = -s -w -X idios/clients/cli.Version=$(VERSION) -X idios/internal/updater.Version=$(VERSION)
 CLI_BIN = $(BIN_DIR)/idios$(EXE_EXT)
 
-.PHONY: all build run-built web-install web-build web-lint install install-user uninstall test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
+.PHONY: all build run-built web-install web-build web-lint pwa-build mobile-install mobile-build-android mobile-build-ios install install-user uninstall test test-race test-cover vet fmt fmt-check check ci smoke psx-check psx-fix tidy clean help
 
 all: ci
 
@@ -34,6 +34,19 @@ web-install: ## Install the web UI's development/build dependencies (pnpm only; 
 
 web-build: web-install ## Build the React/TypeScript UI into the static bundle embedded in the Go server.
 	cd $(WEB_DIR) && $(PNPM) run build
+
+pwa-build: web-build ## Package the installable PWA shell (API data still requires a reachable IDIOS server).
+	mkdir -p $(BIN_DIR)
+	cd $(WEB_DIR)/dist && zip -qr ../../../$(BIN_DIR)/idios-pwa-web.zip .
+
+mobile-install: ## Install the pinned Capacitor CLI and native platform packages.
+	cd clients/mobile && npm install --no-package-lock --no-audit --no-fund
+
+mobile-build-android: web-build mobile-install ## Build the Android ARM64 debug APK (requires Android SDK and IDIOS_MOBILE_SERVER_URL).
+	bash scripts/release/build-mobile.sh android-arm64-v8a
+
+mobile-build-ios: web-build mobile-install ## Build the unsigned iOS device app bundle (requires macOS, Xcode and IDIOS_MOBILE_SERVER_URL).
+	bash scripts/release/build-mobile.sh ios-arm64
 
 web-lint: web-install ## Type/lint-check the web UI source.
 	cd $(WEB_DIR) && $(PNPM) run lint

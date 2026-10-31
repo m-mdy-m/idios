@@ -1,0 +1,15 @@
+def selectedAbi = System.getenv('IDIOS_ANDROID_ABI')
+if (!selectedAbi) {
+    throw new GradleException('IDIOS_ANDROID_ABI must select one Android ABI.')
+}
+
+android {
+    splits {
+        abi {
+            enable true
+            reset()
+            include selectedAbi
+            universalApk false
+        }
+    }
+}

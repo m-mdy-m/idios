@@ -57,7 +57,8 @@ idios_prepare_web() {
 
 idios_build_binary() {
   local target="${1:?target required}"
-  local version="${GITHUB_REF_NAME#v}"
+  local release_tag="${PIPELINE_RELEASE_TAG:-${GITHUB_REF_NAME:-v${VERSION:-3.2.2}}}"
+  local version="${release_tag#v}"
   local suffix=""
   local ldflags='-s -w'
   [[ "$target" == windows-* ]] && suffix='.exe' && ldflags="$ldflags -linkmode external -extldflags=-static"
@@ -85,5 +86,6 @@ idios_verify_target() {
   idios_build_binary "$target"
   local suffix=""
   [[ "$target" == windows-* ]] && suffix='.exe'
-  IDIOS_EXPECT_VERSION="${GITHUB_REF_NAME#v}" IDIOS_BIN="dist/idios${suffix}" sh ./scripts/smoke-platform.sh
+  local release_tag="${PIPELINE_RELEASE_TAG:-${GITHUB_REF_NAME:-v${VERSION:-3.2.2}}}"
+  IDIOS_EXPECT_VERSION="${release_tag#v}" IDIOS_BIN="dist/idios${suffix}" sh ./scripts/smoke-platform.sh
 }

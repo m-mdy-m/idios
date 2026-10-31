@@ -19,3 +19,10 @@ coverage.out
 
 # Temporary platform packaging stage.
 /release/
+
+# Capacitor projects are generated from clients/mobile/capacitor.config.ts.
+/clients/mobile/node_modules/
+/clients/mobile/android/
+/clients/mobile/ios/
+/clients/mobile/build/
+/clients/mobile/package-lock.json

@@ -1,0 +1,22 @@
+{
+  "name": "@idios/clients/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capacitor shell for the IDIOS mobile web client",
+  "scripts": {
+    "cap": "cap",
+    "sync": "cap sync"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.6.0",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/ios": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
