@@ -2163,7 +2163,9 @@ func TestDiscussionQualityDefectsAreWarningsButUntrustedChapterClaimsRemainHardF
 
 func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T) {
 	manager, err := NewManager("")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer manager.Close()
 	if _, err := manager.UpsertProvider(ProviderConfig{
 		ID: "ollama-budget", Name: "Ollama budget", Type: ProviderOllama,
@@ -2176,22 +2178,34 @@ func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T)
 	config.WorkflowTimeoutSeconds = 600
 	config.MaxAgents = 5
 	config.MaxDiscussionRounds = 5
-	if err := manager.UpdateRuntimeConfig(config); err != nil { t.Fatal(err) }
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
 	agentIDs := []string{"reader", "tutor", "steelman", "concept-connector", "discussion-chair"}
 	assigned := map[string]bool{}
 	for _, agent := range manager.Agents() {
-		if !containsString(agentIDs, agent.ID) { continue }
+		if !containsString(agentIDs, agent.ID) {
+			continue
+		}
 		agent.PreferredModel = "ollama-budget/qwen2.5:3b"
-		if _, err := manager.UpsertAgent(agent); err != nil { t.Fatal(err) }
+		if _, err := manager.UpsertAgent(agent); err != nil {
+			t.Fatal(err)
+		}
 		assigned[agent.ID] = true
 	}
-	for _, id := range agentIDs { if !assigned[id] { t.Fatalf("missing integration agent %q", id) } }
+	for _, id := range agentIDs {
+		if !assigned[id] {
+			t.Fatalf("missing integration agent %q", id)
+		}
+	}
 	request := &DiscussionRequest{AgentIDs: agentIDs, Rounds: 2}
 	manager.mu.RLock()
 	got := manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
 	want := 5*2*240*time.Second + 2*30*time.Second
-	if got != want { t.Fatalf("two-round local discussion budget = %s, want %s", got, want) }
+	if got != want {
+		t.Fatalf("two-round local discussion budget = %s, want %s", got, want)
+	}
 	if manager.RuntimeConfig().WorkflowTimeoutSeconds != 600 {
 		t.Fatal("adaptive discussion budget must not mutate the user's global workflow timeout setting")
 	}
@@ -2206,41 +2220,60 @@ func TestDiscussionWorkflowDeadlineScalesWithSequentialAgentRounds(t *testing.T)
 
 func TestDiscussionWorkflowDeadlineUsesSelectedProviderTimeoutAndCapsAtOneHour(t *testing.T) {
 	manager, err := NewManager("")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer manager.Close()
 	if _, err := manager.UpsertProvider(ProviderConfig{
 		ID: "cloud-budget", Name: "Cloud budget", Type: ProviderOpenAI,
 		BaseURL: "https://example.invalid/v1", APIKey: "test-key", DefaultModel: "test-model",
 		Enabled: true, TimeoutSeconds: 90, MaxConcurrent: 1,
-	}, false); err != nil { t.Fatal(err) }
+	}, false); err != nil {
+		t.Fatal(err)
+	}
 	config := manager.RuntimeConfig()
 	config.WorkflowTimeoutSeconds = 600
 	config.MaxAgents = 8
 	config.MaxDiscussionRounds = 5
-	if err := manager.UpdateRuntimeConfig(config); err != nil { t.Fatal(err) }
+	if err := manager.UpdateRuntimeConfig(config); err != nil {
+		t.Fatal(err)
+	}
 	agentIDs := []string{"reader", "tutor", "steelman", "concept-connector", "discussion-chair"}
 	for _, agent := range manager.Agents() {
-		if !containsString(agentIDs, agent.ID) { continue }
+		if !containsString(agentIDs, agent.ID) {
+			continue
+		}
 		agent.PreferredModel = "cloud-budget/test-model"
-		if _, err := manager.UpsertAgent(agent); err != nil { t.Fatal(err) }
+		if _, err := manager.UpsertAgent(agent); err != nil {
+			t.Fatal(err)
+		}
 	}
 	request := &DiscussionRequest{AgentIDs: agentIDs, Rounds: 2}
 	manager.mu.RLock()
 	got := manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
 	want := 5*2*90*time.Second + 2*30*time.Second
-	if got != want { t.Fatalf("cloud discussion budget = %s, want %s", got, want) }
+	if got != want {
+		t.Fatalf("cloud discussion budget = %s, want %s", got, want)
+	}
+
 	request.AgentIDs = []string{"reader", "tutor", "steelman", "concept-connector", "evidence-auditor", "discussion-chair", "ambiguity-scout", "scope-keeper"}
 	request.Rounds = 5
 	for _, agent := range manager.Agents() {
-		if !containsString(request.AgentIDs, agent.ID) { continue }
+		if !containsString(request.AgentIDs, agent.ID) {
+			continue
+		}
 		agent.PreferredModel = "cloud-budget/test-model"
-		if _, err := manager.UpsertAgent(agent); err != nil { t.Fatal(err) }
+		if _, err := manager.UpsertAgent(agent); err != nil {
+			t.Fatal(err)
+		}
 	}
 	manager.mu.RLock()
 	got = manager.discussionWorkflowTimeoutLocked(request)
 	manager.mu.RUnlock()
-	if got != time.Hour { t.Fatalf("maximum discussion budget = %s, want %s", got, time.Hour) }
+	if got != time.Hour {
+		t.Fatalf("maximum discussion budget = %s, want %s", got, time.Hour)
+	}
 }
 func TestDiscussionTimeoutUsesProviderSettingsWithLocalWarmupFloor(t *testing.T) {
 	manager, err := NewManager("")
