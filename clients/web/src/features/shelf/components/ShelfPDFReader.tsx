@@ -275,7 +275,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const currentPageTranslationKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`;
   const currentPageTranslationKeyRef = useRef(currentPageTranslationKey);
   useEffect(() => {
-    currentPageTranslationKeyRef.current = currentPageTranslationKey;
+    useEffect(() => {
+      currentPageTranslationKeyRef.current = currentPageTranslationKey;
+    }, [currentPageTranslationKey]);
   }, [currentPageTranslationKey]);
   const runningTranslationJobs = translationJobSnapshots.filter((job) => job.bookID === bookID && job.status === 'running');
   const stopTranslation = useCallback((jobID?: string) => {
@@ -1530,7 +1532,7 @@ function markCompanionHighlights(layer: HTMLDivElement, sheet: HTMLDivElement, m
     if (current.nodeType !== Node.TEXT_NODE) continue;
     const node = current as Text;
     const pattern = /[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}'’-]|\u200c|\u200d)*/gu;
-    for (const match of node.data.matchAll(/[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}'’-]|\u200c|\u200d)*/gu)) {
+    for (const match of node.data.matchAll(pattern)) {
       const start = match.index ?? 0;
       words.push({ word: normalizeHighlightWord(match[0]), node, start, end: start + match[0].length });
     }
