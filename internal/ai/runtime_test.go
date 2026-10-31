@@ -464,11 +464,23 @@ func TestBookDiscussionRunsBoundedReviewRoundsAndValidatesSources(t *testing.T) 
 	t.Fatal("discussion did not complete before the test deadline")
 }
 
-func TestDiscussionAgentContextHasIndependentDeadline(t *testing.T) {
+func TestDiscussionAgentContextUsesProviderAwareDeadline(t *testing.T) {
+	manager, err := NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.UpsertProvider(ProviderConfig{
+		ID: "ollama-timeout", Name: "Ollama timeout", Type: ProviderOllama,
+		BaseURL: "http://127.0.0.1:11434", DefaultModel: "qwen2.5:3b",
+		Enabled: true, TimeoutSeconds: 60, MaxConcurrent: 1,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+
 	workflowCtx, cancelWorkflow := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancelWorkflow()
-
-	agentCtx, cancelAgent := newDiscussionAgentContext(workflowCtx)
+	agentCtx, cancelAgent := manager.newDiscussionAgentContext(workflowCtx, "ollama-timeout")
 	defer cancelAgent()
 
 	agentDeadline, ok := agentCtx.Deadline()
@@ -480,8 +492,8 @@ func TestDiscussionAgentContextHasIndependentDeadline(t *testing.T) {
 	if !agentDeadline.Before(workflowDeadline) {
 		t.Fatalf("agent deadline %v must be earlier than workflow deadline %v", agentDeadline, workflowDeadline)
 	}
-	if remaining <= 0 || remaining > discussionAgentTurnTimeout {
-		t.Fatalf("agent deadline remaining = %s, want a positive duration no greater than %s", remaining, discussionAgentTurnTimeout)
+	if remaining <= 0 || remaining > 4*time.Minute {
+		t.Fatalf("agent deadline remaining = %s, want a positive duration no greater than the local cold-start floor", remaining)
 	}
 }
 
