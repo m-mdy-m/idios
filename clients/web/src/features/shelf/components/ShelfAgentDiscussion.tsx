@@ -119,6 +119,12 @@ function questionFrom(content: string): string {
 function visibleTurnText(content: string): string {
   return content.replace(/(?:^|\n)\s*(?:\*\*)?Question for you(?:\*\*)?\s*:\s*.+(?=\n|$)/i, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').trim();
 }
+function buildGuidedPagePrompt(bookTitle: string, pageNumber: number, selectedText: string): string {
+  const focus = selectedText.trim()
+    ? `\n\nFocus especially on this exact passage selected on page ${pageNumber}: “${selectedText.trim().slice(0, 900)}”`
+    : '';
+  return `Analyze page ${pageNumber} of “${bookTitle}” as an evidence-led reading discussion. Identify the author's central claim and the exact textual support for it. Explain the most important concept or inference in plain language. Examine one meaningful qualification, ambiguity, or possible objection without manufacturing disagreement. Connect the page to other ideas only when the supplied pages or saved annotations support that connection. Distinguish what the author explicitly states from interpretation and uncertainty. Do not infer the contents of unseen pages or chapters.${focus}\n\nLet each selected specialist perform its own role rather than producing several similar summaries. In a fresh discussion, specialists should work independently in the opening round; in later rounds, address actual claims from the discussion history. MIMI should compare the real positions, explain what is supported and what remains unresolved, and avoid forcing consensus.`;
+}
 function loadSavedAgentIDs(bookID: string): string[] {
   try {
     const value = localStorage.getItem(`idios.shelf.agent-discussion.${bookID}`);
@@ -366,12 +372,16 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     const historyBoundary = history.omittedCount > 0 || history.truncatedCount > 0
       ? `\n\nHistory boundary: ${history.omittedCount} older completed turn(s) were omitted and ${history.truncatedCount} retained turn(s) were shortened to fit the bounded carry-over. Do not claim to remember omitted content; verify every retained claim against the supplied passages.`
       : '';
+    const openingContract = history.contributions.length > 0
+      ? 'This is a continuation: the supplied completed discussion history is available from the first round. Each specialist must address one actual earlier claim suited to its role, name the speaker, assess the claim as supported/partly supported/unclear/unsupported, and add a source-based correction, qualification, or implication.'
+      : 'This is a fresh discussion: in Round 1, Reader and every non-Chair specialist must independently perform their configured role using only the supplied source material. Do not ask opening specialists to address one another or invent peer claims; their same-round contributions are not in one another’s prompts. MIMI runs last and compares the completed opening positions.';
+    const roundTableContract = `Round-table contract: conduct ${discussionRounds} sequential rounds, never parallel. ${openingContract} From Round 2 onward, specialists must address an actual completed peer claim from the discussion history by the speaker's displayed name, assess its support, and add a new qualification, correction, or implication. MIMI · Chair speaks last in every round: compare actual positions, weigh the supplied text rather than counting agreement, preserve explicit negations and qualifications, and identify both resolved and unresolved points. Do not imitate another agent, repeat its wording, or treat peer statements as source evidence. Use only supplied page/highlight/note evidence; never invent citations or claim knowledge of unseen chapters. Separate direct text from inference. Do not ask questions during peer debate. Only MIMI may ask one consequential "Question for you: ..." line at the end. Explain concise public reasons, not hidden chain-of-thought.`;
     const payload = {
       book_id: bookID,
       book_title: bookTitle,
       page_start: Math.min(pageNumber, ...sourceEntries.map((item) => item.page)),
       page_end: pageNumber,
-      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}${historyBoundary}\n\nRound-table contract: conduct ${discussionRounds} sequential debate rounds, never parallel. Every agent must perform its configured specialist role and add an independent contribution. Every agent after the first must address one actual earlier claim by the speaker's displayed name, assess it as supported/partly supported/unclear/unsupported, give a source-based reason, and add a new qualification, correction, or implication. Do not imitate another agent, repeat its wording, or paraphrase the latest Chair as a substitute for analysis. Treat peer statements as claims to verify, not as source evidence. The final agent is MIMI · Chair: compare actual positions, weigh the supplied text rather than counting agreement, preserve explicit negations and qualifications, identify resolved and unresolved disagreements, and give a refined conclusion. Use only supplied page/highlight/note evidence; never invent citations or claim knowledge of unseen chapters. Separate direct text from inference. Do not ask questions during peer debate. Only MIMI on the final turn may ask one consequential "Question for you: ..." line. Explain concise public reasons, not hidden chain-of-thought.`,
+      question: `${base}${selectedText.trim() && firstTurn ? `\n\nFocus phrase selected on page ${pageNumber}: “${selectedText.trim().slice(0, 1200)}”` : ''}${historyBoundary}\n\n${roundTableContract}`,
       context: uniqueContext,
       agent_ids: localAgents.slice(0, maxAgents),
       parallel: false,
@@ -405,6 +415,19 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
 
   const activeSpeaker = [...(activeRun?.workflow?.contributions ?? [])].reverse().find((item) => item.status === 'running');
   const visibleTurns = turns.slice(-24);
+  const runContributions = array(activeRun?.workflow?.contributions);
+  const runCompletedCount = runContributions.filter((item) => item.status === 'completed').length;
+  const runFailedCount = runContributions.filter((item) => item.status === 'failed').length;
+  const runWarningAgents = runContributions.filter((item) => array(item.warnings).length > 0);
+  const showExecutionCheck = Boolean(activeRun && runContributions.length > 0);
+  const executionTone = runFailedCount > 0 || activeRun?.status === 'failed' ? 'problem' : runWarningAgents.length > 0 ? 'review' : activeRun?.status === 'completed' ? 'passed' : 'running';
+  const executionHeadline = runFailedCount > 0
+    ? `${runCompletedCount}/${runContributions.length} completed · ${runFailedCount} failed`
+    : runWarningAgents.length > 0
+      ? `${runCompletedCount}/${runContributions.length} completed · ${runWarningAgents.length} need review`
+      : activeRun?.status === 'completed'
+        ? `${runCompletedCount}/${runContributions.length} completed · no runtime warnings`
+        : `${runCompletedCount}/${runContributions.length} completed · discussion running`;
 
   if (!open) return null;
   const chairReady = usableIDs.includes('discussion-chair') && agentIDs.includes('discussion-chair');
@@ -473,6 +496,11 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
     <main className={`shelf-agent-room__main ${!participantsVisible ? 'has-hidden-agent-selector' : ''}`}>
       {error && <div className="shelf-agent-room__error" role="alert">{error}</div>}
       <div className="shelf-agent-room__timeline" aria-live="polite">
+        {showExecutionCheck && <section className={`shelf-agent-room__run-check is-${executionTone}`} aria-label="Agent execution check">
+          <div className="shelf-agent-room__run-check-head"><strong>Execution check</strong><span>{executionHeadline}</span></div>
+          <p>These checks report completion and runtime warnings, not whether an interpretation is true. Review each agent’s claims against the page and its source markers.</p>
+          {runWarningAgents.length > 0 && <details><summary>Agents with warnings: {runWarningAgents.map((item) => item.agent_name).join(', ')}</summary><ul>{runWarningAgents.flatMap((item) => array(item.warnings).map((warning) => `${item.agent_name}: ${warning}`)).map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
+        </section>}
         {!turns.length && !busy && <div className="shelf-agent-room__empty-state">Start with your thought, a question, or a highlighted line.</div>}
         {turns.length > 0 && <article className="shelf-agent-room__reader-opening"><span className="shelf-agent-room__reader-avatar">Y</span><div><div className="shelf-agent-room__message-head"><strong>You</strong></div><p>{topic}</p></div></article>}
         {visibleTurns.map((turn, turnIndex) => {
@@ -485,7 +513,7 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
             <article className={`shelf-agent-room__message profile-${turn.agent_id.replace(/[^a-z0-9-]/gi, '-')} ${turn.agent_id === 'reader-input' ? 'is-reader-reply' : ''} ${turn.status === 'running' ? 'is-running' : ''} ${turn.status === 'failed' ? 'is-failed' : ''}`}>
             <div className="shelf-agent-room__message-avatar">{(turn.agent_name || 'AI').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
             <div className="shelf-agent-room__message-body">
-              <div className="shelf-agent-room__message-head"><strong>{turn.agent_name}</strong>{profile?.role && <small className="shelf-agent-room__role">{profile.role}</small>}{status && <small>{status}</small>}</div>
+              <div className="shelf-agent-room__message-head"><strong>{turn.agent_name}</strong>{profile?.role && <small className="shelf-agent-room__role">{profile.role}</small>}{status && <small>{status}</small>}{turn.status === 'completed' && turn.agent_id !== 'reader-input' && <small className={array(turn.warnings).length ? 'is-review-needed' : 'is-runtime-checked'} title="Runtime validation checks response structure and supplied source markers; it does not judge semantic correctness.">{array(turn.warnings).length ? 'needs review' : 'runtime checks passed'}</small>}</div>
               <p>{turn.status === 'running' ? 'Waiting for the model response…' : turn.content ? visibleTurnText(turn.content) || turn.content : turn.error?.message || 'No response returned.'}</p>
               {turn.warnings?.map((warning) => <div className="shelf-agent-room__turn-warning" key={warning} role="note">{warning}</div>)}
               {q && <div className="shelf-agent-room__question"><CircleHelp size={13} /><span>{q}{answeredQuestionKeys.includes(turn.threadKey) ? ' · answered' : ''}</span></div>}
@@ -499,6 +527,8 @@ export function ShelfAgentDiscussion({ open, bookID, bookTitle, pageNumber, page
       </div>
       <form className="shelf-agent-room__composer" onSubmit={(event) => { event.preventDefault(); if (!turns.length) void startTurn('', true); else void startTurn(readerReply, false); }}>
         {!turns.length ? <textarea aria-label="Your opening thought" rows={2} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Start the discussion…" disabled={busy || starting} /> : <textarea aria-label="Your reply" rows={2} value={readerReply} onChange={(event) => setReaderReply(event.target.value)} placeholder="Reply to an agent…" disabled={busy || starting} />}
+        {!turns.length && <button type="button" className="shelf-agent-room__guided-prompt" onClick={() => setTopic(buildGuidedPagePrompt(bookTitle, pageNumber, selectedText))} disabled={busy || starting}>Use a guided page-analysis prompt</button>}
+        <div className="shelf-agent-room__process-hint">Fresh discussion: specialists work independently in Round 1; later rounds enable peer review, and MIMI compares the positions.</div>
         <div className="shelf-agent-room__composer-options" aria-label="Discussion settings">
           <label title="More rounds permit deeper critique but make the discussion slower."><span>Depth</span><select aria-label="Discussion depth" value={discussionRounds} onChange={(event) => setRequestedRounds(Number(event.target.value))} disabled={busy || starting}>{Array.from({ length: maxDiscussionRounds }, (_, index) => index + 1).filter((value) => value >= 2 || maxDiscussionRounds === 1).map((value) => <option key={value} value={value}>{value} {value === 1 ? 'round' : 'rounds'}</option>)}</select></label>
           <label title={hasThinkingSupport ? (nativeThinkingOnly ? 'Optional native reasoning for models that advertise it. Ordinary translation never uses this setting.' : 'Reasoning effort is sent only to selected models that advertise support.') : 'The selected models do not advertise native thinking support.'}><span>Thinking</span><select aria-label={nativeThinkingOnly ? 'Native thinking' : 'Thinking effort'} value={effectiveThinking} onChange={(event) => setThinkingEffort(event.target.value as 'off' | 'low' | 'medium' | 'high')} disabled={!hasThinkingSupport || busy || starting}><option value="off">Off</option>{nativeThinkingOnly ? <option value="high">On</option> : <><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></>}</select></label>
