@@ -5,7 +5,7 @@
 ### Added
 
 - Add an in-reader, translation-first companion for PDF pages and selected passages. The full page translation is the default view; Word, Grammar, and IELTS are available from a compact tool menu and run as focused tasks.
-- Add a compact settings popover for target language, AI model, and per-request timeout, plus a resizable floating translation window anchored above Mimi.
+- Add a compact settings popover for target language, AI model, and per-request timeout, plus a resizable, collapsible reader companion docked beside the PDF page.
 - Retain the reader's resized translation-window dimensions when the bubble is closed and reopened.
 - Dock the resizable reading companion to the left side of the PDF reader and synchronize hover highlights between source text and sentence-aligned translation segments.
 - Render translation Markdown safely in the reader, including paragraphs, headings, emphasis, inline code, and lists.
