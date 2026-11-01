@@ -555,7 +555,6 @@ func TestProviderEndpointPreservesAbsoluteHTTPAndHTTPSURLs(t *testing.T) {
 	}
 }
 
-
 func TestGitHubTreeLoadsRootAndExpandedDirectoriesSeparately(t *testing.T) {
 	treeSHA := strings.Repeat("a", 40)
 	var requests int
