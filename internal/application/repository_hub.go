@@ -744,6 +744,14 @@ func (s *RepositoryHubService) RemoteCommits(ctx context.Context, repositoryID, 
 	defer zeroBytes(token)
 	return client.ListCommits(ctx, string(token), repo, ref, page)
 }
+func (s *RepositoryHubService) RemoteCommit(ctx context.Context, repositoryID, ref, sha string) (repositoryhub.Commit, error) {
+	repo, client, token, err := s.remoteContext(ctx, repositoryID)
+	if err != nil {
+		return repositoryhub.Commit{}, err
+	}
+	defer zeroBytes(token)
+	return client.GetCommit(ctx, string(token), repo, ref, sha)
+}
 func (s *RepositoryHubService) RemoteIssues(ctx context.Context, repositoryID, state string, page int) ([]repositoryhub.Issue, error) {
 	repo, client, token, err := s.remoteContext(ctx, repositoryID)
 	if err != nil {
