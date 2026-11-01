@@ -177,9 +177,9 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 		Items []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
-			SHA string `json:"sha"`
+			SHA  string `json:"sha"`
 		} `json:"items"`
-		Page int `json:"page"`
+		Page    int  `json:"page"`
 		HasMore bool `json:"has_more"`
 	}
 	if treeRec.Code != http.StatusOK || json.Unmarshal(treeRec.Body.Bytes(), &rootPage) != nil ||
@@ -194,9 +194,9 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 		Items []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
-			Size int64 `json:"size"`
+			Size int64  `json:"size"`
 		} `json:"items"`
-		Page int `json:"page"`
+		Page    int  `json:"page"`
 		HasMore bool `json:"has_more"`
 	}
 	if childRec.Code != http.StatusOK || json.Unmarshal(childRec.Body.Bytes(), &childPage) != nil ||
