@@ -419,6 +419,12 @@ export interface LocalGitBranch {
   commit_sha: string;
   current: boolean;
 }
+export interface LocalGitTag {
+  name: string;
+  target_sha: string;
+  annotated: boolean;
+  message?: string;
+}
 export interface LocalGitCommit {
   sha: string;
   author: string;
