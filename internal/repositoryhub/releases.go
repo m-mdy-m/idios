@@ -130,6 +130,159 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 
 	switch p.kind {
 	case domain.RepositoryProviderGitHub:
+		owner, name := splitFullPath(repo.FullPath)
+		var rows []struct {
+			ID              int64      `json:"id"`
+			TagName         string     `json:"tag_name"`
+			Name            string     `json:"name"`
+			TargetCommitish string     `json:"target_commitish"`
+			Body            string     `json:"body"`
+			Draft           bool       `json:"draft"`
+			Prerelease      bool       `json:"prerelease"`
+			CreatedAt       *time.Time `json:"created_at"`
+			PublishedAt     *time.Time `json:"published_at"`
+			HTMLURL         string     `json:"html_url"`
+			Assets          []struct {
+				ID                 int64  `json:"id"`
+				Name               string `json:"name"`
+				Label              string `json:"label"`
+				Size               int64  `json:"size"`
+				ContentType        string `json:"content_type"`
+				DownloadCount      int64  `json:"download_count"`
+				Digest             string `json:"digest"`
+				BrowserDownloadURL string `json:"browser_download_url"`
+			} `json:"assets"`
+		}
+		endpoint := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/releases"
+		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
+			return ReleasePage{}, err
+		}
+		for _, row := range rows {
+			name := row.Name
+			if name == "" {
+				name = row.TagName
+			}
+			state := "published"
+			if row.Draft {
+				state = "draft"
+			} else if row.Prerelease {
+				state = "prerelease"
+			}
+			item := Release{
+				ID: strconv.FormatInt(row.ID, 10), TagName: row.TagName, Name: name,
+				TargetCommitish: row.TargetCommitish, Body: row.Body,
+				Draft: boolPointer(row.Draft), Prerelease: boolPointer(row.Prerelease),
+				State: state, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt,
+				URL: providerDownloadURL(row.HTMLURL), AssetsAvailable: true,
+				Assets: make([]ReleaseAsset, 0, len(row.Assets)),
+			}
+			for _, asset := range row.Assets {
+				item.Assets = append(item.Assets, ReleaseAsset{
+					ID: strconv.FormatInt(asset.ID, 10), Name: asset.Name, Label: asset.Label,
+					Platform: releasePlatformFromName(asset.Name), PlatformSource: platformSource(asset.Name),
+					Size: int64Pointer(asset.Size), ContentType: asset.ContentType,
+					DownloadCount: int64Pointer(asset.DownloadCount), Digest: asset.Digest,
+					URL: providerDownloadURL(asset.BrowserDownloadURL),
+				})
+			}
+			result.Items = append(result.Items, item)
+		}
+		sort.SliceStable(result.Items, func(i, j int) bool {
+			left := result.Items[i].PublishedAt
+			if left == nil {
+				left = result.Items[i].CreatedAt
+			}
+			right := result.Items[j].PublishedAt
+			if right == nil {
+				right = result.Items[j].CreatedAt
+			}
+			if left == nil {
+				return false
+			}
+			if right == nil {
+				return true
+			}
+			return left.After(*right)
+		})
+		result.HasMore = len(rows) == pageSize
+		return result, nil
+	case domain.RepositoryProviderGitLab:
+		var rows []struct {
+			TagName         string     `json:"tag_name"`
+			Name            string     `json:"name"`
+			Description     string     `json:"description"`
+			CreatedAt       *time.Time `json:"created_at"`
+			ReleasedAt      *time.Time `json:"released_at"`
+			UpcomingRelease bool       `json:"upcoming_release"`
+			Assets          struct {
+				Links []struct {
+					ID              int64  `json:"id"`
+					Name            string `json:"name"`
+					URL             string `json:"url"`
+					DirectAssetPath string `json:"direct_asset_path"`
+					LinkType        string `json:"link_type"`
+				} `json:"links"`
+			} `json:"assets"`
+		}
+		endpoint := "projects/" + url.PathEscape(repo.ExternalID) + "/releases"
+		query.Set("order_by", "released_at")
+		query.Set("sort", "desc")
+		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
+			return ReleasePage{}, err
+		}
+		for _, row := range rows {
+			name := row.Name
+			if name == "" {
+				name = row.TagName
+			}
+			state := "published"
+			if row.UpcomingRelease {
+				state = "upcoming"
+			}
+			item := Release{
+				TagName: row.TagName, Name: name, Body: row.Description, State: state,
+				CreatedAt: row.CreatedAt, PublishedAt: row.ReleasedAt,
+				URL:             providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/-/releases/" + url.PathEscape(row.TagName)),
+				AssetsAvailable: true, Assets: make([]ReleaseAsset, 0, len(row.Assets.Links)),
+			}
+			for _, asset := range row.Assets.Links {
+				item.Assets = append(item.Assets, ReleaseAsset{
+					ID: strconv.FormatInt(asset.ID, 10), Name: asset.Name, Label: asset.LinkType,
+					Platform: releasePlatformFromName(asset.Name), PlatformSource: platformSource(asset.Name),
+					URL: providerDownloadURL(asset.URL),
+				})
+			}
+			result.Items = append(result.Items, item)
+		}
+		result.HasMore = len(rows) == pageSize
+		return result, nil
+
+	case domain.RepositoryProviderSourceForge:
+		result.Availability = FeatureAvailability{
+			Available: false, State: "unsupported",
+			Reason: "SourceForge Allura does not expose a provider-backed Releases API. Git tags remain available separately.",
+		}
+		return result, nil
+	default:
+		return ReleasePage{}, fmt.Errorf("%w: releases are not available for this provider", domain.ErrUnsupported)
+	}
+}
+
+// ListTags returns a bounded provider-backed tag page. It never uses the
+// local simulated RepositoryTag store.
+func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int, cursor string) (TagPage, error) {
+	page, pageSize, err := normalizeHubPage(page, pageSize)
+	if err != nil {
+		return TagPage{}, err
+	}
+	result := TagPage{
+		Items: make([]Tag, 0), Page: page,
+		Availability: FeatureAvailability{Available: true, State: "available"},
+	}
+	query := url.Values{"per_page": {strconv.Itoa(pageSize)}, "page": {strconv.Itoa(page)}}
+
+	switch p.kind {
+	case domain.RepositoryProviderGitHub:
 		if page > 1 && cursor == "" {
 			return TagPage{}, fmt.Errorf("%w: GitHub tag pagination requires the cursor from the previous page", domain.ErrInvalid)
 		}
@@ -248,122 +401,6 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 		}
 		return result, nil
 	case domain.RepositoryProviderGitLab:
-		var rows []struct {
-			TagName         string     `json:"tag_name"`
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			CreatedAt       *time.Time `json:"created_at"`
-			ReleasedAt      *time.Time `json:"released_at"`
-			UpcomingRelease bool       `json:"upcoming_release"`
-			Assets          struct {
-				Links []struct {
-					ID              int64  `json:"id"`
-					Name            string `json:"name"`
-					URL             string `json:"url"`
-					DirectAssetPath string `json:"direct_asset_path"`
-					LinkType        string `json:"link_type"`
-				} `json:"links"`
-			} `json:"assets"`
-		}
-		endpoint := "projects/" + url.PathEscape(repo.ExternalID) + "/releases"
-		query.Set("order_by", "released_at")
-		query.Set("sort", "desc")
-		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
-			return ReleasePage{}, err
-		}
-		for _, row := range rows {
-			name := row.Name
-			if name == "" {
-				name = row.TagName
-			}
-			state := "published"
-			if row.UpcomingRelease {
-				state = "upcoming"
-			}
-			item := Release{
-				TagName: row.TagName, Name: name, Body: row.Description, State: state,
-				CreatedAt: row.CreatedAt, PublishedAt: row.ReleasedAt,
-				URL:             providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/-/releases/" + url.PathEscape(row.TagName)),
-				AssetsAvailable: true, Assets: make([]ReleaseAsset, 0, len(row.Assets.Links)),
-			}
-			for _, asset := range row.Assets.Links {
-				item.Assets = append(item.Assets, ReleaseAsset{
-					ID: strconv.FormatInt(asset.ID, 10), Name: asset.Name, Label: asset.LinkType,
-					Platform: releasePlatformFromName(asset.Name), PlatformSource: platformSource(asset.Name),
-					URL: providerDownloadURL(asset.URL),
-				})
-			}
-			result.Items = append(result.Items, item)
-		}
-		result.HasMore = len(rows) == pageSize
-		return result, nil
-
-	case domain.RepositoryProviderSourceForge:
-		result.Availability = FeatureAvailability{
-			Available: false, State: "unsupported",
-			Reason: "SourceForge Allura does not expose a provider-backed Releases API. Git tags remain available separately.",
-		}
-		return result, nil
-	default:
-		return ReleasePage{}, fmt.Errorf("%w: releases are not available for this provider", domain.ErrUnsupported)
-	}
-}
-
-// ListTags returns a bounded provider-backed tag page. It never uses the
-// local simulated RepositoryTag store.
-func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int, cursor string) (TagPage, error) {
-	page, pageSize, err := normalizeHubPage(page, pageSize)
-	if err != nil {
-		return TagPage{}, err
-	}
-	result := TagPage{
-		Items: make([]Tag, 0), Page: page,
-		Availability: FeatureAvailability{Available: true, State: "available"},
-	}
-	query := url.Values{"per_page": {strconv.Itoa(pageSize)}, "page": {strconv.Itoa(page)}}
-
-	switch p.kind {
-	case domain.RepositoryProviderGitHub:
-		owner, name := splitFullPath(repo.FullPath)
-		endpoint := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/tags"
-		var rows []struct {
-			Name   string `json:"name"`
-			Commit struct {
-				SHA string `json:"sha"`
-			} `json:"commit"`
-		}
-		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
-			return TagPage{}, err
-		}
-		releaseLinks := make(map[string]githubTagRelease)
-		if len(rows) > 0 {
-			var releases []struct {
-				Name    string `json:"name"`
-				TagName string `json:"tag_name"`
-				HTMLURL string `json:"html_url"`
-			}
-			releaseQuery := url.Values{"per_page": {"100"}, "page": {"1"}}
-			if err := p.json(ctx, token, http.MethodGet, "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/releases", releaseQuery, nil, &releases); err != nil {
-				return TagPage{}, err
-			}
-			for _, release := range releases {
-				releaseLinks[release.TagName] = githubTagRelease{
-					Name: release.Name,
-					URL:  providerDownloadURL(release.HTMLURL),
-				}
-			}
-		}
-		for _, row := range rows {
-			tag, err := p.getGitHubTag(ctx, token, repo, owner, name, row.Name, row.Commit.SHA, releaseLinks)
-			if err != nil {
-				return TagPage{}, err
-			}
-			result.Items = append(result.Items, tag)
-		}
-		result.HasMore = len(rows) == pageSize
-		return result, nil
-
-	case domain.RepositoryProviderGitLab:
 		endpoint := "projects/" + url.PathEscape(repo.ExternalID) + "/repository/tags"
 		query.Set("order_by", "updated")
 		query.Set("sort", "desc")
@@ -416,14 +453,14 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 }
 
 type githubTagObject struct {
-	TypeName      string          \`json:"__typename"\`
-	OID           string          \`json:"oid"\`
-	CommittedDate *time.Time      \`json:"committedDate"\`
-	Message       string          \`json:"message"\`
+	TypeName      string          `json:"__typename"`
+	OID           string          `json:"oid"`
+	CommittedDate *time.Time      `json:"committedDate"`
+	Message       string          `json:"message"`
 	Tagger        struct {
-		Date *time.Time \`json:"date"\`
-	} \`json:"tagger"\`
-	Target *githubTagObject \`json:"target"\`
+		Date *time.Time `json:"date"`
+	} `json:"tagger"`
+	Target *githubTagObject `json:"target"`
 }
 
 func mapGitHubTagNode(repo RemoteRepository, name string, target githubTagObject) (Tag, error) {
