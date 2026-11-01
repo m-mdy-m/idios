@@ -260,6 +260,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const pageLearningCache = useRef<Map<string, ReaderTranslationData>>(new Map());
   const wordTranslationInFlight = useRef<Set<string>>(new Set());
   const translationPageInFlight = useRef('');
+  const translationPageJobByKey = useRef<Map<string, string>>(new Map());
   const [translationJobSnapshots, setTranslationJobSnapshots] = useState<TranslationJobSnapshot[]>(() => translationJobs.list());
   const translationJobSequence = useRef(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState('');
@@ -595,7 +596,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     if (!source) throw new Error('Select some readable text first.');
     if (!translationModel) throw new Error('Choose an AI model in the Reading Companion panel before translating.');
     const requestStartedAt = Date.now();
-    if (kind === 'page') setTranslationProgress((current) => ({ ...current, stage: 'reading-context', startedAt: current.startedAt || requestStartedAt }));
+    if (kind === 'page' && jobID && translationPageJobByKey.current.get(currentPageTranslationKey) === jobID && currentPageTranslationKeyRef.current === currentPageTranslationKey) {
+      setTranslationProgress((current) => ({ ...current, stage: 'reading-context', startedAt: current.startedAt || requestStartedAt }));
+    }
     const documentContext = await getTranslationContext(pageNumber);
     if (signal?.aborted) throw signal.reason ?? new DOMException('Translation cancelled.', 'AbortError');
     const glossary = new Map<string, { source: string; translation: string; meaning: string }>();
@@ -648,9 +651,13 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const cachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${kind}:${sourceIdentity}`;
     const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${sourceIdentity}`;
     const streamedPreviews: Array<ReaderTranslationData | undefined> = Array.from({ length: chunks.length });
+    const isCurrentPageJob = () => kind === 'page'
+      && Boolean(jobID)
+      && translationPageJobByKey.current.get(pageRequestKey) === jobID
+      && currentPageTranslationKeyRef.current === pageRequestKey;
     const updateProgress = (done: number, activePart = Math.min(chunks.length, done + 1)) => {
       if (jobID) translationJobs.progress(jobID, done, chunks.length);
-      if (kind === 'page' && translationPageInFlight.current === pageRequestKey) {
+      if (isCurrentPageJob() && translationPageInFlight.current === pageRequestKey) {
         setTranslationProgress((current) => ({
           ...current,
           done,
@@ -664,7 +671,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       }
     };
     const publishContiguousPartial = () => {
-      if (kind !== 'page' || translationPageInFlight.current !== pageRequestKey) return;
+      if (!isCurrentPageJob() || translationPageInFlight.current !== pageRequestKey) return;
       const prefix: ReaderTranslationData[] = [];
       for (let index = 0; index < results.length; index += 1) {
         const result = results[index];
@@ -723,7 +730,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
           documentContext: [currentPageContinuity, contextRequest.documentContext].filter(Boolean).join('\n\n').slice(0, 5200),
           priorGlossary: batchGlossary,
           onStream: (rawContent) => {
-            if (kind !== 'page' || translationPageInFlight.current !== pageRequestKey) return;
+            if (!isCurrentPageJob() || translationPageInFlight.current !== pageRequestKey || signal?.aborted) return;
             const preview = extractPartialReaderTranslation(rawContent);
             if (preview === null || !preview.trim()) return;
             streamedPreviews[index] = {
@@ -827,6 +834,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
     }
     pageTranslationCache.current.delete(currentPageTranslationKey);
+    translationPageJobByKey.current.delete(currentPageTranslationKey);
     const chunkCachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:`;
     const chunkCachePrefixes = ['page', 'word', 'grammar', 'ielts'].map((kind) => `${chunkCachePrefix}${kind}:${translationSourceIdentity(currentPageText)}:`);
     for (const key of translationChunkCache.current.keys()) {
@@ -896,6 +904,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }
     const jobID = `shelf-page-${bookID}-${pageNumber}-${++translationJobSequence.current}`;
     const signal = translationJobs.start({ id: jobID, bookID, pageNumber, totalParts: 0 });
+    translationPageJobByKey.current.set(key, jobID);
     translationPageInFlight.current = key;
     setPageTranslation(null);
     setPartialPageTranslation(null);
@@ -904,6 +913,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setTranslationProgress({ done: 0, total: 0, startedAt: Date.now(), stage: 'reading-context', activePart: 0, receivedCharacters: 0 });
     setTranslationError('');
     void requestTranslation(currentPageText, 'page', signal, jobID).then((translated) => {
+      if (signal.aborted || translationPageJobByKey.current.get(key) !== jobID) return;
       pageTranslationCache.current.set(key, translated);
       if (pageTranslationCache.current.size > 40) {
         const oldestKey = pageTranslationCache.current.keys().next().value;
@@ -918,12 +928,15 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }).catch((cause) => {
       if (signal.aborted) translationJobs.cancel(jobID);
       else translationJobs.fail(jobID, cause instanceof Error ? cause.message : 'Translation failed.');
-      if (currentPageTranslationKeyRef.current === key && !signal.aborted) {
+      if (currentPageTranslationKeyRef.current === key && translationPageJobByKey.current.get(key) === jobID && !signal.aborted) {
         setTranslationError(cause instanceof Error ? cause.message : 'This page could not be translated.');
       }
     }).finally(() => {
-      if (translationPageInFlight.current === key) translationPageInFlight.current = '';
-      if (currentPageTranslationKeyRef.current === key) setPageTranslationBusy(false);
+      if (translationPageJobByKey.current.get(key) === jobID) {
+        translationPageJobByKey.current.delete(key);
+        if (translationPageInFlight.current === key) translationPageInFlight.current = '';
+        if (currentPageTranslationKeyRef.current === key) setPageTranslationBusy(false);
+      }
     });
     // No cleanup cancellation: hiding the companion does not cancel the background job.
   }, [bookID, currentPageText, currentPageTranslationKey, pageNumber, pageTranslation, pdf, requestTranslation, translationModel, translationOpen, translationPageKey, translationTargetLanguage, translationRevision]);
