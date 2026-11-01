@@ -7,7 +7,7 @@ import {
 import { api } from '@/lib/api';
 import type {
   HubBranch, HubChangeRequest, HubCollection, HubCommit, HubConnection, HubDiscoveredRepository, HubFile,
-  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
+  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, HubTreePage, Project,
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 import './RepositoryHubPanel.css';
@@ -142,6 +142,9 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [branches, setBranches] = useState<HubBranch[]>([]);
   const [branch, setBranch] = useState('');
   const [tree, setTree] = useState<HubTreeEntry[]>([]);
+  const [treePage, setTreePage] = useState(1);
+  const [treeHasMore, setTreeHasMore] = useState(false);
+  const [treeLoading, setTreeLoading] = useState(false);
   const [file, setFile] = useState<HubFile | null>(null);
   const [filePath, setFilePath] = useState('');
   const [fileContent, setFileContent] = useState('');
@@ -290,10 +293,18 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   }, [standalone, selected?.id, tab, branch]);
 
   useEffect(() => {
-    if (!selected || tab !== 'Code' || !branch) { setTree([]); return; }
+    if (!selected || tab !== 'Code' || !branch) {
+      setTree([]); setTreePage(1); setTreeHasMore(false); setTreeLoading(false);
+      return;
+    }
     let active = true;
+    setTree([]); setTreePage(1); setTreeHasMore(false); setTreeLoading(true);
     setFile(null); setFilePath(''); setFileContent(''); setFileOriginalContent(''); setShowDiffPreview(false);
-    void api.hubTree(selected.id, branch).then((items) => { if (active) setTree(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
+    void api.hubTree(selected.id, branch).then((result) => {
+      if (!active) return;
+      setTree(result.items); setTreePage(result.page); setTreeHasMore(result.has_more);
+    }).catch((err) => { if (active) setError(messageFrom(err)); })
+      .finally(() => { if (active) setTreeLoading(false); });
     return () => { active = false; };
   }, [selected?.id, tab, branch]);
 
@@ -539,6 +550,24 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     finally { setFileLoading(false); }
   }
 
+  async function loadMoreRemoteTree() {
+    if (!selected || !branch || !treeHasMore || treeLoading) return;
+    const repositoryID = selected.id;
+    const currentBranch = branch;
+    setTreeLoading(true);
+    try {
+      const result = await api.hubTree(repositoryID, currentBranch, '', '', treePage + 1);
+      if (selected?.id !== repositoryID || branch !== currentBranch) return;
+      setTree((current) => [...current, ...result.items]);
+      setTreePage(result.page);
+      setTreeHasMore(result.has_more);
+    } catch (err) {
+      setError(messageFrom(err));
+    } finally {
+      setTreeLoading(false);
+    }
+  }
+
   async function saveRemoteFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !branch || !filePath.trim() || !fileCommitMessage.trim()) return;
@@ -548,7 +577,8 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
         expected_sha: file?.sha || file?.last_commit_id, create_only: fileCreateOnly || !file,
       });
       setFile(result); setFileOriginalContent(result.content); setShowDiffPreview(false); setFileCreateOnly(false); setFileCommitMessage('');
-      setTree(await api.hubTree(selected.id, branch));
+      const rootPage = await api.hubTree(selected.id, branch);
+      setTree(rootPage.items); setTreePage(rootPage.page); setTreeHasMore(rootPage.has_more);
     }, 'Remote file committed successfully.');
   }
 
@@ -835,7 +865,17 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
           {tab === 'Code' && supports('code.read') && <div className="hub-code-layout">
             <div className="hub-code-tree">
               <div className="hub-detail-toolbar"><strong>Remote tree</strong><Field label="Branch"><select value={branch} onChange={(event) => setBranch(event.target.value)}>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? ' · default' : ''}</option>)}</select></Field></div>
-              <RemoteTreeView tree={tree} selectedPath={filePath} onOpenFile={(path) => void openRemoteFile(path)} emptyMessage={branches.length ? "No files returned for this branch." : "This provider does not expose a REST tree browser for this repository."} />
+              <RemoteTreeView
+                key={`${selected.id}:${branch}`}
+                tree={tree}
+                selectedPath={filePath}
+                onOpenFile={(path) => void openRemoteFile(path)}
+                emptyMessage={branches.length ? "No files returned for this branch." : "This provider does not expose a REST tree browser for this repository."}
+                loadChildren={(entry, page) => api.hubTree(selected.id, branch, entry.path, entry.sha ?? '', page)}
+                rootHasMore={treeHasMore}
+                rootLoading={treeLoading}
+                onLoadMoreRoot={() => void loadMoreRemoteTree()}
+              />
             </div>
             <div className="hub-file-editor">
               <div className="hub-detail-toolbar"><strong>{file?.path || (fileCreateOnly ? 'New remote file' : 'Remote file viewer')}</strong><div className="hub-file-toolbar-actions">{fileLoading && <span>Loading…</span>}<Button type="button" variant="secondary" disabled={!supports('code.write') || busy} onClick={() => { setFile(null); setFilePath(''); setFileContent(''); setFileOriginalContent(''); setShowDiffPreview(false); setFileCreateOnly(true); setFileCommitMessage(''); }}><Plus size={13}/> New file</Button></div></div>

@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, FileCode2, FileText, Folder, FolderOpen, Search,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { HubFile, HubRepository, HubTreeEntry } from '@/types/idios';
+import type { HubFile, HubRepository, HubTreeEntry, HubTreePage } from '@/types/idios';
 import './RepositoryBrowser.css';
 
 type TreeNode = {
@@ -11,13 +11,19 @@ type TreeNode = {
   name: string;
   type: 'tree' | 'blob';
   size: number;
+  sha?: string;
   children: TreeNode[];
+  loaded: boolean;
+  loading: boolean;
+  page: number;
+  hasMore: boolean;
+  error: string;
+  errorPage: number;
 };
 
 function buildTree(entries: HubTreeEntry[]): TreeNode[] {
   const roots: TreeNode[] = [];
   const directories = new Map<string, TreeNode>();
-
   const ordered = [...entries].filter((entry) => entry.path.trim()).sort((a, b) =>
     a.path.split('/').length - b.path.split('/').length || a.path.localeCompare(b.path));
 
@@ -41,12 +47,21 @@ function buildTree(entries: HubTreeEntry[]): TreeNode[] {
           name,
           type: isFile ? 'blob' : 'tree',
           size: isFile ? entry.size : 0,
+          sha: isLast ? entry.sha : undefined,
           children: [],
+          loaded: false,
+          loading: false,
+          page: 0,
+          hasMore: false,
+          error: '',
+          errorPage: 0,
         };
         siblings.push(node);
         if (!isFile) directories.set(path, node);
       } else if (isFile) {
         node.size = entry.size;
+      } else if (isLast && entry.sha) {
+        node.sha = entry.sha;
       }
       if (!isFile) siblings = node.children;
       parentPath = path;
@@ -62,6 +77,42 @@ function buildTree(entries: HubTreeEntry[]): TreeNode[] {
   };
   sortNodes(roots);
   return roots;
+}
+
+function findTreeNode(nodes: TreeNode[], path: string): TreeNode | undefined {
+  for (const node of nodes) {
+    if (node.path === path) return node;
+    const child = findTreeNode(node.children, path);
+    if (child) return child;
+  }
+  return undefined;
+}
+
+function updateTreeNode(nodes: TreeNode[], path: string, update: (node: TreeNode) => TreeNode): TreeNode[] {
+  return nodes.map((node) => node.path === path
+    ? update(node)
+    : { ...node, children: updateTreeNode(node.children, path, update) });
+}
+
+function mergeTreeNodes(current: TreeNode[], incoming: TreeNode[]): TreeNode[] {
+  const merged = new Map(current.map((node) => [node.path, node]));
+  for (const node of incoming) {
+    const existing = merged.get(node.path);
+    merged.set(node.path, existing ? {
+      ...node,
+      children: existing.children,
+      loaded: existing.loaded,
+      loading: existing.loading,
+      page: existing.page,
+      hasMore: existing.hasMore,
+      error: existing.error,
+      errorPage: existing.errorPage,
+    } : node);
+  }
+  return [...merged.values()].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'tree' ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
 }
 
 function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
@@ -85,29 +136,70 @@ export function RemoteTreeView({
   selectedPath,
   onOpenFile,
   emptyMessage,
+  loadChildren,
+  rootHasMore,
+  rootLoading,
+  onLoadMoreRoot,
 }: {
   tree: HubTreeEntry[];
   selectedPath: string;
   onOpenFile: (path: string) => void;
   emptyMessage: string;
+  loadChildren: (entry: HubTreeEntry, page: number) => Promise<HubTreePage>;
+  rootHasMore: boolean;
+  rootLoading: boolean;
+  onLoadMoreRoot: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const nodes = useMemo(() => buildTree(tree), [tree]);
+  const [nodes, setNodes] = useState<TreeNode[]>(() => buildTree(tree));
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim().toLowerCase();
   const visibleNodes = useMemo(() => filterTree(nodes, normalizedQuery), [nodes, normalizedQuery]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    setExpanded(new Set(nodes.filter((node) => node.type === 'tree').map((node) => node.path)));
-  }, [nodes]);
+    setNodes((current) => mergeTreeNodes(current, buildTree(tree)));
+  }, [tree]);
 
-  function toggle(path: string) {
+  async function loadDirectoryPage(node: TreeNode, page: number) {
+    setNodes((current) => updateTreeNode(current, node.path, (item) => ({
+      ...item, loading: true, error: '', errorPage: page,
+    })));
+    try {
+      const result = await loadChildren({
+        path: node.path, name: node.name, type: 'tree', size: node.size, sha: node.sha,
+      }, page);
+      const responseTree = buildTree(result.items);
+      const parent = findTreeNode(responseTree, node.path);
+      const incoming = parent?.children ?? [];
+      setNodes((current) => updateTreeNode(current, node.path, (item) => ({
+        ...item,
+        children: page === 1 ? incoming : mergeTreeNodes(item.children, incoming),
+        loaded: true,
+        loading: false,
+        page: result.page,
+        hasMore: result.has_more,
+        error: '',
+        errorPage: 0,
+      })));
+    } catch (cause) {
+      setNodes((current) => updateTreeNode(current, node.path, (item) => ({
+        ...item,
+        loading: false,
+        error: cause instanceof Error ? cause.message : 'Could not load this directory.',
+        errorPage: page,
+      })));
+    }
+  }
+
+  function toggleDirectory(node: TreeNode) {
+    const isOpen = expanded.has(node.path);
     setExpanded((current) => {
       const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
+      if (isOpen) next.delete(node.path);
+      else next.add(node.path);
       return next;
     });
+    if (!isOpen && !node.loaded && !node.loading) void loadDirectoryPage(node, 1);
   }
 
   function expandTo(path: string) {
@@ -132,11 +224,13 @@ export function RemoteTreeView({
         <div className="hub-tree-node-group" key={node.path}>
           <button
             type="button"
+            role="treeitem"
             className={`hub-tree-node ${selected ? 'is-selected' : ''} ${isDirectory ? 'is-directory' : 'is-file'}`}
             style={{ paddingInlineStart: `${10 + depth * 15}px` }}
-            onClick={() => isDirectory ? toggle(node.path) : onOpenFile(node.path)}
+            onClick={() => isDirectory ? toggleDirectory(node) : onOpenFile(node.path)}
             aria-expanded={isDirectory ? isOpen : undefined}
             aria-current={selected ? 'page' : undefined}
+            aria-busy={isDirectory ? node.loading : undefined}
             title={node.path}
           >
             {isDirectory
@@ -150,7 +244,29 @@ export function RemoteTreeView({
             <span className="hub-tree-node__name">{node.name}</span>
             {!isDirectory && node.size > 0 && <small>{formatSize(node.size)}</small>}
           </button>
-          {isDirectory && isOpen && node.children.length > 0 && renderNodes(node.children, depth + 1)}
+          {isDirectory && isOpen && (
+            <div role="group" className="hub-tree-node-children">
+              {node.loading && <p className="hub-tree-node-state">Loading directory…</p>}
+              {node.error && (
+                <div className="hub-tree-node-error">
+                  <span>{node.error}</span>
+                  <button type="button" onClick={() => void loadDirectoryPage(node, node.errorPage || 1)}>Retry</button>
+                </div>
+              )}
+              {node.children.length > 0 && renderNodes(node.children, depth + 1)}
+              {node.loaded && !node.children.length && !node.error && <p className="hub-tree-node-state">This folder is empty.</p>}
+              {node.hasMore && !node.loading && (
+                <button
+                  type="button"
+                  className="hub-tree-load-more"
+                  onClick={() => void loadDirectoryPage(node, node.page + 1)}
+                  style={{ paddingInlineStart: `${25 + depth * 15}px` }}
+                >
+                  Load more entries
+                </button>
+              )}
+            </div>
+          )}
         </div>
       );
     });
@@ -165,15 +281,14 @@ export function RemoteTreeView({
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search files and folders"
-          aria-label="Search remote files and folders"
+          placeholder="Search loaded paths"
+          aria-label="Search loaded repository paths"
         />
       </label>
+      <p className="hub-tree-search-hint">Search covers loaded paths. Expand folders to fetch their contents.</p>
       {selectedPath && (
         <nav className="hub-tree-breadcrumbs" aria-label="Selected file path">
-          <button type="button" onClick={() => setExpanded(new Set(nodes.filter((node) => node.type === 'tree').map((node) => node.path)))}>
-            Repository
-          </button>
+          <button type="button" onClick={() => setExpanded(new Set())}>Repository</button>
           {crumbs.map((part, index) => {
             const path = crumbs.slice(0, index + 1).join('/');
             const isLast = index === crumbs.length - 1;
@@ -187,11 +302,17 @@ export function RemoteTreeView({
         </nav>
       )}
       <div className="hub-tree-list" role="tree" aria-label="Remote repository files">
+        {rootLoading && !nodes.length && <p className="hub-tree-empty">Loading repository tree…</p>}
         {renderNodes(visibleNodes)}
-        {!visibleNodes.length && (
-          <p className="hub-tree-empty">{normalizedQuery ? 'No paths match this search.' : emptyMessage}</p>
+        {!rootLoading && !visibleNodes.length && (
+          <p className="hub-tree-empty">{normalizedQuery ? 'No loaded paths match this search.' : emptyMessage}</p>
         )}
       </div>
+      {rootHasMore && (
+        <button type="button" className="hub-tree-load-more hub-tree-load-more--root" onClick={onLoadMoreRoot} disabled={rootLoading}>
+          {rootLoading ? 'Loading repository entries…' : 'Load more repository entries'}
+        </button>
+      )}
     </div>
   );
 }
@@ -272,27 +393,19 @@ function renderBlocks(markdown: string, linkBase: string, imageBase: string): Re
   while (index < lines.length) {
     const line = lines[index];
     if (!line.trim()) { index += 1; continue; }
-
     if (/^\x60{3}/.test(line.trim())) {
       const code: string[] = [];
       index += 1;
-      while (index < lines.length && !/^\x60{3}/.test(lines[index].trim())) {
-        code.push(lines[index]);
-        index += 1;
-      }
+      while (index < lines.length && !/^\x60{3}/.test(lines[index].trim())) { code.push(lines[index]); index += 1; }
       if (index < lines.length) index += 1;
       result.push(<pre key={`code-${index}`}><code>{code.join('\n')}</code></pre>);
       continue;
     }
-
     if (index + 1 < lines.length && line.includes('|') && isTableDivider(lines[index + 1])) {
       const headers = tableCells(line);
       index += 2;
       const rows: string[][] = [];
-      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
-        rows.push(tableCells(lines[index]));
-        index += 1;
-      }
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) { rows.push(tableCells(lines[index])); index += 1; }
       result.push(
         <div className="hub-readme-table-wrap" key={`table-${index}`}>
           <table className="hub-readme-table">
@@ -305,7 +418,6 @@ function renderBlocks(markdown: string, linkBase: string, imageBase: string): Re
       );
       continue;
     }
-
     const heading = /^(#{1,6})\s+(.*)$/.exec(line.trim());
     if (heading) {
       const level = heading[1].length;
@@ -319,49 +431,28 @@ function renderBlocks(markdown: string, linkBase: string, imageBase: string): Re
       index += 1;
       continue;
     }
-
-    if (/^\s*(---+|\*\*\*|___)\s*$/.test(line)) {
-      result.push(<hr key={index} />);
-      index += 1;
-      continue;
-    }
-
+    if (/^\s*(---+|\*\*\*|___)\s*$/.test(line)) { result.push(<hr key={index} />); index += 1; continue; }
     if (/^>\s?/.test(line)) {
       const quote: string[] = [];
-      while (index < lines.length && /^>\s?/.test(lines[index])) {
-        quote.push(lines[index].replace(/^>\s?/, ''));
-        index += 1;
-      }
+      while (index < lines.length && /^>\s?/.test(lines[index])) { quote.push(lines[index].replace(/^>\s?/, '')); index += 1; }
       result.push(<blockquote key={`quote-${index}`}>{quote.map((part, partIndex) => <p key={partIndex}>{inline(part)}</p>)}</blockquote>);
       continue;
     }
-
     if (/^\s*[-*+]\s+/.test(line)) {
       const items: string[] = [];
-      while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*[-*+]\s+/, ''));
-        index += 1;
-      }
+      while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index])) { items.push(lines[index].replace(/^\s*[-*+]\s+/, '')); index += 1; }
       result.push(<ul key={`ul-${index}`}>{items.map((item, itemIndex) => <li key={itemIndex}>{inline(item)}</li>)}</ul>);
       continue;
     }
-
     if (/^\s*\d+\.\s+/.test(line)) {
       const items: string[] = [];
-      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*\d+\.\s+/, ''));
-        index += 1;
-      }
+      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) { items.push(lines[index].replace(/^\s*\d+\.\s+/, '')); index += 1; }
       result.push(<ol key={`ol-${index}`}>{items.map((item, itemIndex) => <li key={itemIndex}>{inline(item)}</li>)}</ol>);
       continue;
     }
-
     const paragraph = [line.trim()];
     index += 1;
-    while (index < lines.length && !startsBlock(lines, index)) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
+    while (index < lines.length && !startsBlock(lines, index)) { paragraph.push(lines[index].trim()); index += 1; }
     result.push(<p key={`p-${index}`}>{inline(paragraph.join(' '))}</p>);
   }
   return result;
@@ -414,10 +505,17 @@ export function RemoteReadmePreview({ repository }: { repository: HubRepository 
     const branch = repository.default_branch || 'main';
     void (async () => {
       try {
-        const tree = await api.hubTree(repository.id, branch);
-        const candidates = readmeCandidates(tree);
+        let page = await api.hubTree(repository.id, branch);
+        const rootEntries = [...page.items];
+        while (page.has_more && page.page < 20) {
+          page = await api.hubTree(repository.id, branch, '', '', page.page + 1);
+          rootEntries.push(...page.items);
+        }
+        const candidates = readmeCandidates(rootEntries);
         if (!candidates.length) {
-          if (active) setError('No root-level README file was found on the default branch.');
+          if (active) setError(page.has_more
+            ? 'No README was found in the first 2,000 root entries. Open the Code view to continue browsing.'
+            : 'No root-level README file was found on the default branch.');
           return;
         }
         let lastError = '';

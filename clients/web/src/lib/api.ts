@@ -19,7 +19,7 @@ import type {
   Branch, CompletionRecord, Concept, Label, Milestone, PullRequest, ProtocolCatalog, ProtocolOption, LogPayload, Quote, RepositorySetting, RepositoryFile, RepositoryTag, RepositoryTagComparison, ScheduledJob, WorkspacePin, UpdateCheck, UpdateStatus, FeatureCatalog, MonitoringSnapshot, ShelfState, ShelfBook, ShelfBookRelation, ShelfAsk, ShelfAnnotation, ShelfAnnotationRect, ShelfReadingSession,
   HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
   LocalGitStatus, LocalGitBranch, LocalGitCommit, LocalGitTag,
-  HubDiscoveryResult, HubBranch, HubTreeEntry, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
+  HubDiscoveryResult, HubBranch, HubTreeEntry, HubTreePage, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
 
@@ -251,7 +251,13 @@ export const api = {
   createHubRepositoryRelation: (ref: string, body: { target_repository_id: string; relation_type: string; description?: string }) => request<HubRepositoryRelation>(`/api/hub/repositories/${encodeURIComponent(ref)}/relations`, json('POST', body)),
   deleteHubRepositoryRelation: (ref: string) => request<{ deleted: boolean }>(`/api/hub/relations/${encodeURIComponent(ref)}`, json('DELETE')),
   hubBranches: (ref: string) => request<HubBranch[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/branches`),
-  hubTree: (ref: string, branch = '') => request<HubTreeEntry[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/tree?${new URLSearchParams(branch ? { ref: branch } : {})}`),
+  hubTree: (ref: string, branch = '', path = '', treeSHA = '', page = 1) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (branch) params.set('ref', branch);
+    if (path) params.set('path', path);
+    if (treeSHA) params.set('tree_sha', treeSHA);
+    return request<HubTreePage>(`/api/hub/repositories/${encodeURIComponent(ref)}/tree?${params}`);
+  },
   hubFile: (ref: string, path: string, branch = '') => {
     const params = new URLSearchParams({ path }); if (branch) params.set('ref', branch);
     return request<HubFile>(`/api/hub/repositories/${encodeURIComponent(ref)}/file?${params}`);
