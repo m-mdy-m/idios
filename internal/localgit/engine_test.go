@@ -1,0 +1,79 @@
+package localgit
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestCLIEngineOfflineWorkflow(t *testing.T) {
+	engine := NewCLIEngine()
+	if !engine.Availability().Available {
+		t.Skip("Git CLI is not installed in this test environment")
+	}
+
+	ctx := context.Background()
+	repository := filepath.Join(t.TempDir(), "working-copy")
+	if err := engine.Init(ctx, repository, "main"); err != nil {
+		t.Fatalf("initialize repository: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repository, "README.md"), []byte("# Local first\n"), 0o600); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+	if err := engine.Stage(ctx, repository, []string{"README.md"}); err != nil {
+		t.Fatalf("stage file: %v", err)
+	}
+	status, err := engine.Status(ctx, repository)
+	if err != nil {
+		t.Fatalf("read staged status: %v", err)
+	}
+	if !status.Initialized || status.Staged != 1 || status.Clean {
+		t.Fatalf("unexpected staged status: %+v", status)
+	}
+	commit, err := engine.Commit(ctx, repository, "Add local README", "IDIOS Test", "idios-test@example.invalid")
+	if err != nil {
+		t.Fatalf("create local commit: %v", err)
+	}
+	if commit.SHA == "" || commit.AuthorEmail != "idios-test@example.invalid" {
+		t.Fatalf("commit provenance was not recorded: %+v", commit)
+	}
+	if err := engine.CreateBranch(ctx, repository, "feature/offline-work", "main"); err != nil {
+		t.Fatalf("create branch: %v", err)
+	}
+	branches, err := engine.Branches(ctx, repository)
+	if err != nil {
+		t.Fatalf("list branches: %v", err)
+	}
+	if len(branches) != 2 || !branches[0].Current && !branches[1].Current {
+		t.Fatalf("expected two branches and one checked out: %+v", branches)
+	}
+	if err := engine.SwitchBranch(ctx, repository, "main"); err != nil {
+		t.Fatalf("switch branch: %v", err)
+	}
+	status, err = engine.Status(ctx, repository)
+	if err != nil {
+		t.Fatalf("read clean status: %v", err)
+	}
+	if !status.Clean || status.Branch != "main" {
+		t.Fatalf("expected clean main branch, got %+v", status)
+	}
+	log, err := engine.Log(ctx, repository, 5)
+	if err != nil {
+		t.Fatalf("read commit history: %v", err)
+	}
+	if len(log) != 1 || log[0].SHA != commit.SHA {
+		t.Fatalf("unexpected local history: %+v", log)
+	}
+}
+
+func TestSafeRelativePathRejectsTraversal(t *testing.T) {
+	for _, value := range []string{"../secret", "folder/../../secret", "/etc/passwd", ""} {
+		if _, err := safeRelativePath(value); err == nil {
+			t.Errorf("expected %q to be rejected", value)
+		}
+	}
+	if got, err := safeRelativePath("src/main.go"); err != nil || got != "src/main.go" {
+		t.Fatalf("valid relative path rejected: %q, %v", got, err)
+	}
+}
