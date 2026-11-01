@@ -345,6 +345,15 @@ func (s *Server) getHubCommits(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, items)
 }
+
+func (s *Server) getHubCommit(w http.ResponseWriter, r *http.Request) {
+	item, err := s.app.RemoteCommit(requestContext(r), r.PathValue("ref"), r.URL.Query().Get("ref"), r.PathValue("sha"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
 func (s *Server) getHubIssues(w http.ResponseWriter, r *http.Request) {
 	items, err := s.app.RemoteIssues(requestContext(r), r.PathValue("ref"), r.URL.Query().Get("state"), queryInt(r, "page", 1, 10000))
 	if err != nil {
