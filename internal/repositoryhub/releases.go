@@ -296,8 +296,26 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
 			return TagPage{}, err
 		}
+		releaseLinks := make(map[string]githubTagRelease)
+		if len(rows) > 0 {
+			var releases []struct {
+				Name    string `json:"name"`
+				TagName string `json:"tag_name"`
+				HTMLURL string `json:"html_url"`
+			}
+			releaseQuery := url.Values{"per_page": {"100"}, "page": {"1"}}
+			if err := p.json(ctx, token, http.MethodGet, "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/releases", releaseQuery, nil, &releases); err != nil {
+				return TagPage{}, err
+			}
+			for _, release := range releases {
+				releaseLinks[release.TagName] = githubTagRelease{
+					Name: release.Name,
+					URL:  providerDownloadURL(release.HTMLURL),
+				}
+			}
+		}
 		for _, row := range rows {
-			tag, err := p.getGitHubTag(ctx, token, repo, owner, name, row.Name, row.Commit.SHA)
+			tag, err := p.getGitHubTag(ctx, token, repo, owner, name, row.Name, row.Commit.SHA, releaseLinks)
 			if err != nil {
 				return TagPage{}, err
 			}
@@ -359,7 +377,12 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 	}
 }
 
-func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRepository, owner, repository, name, fallbackSHA string) (Tag, error) {
+type githubTagRelease struct {
+	Name string
+	URL  string
+}
+
+func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRepository, owner, repository, name, fallbackSHA string, releaseLinks map[string]githubTagRelease) (Tag, error) {
 	if !validRemoteTagName(name) {
 		return Tag{}, fmt.Errorf("%w: provider returned an invalid Git tag name", domain.ErrUnavailable)
 	}
@@ -424,19 +447,12 @@ func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRe
 	default:
 		item.Kind = "unknown"
 	}
-	var release struct {
-		Name    string `json:"name"`
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
-	}
-	if err := p.json(ctx, token, http.MethodGet, base+"/releases/tags/"+url.PathEscape(name), nil, nil, &release); err == nil {
+	if release, ok := releaseLinks[name]; ok {
 		item.ReleaseName = release.Name
 		if item.ReleaseName == "" {
-			item.ReleaseName = release.TagName
+			item.ReleaseName = name
 		}
-		item.ReleaseURL = providerDownloadURL(release.HTMLURL)
-	} else if !errors.Is(err, domain.ErrNotFound) {
-		return Tag{}, err
+		item.ReleaseURL = release.URL
 	}
 	return item, nil
 }
