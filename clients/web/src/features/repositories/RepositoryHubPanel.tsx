@@ -171,6 +171,9 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [latestRelease, setLatestRelease] = useState<HubRelease | null>(null);
   const [latestReleaseLoading, setLatestReleaseLoading] = useState(false);
   const [latestReleaseAvailability, setLatestReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [latestTag, setLatestTag] = useState<HubTag | null>(null);
+  const [latestTagLoading, setLatestTagLoading] = useState(false);
+  const [latestTagAvailability, setLatestTagAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
   const [releases, setReleases] = useState<HubRelease[]>([]);
   const [releasePage, setReleasePage] = useState(1);
   const [releaseHasMore, setReleaseHasMore] = useState(false);
@@ -301,6 +304,31 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     }).catch((err) => {
       if (active) setLatestReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
     }).finally(() => { if (active) setLatestReleaseLoading(false); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.capabilities]);
+
+  useEffect(() => {
+    if (!selected) {
+      setLatestTag(null);
+      setLatestTagAvailability(null);
+      setLatestTagLoading(false);
+      return;
+    }
+    let active = true;
+    setLatestTag(null);
+    setLatestTagAvailability(null);
+    if (!selected.capabilities.includes('tags.read')) {
+      setLatestTagLoading(false);
+      return () => { active = false; };
+    }
+    setLatestTagLoading(true);
+    void api.hubTags(selected.id, 1, 1, '').then((page) => {
+      if (!active) return;
+      setLatestTag(page.items[0] ?? null);
+      setLatestTagAvailability(page.availability);
+    }).catch((err) => {
+      if (active) setLatestTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    }).finally(() => { if (active) setLatestTagLoading(false); });
     return () => { active = false; };
   }, [selected?.id, selected?.capabilities]);
 
@@ -1056,6 +1084,33 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                       : latestReleaseLoading
                         ? <p className="hub-muted">Loading latest release…</p>
                         : <p className="hub-muted">No published releases were returned.</p>}
+            </section>
+            <section className="hub-latest-release">
+              <div className="hub-detail-toolbar">
+                <div><strong>Latest tag</strong><p className="hub-muted">The newest Git tag is fetched independently from the full tag history.</p></div>
+                <Button type="button" variant="ghost" disabled={!selected.capabilities.includes('tags.read')} onClick={() => setTab('Tags')}>Tag history <ArrowUpRight size={12}/></Button>
+              </div>
+              {!selected.capabilities.includes('tags.read')
+                ? <p className="hub-muted">This provider does not expose repository tags.</p>
+                : latestTag
+                  ? <article className="hub-latest-release__item">
+                      <div><strong>{latestTag.name}</strong><span>{latestTag.kind} tag · {latestTag.target_sha ? latestTag.target_sha.slice(0, 12) : 'target unavailable'}</span></div>
+                      <div className="hub-latest-release__meta">
+                        <Badge>{latestTag.kind}</Badge>
+                        <small>{latestTag.created_at ? new Date(latestTag.created_at).toLocaleDateString() : latestTag.commit_created_at ? new Date(latestTag.commit_created_at).toLocaleDateString() : 'Date not reported'}</small>
+                      </div>
+                      {latestTag.release_name && (latestTag.release_url
+                        ? <a href={latestTag.release_url} target="_blank" rel="noreferrer">Release: {latestTag.release_name} <ArrowUpRight size={12}/></a>
+                        : <small>Release: {latestTag.release_name}</small>)}
+                      {latestTag.url && <a href={latestTag.url} target="_blank" rel="noreferrer">Browse tag <ArrowUpRight size={12}/></a>}
+                    </article>
+                  : latestTagAvailability?.state === 'unsupported'
+                    ? <p className="hub-muted">{latestTagAvailability.reason}</p>
+                    : latestTagAvailability?.state === 'error'
+                      ? <p className="hub-muted">{latestTagAvailability.reason || 'Latest tag could not be loaded.'}</p>
+                      : latestTagLoading
+                        ? <p className="hub-muted">Loading latest tag…</p>
+                        : <p className="hub-muted">No tags were returned for this repository.</p>}
             </section>
             <section className="hub-overview-description">
               <div><span>Description</span><p>{selected.description || 'No description provided by the provider.'}</p></div>
