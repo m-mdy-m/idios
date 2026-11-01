@@ -935,7 +935,7 @@ func TestDiscussionReviewExcludesFailedEmptyTurns(t *testing.T) {
 		{AgentID: "tutor", AgentName: "Tutor", Status: "failed", Error: &Error{Code: "rejected", Message: "empty"}},
 		{AgentID: "reader", AgentName: "Reader", Status: "completed", Content: "The passage makes a narrow claim.", Warnings: []string{"This contribution lacks an exact source marker; treat its textual claim as unverified."}},
 	}
-	got := discussionReviewMessages(messages, AgentDefinition{Name: "Reviewer"}, 1, false, false, turns)
+	got := discussionReviewMessages(messages, AgentDefinition{Name: "Reviewer"}, 1, turns, false, false)
 	joined := strings.Join([]string{got[len(got)-1].Content}, "\n")
 	if strings.Contains(joined, "Agent Tutor") || !strings.Contains(joined, "Agent Reader") {
 		t.Fatalf("review context should include valid peer only, got: %s", joined)
@@ -1135,7 +1135,7 @@ func TestDiscussionReviewMessagesRetainEarlyClaimsInCompactLedger(t *testing.T) 
 	previous[0].Content = "ORIGINAL_CLAIM_CANARY: the passage distinguishes institutional rules from personal motives."
 	previous[11].Content = "LATEST_TURN_CANARY: the reviewer challenges the scope of the inference."
 	messages := []Message{{Role: "user", Content: "Review the live discussion."}}
-	got := discussionReviewMessages(messages, AgentDefinition{ID: "tutor", Name: "Sage · Tutor"}, 3, false, false, previous)
+	got := discussionReviewMessages(messages, AgentDefinition{ID: "tutor", Name: "Sage · Tutor"}, 3, previous, false, false)
 	if len(got) != 2 {
 		t.Fatalf("message count = %d, want original source plus separate bounded review context", len(got))
 	}
@@ -2201,7 +2201,7 @@ func TestDiscussionReviewDoesNotEchoPriorChairConclusion(t *testing.T) {
 		AgentID: "discussion-chair", AgentName: "MIMI · Chair", Status: "completed",
 		Content: "The page explicitly rejects the reading that these chapters are merely applications. [source:page-21]",
 	}}
-	messages = discussionReviewMessages(messages, tutor, 2, false, false, previous)
+	messages = discussionReviewMessages(messages, tutor, 2, previous, false, false)
 	var prompt strings.Builder
 	for _, message := range messages {
 		prompt.WriteString(message.Content)
