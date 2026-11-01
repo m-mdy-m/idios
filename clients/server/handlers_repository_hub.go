@@ -319,6 +319,7 @@ func (s *Server) getHubTags(w http.ResponseWriter, r *http.Request) {
 	items, err := s.app.RemoteTags(
 		requestContext(r), r.PathValue("ref"),
 		queryInt(r, "page", 1, 10000), queryInt(r, "page_size", 20, 50),
+		r.URL.Query().Get("cursor"),
 	)
 	if err != nil {
 		writeError(w, err)
