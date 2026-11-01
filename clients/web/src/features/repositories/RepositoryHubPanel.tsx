@@ -510,6 +510,10 @@ export function RepositoryHubPanel() {
   async function createChange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !changeTitle.trim() || !changeSource || !changeTarget) return;
+    if (changeSource === changeTarget) {
+      setError('Choose two different branches for a change request.');
+      return;
+    }
     await perform(async () => {
       await api.createHubChange(selected.id, { title: changeTitle.trim(), body: changeBody, source_branch: changeSource, target_branch: changeTarget });
       setChangeTitle(''); setChangeBody('');
