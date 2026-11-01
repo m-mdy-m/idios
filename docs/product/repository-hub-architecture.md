@@ -50,6 +50,8 @@ Local operations must not call provider APIs, read provider credentials or requi
 
 Desktop and mobile must bind the contract to platform-supported implementations. Do not assume a system `git` executable is installed on every supported target. Engine capabilities and unavailable operations must be explicit.
 
+The current `CLIEngine` is a desktop backend and requires a system Git executable. On devices without a process-capable Git installation (including the current mobile targets), Local Git reports `available=false` with a reason and disables local mutations; it does not pretend that simulated IDIOS branches are real Git. A native or pure-Go mobile backend is a separate adapter and must pass the same contract tests before mobile support is advertised.
+
 ## UI interaction contract
 
 - Collection, repository and provider management actions live in contextual toolbars or menus.

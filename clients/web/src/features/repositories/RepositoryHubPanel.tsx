@@ -662,7 +662,6 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
         {standalone && <strong className="hub-heading__title">{selected?.local_alias || selected?.full_path || 'Repository'}</strong>}
       </div>
       <div className="hub-heading__actions">
-        {standalone && <Button variant="ghost" onClick={() => navigate('/repositories')}>← All repositories</Button>}
         {!standalone && <Button variant="secondary" onClick={() => setProviderSetupOpen((open) => !open)}>{providerSetupOpen ? 'Hide provider setup' : 'Manage providers'}</Button>}
         <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh</Button>
       </div>
