@@ -251,6 +251,15 @@ export const api = {
   createHubRepositoryRelation: (ref: string, body: { target_repository_id: string; relation_type: string; description?: string }) => request<HubRepositoryRelation>(`/api/hub/repositories/${encodeURIComponent(ref)}/relations`, json('POST', body)),
   deleteHubRepositoryRelation: (ref: string) => request<{ deleted: boolean }>(`/api/hub/relations/${encodeURIComponent(ref)}`, json('DELETE')),
   hubBranches: (ref: string) => request<HubBranch[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/branches`),
+  hubReleases: (ref: string, page = 1, pageSize = 20) => request<HubReleasePage>(
+    `/api/hub/repositories/${encodeURIComponent(ref)}/releases?${new URLSearchParams({ page: String(page), page_size: String(pageSize) })}`,
+  ),
+  hubTags: (ref: string, page = 1, pageSize = 20) => request<HubTagPage>(
+    `/api/hub/repositories/${encodeURIComponent(ref)}/tags?${new URLSearchParams({ page: String(page), page_size: String(pageSize) })}`,
+  ),
+  hubCompareTags: (ref: string, from: string, to: string) => request<HubTagComparison>(
+    `/api/hub/repositories/${encodeURIComponent(ref)}/tags/compare?${new URLSearchParams({ from, to })}`,
+  ),
   hubTree: (ref: string, branch = '', path = '', treeSHA = '', page = 1) => {
     const params = new URLSearchParams({ page: String(page) });
     if (branch) params.set('ref', branch);
