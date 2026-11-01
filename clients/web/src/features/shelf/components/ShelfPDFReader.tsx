@@ -652,6 +652,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const pageRequestKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${sourceIdentity}`;
     const streamedPreviews: Array<ReaderTranslationData | undefined> = Array.from({ length: chunks.length });
     const isCurrentPageJob = () => kind === 'page'
+      && !signal?.aborted
       && Boolean(jobID)
       && translationPageJobByKey.current.get(pageRequestKey) === jobID
       && currentPageTranslationKeyRef.current === pageRequestKey;
@@ -830,8 +831,15 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const refreshPageTranslation = useCallback(() => {
     learningAnalysisSequenceRef.current += 1;
     setLearningAnalysisBusy(false);
+    const cancelledPageJobIDs = new Set<string>();
     for (const job of translationJobs.list()) {
-      if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
+      if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') {
+        translationJobs.cancel(job.id);
+        cancelledPageJobIDs.add(job.id);
+      }
+    }
+    for (const [jobKey, jobID] of translationPageJobByKey.current) {
+      if (cancelledPageJobIDs.has(jobID)) translationPageJobByKey.current.delete(jobKey);
     }
     pageTranslationCache.current.delete(currentPageTranslationKey);
     translationPageJobByKey.current.delete(currentPageTranslationKey);
