@@ -146,6 +146,21 @@ Signature status is not inferred from an email address, avatar, or CI result. Gi
 
 The UI distinguishes **Verified**, **Unverified**, **Unsigned**, **Unknown** and **Unavailable**. Status checks and pipelines are displayed separately from cryptographic signatures. Providers that do not expose a check or verification endpoint are reported as unavailable rather than as a passing or failing result. SourceForge does not expose provider-hosted CI checks through the current Allura integration. For SourceForge SSH-signed commits, set `IDIOS_SOURCEFORGE_SSH_ALLOWED_SIGNERS_FILE` to the absolute path of a trusted OpenSSH allowed-signers file in the IDIOS server environment. The file is read locally and is never sent to SourceForge. GPG verification uses the local GPG keyring available to the IDIOS server process.
 
+## Releases, tags and comparisons
+
+Open **Releases** to view provider releases in bounded pages, starting with the newest entries. Each release shows its version/tag, publication date, notes, draft or prerelease state when the provider reports it, and downloadable assets. Asset size, content type, download count and checksum/digest are shown only when supplied by the provider; missing values are not treated as zero or inferred from the URL. Platform labels are filename hints, not a verified compatibility statement.
+
+Open **Tags** to browse Git tags separately from Releases. Lightweight tags point directly to a commit; annotated tags retain their tag object and annotation when the provider exposes them. The tag view shows the target commit and the relationship to a release when that relationship is available. Older tags are fetched only when requested.
+
+**Compare tags** compares two loaded tag names and reports the commit interval and changed files where the provider supports that operation. Some providers do not report ahead/behind counts or complete diff patches; IDIOS marks unavailable or truncated fields instead of inventing them.
+
+Provider differences are intentional:
+- GitHub exposes release assets with size, content type, download count and digest when present, and exposes annotated tag objects through its Git database API.
+- GitLab exposes release links and repository tags, including annotated tag messages and release relations, but its release links do not provide all GitHub-style asset metadata.
+- SourceForge Allura has no provider-backed Releases API in this integration. Git tags and comparisons are read from the temporary Git clone; provider-hosted release assets are therefore unavailable.
+
+Remote Hub Releases and Tags are not the local IDIOS simulated release/tag records. They remain separate provider-backed data and do not create or modify local tags.
+
 ## Data and security boundary
 
 - Provider credentials are encrypted at rest with AES-256-GCM. The provider, host, and stable account ID are authenticated as associated data.
