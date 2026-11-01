@@ -720,6 +720,34 @@ func (s *RepositoryHubService) RemoteBranches(ctx context.Context, repositoryID 
 	defer zeroBytes(token)
 	return client.ListBranches(ctx, string(token), repo)
 }
+
+func (s *RepositoryHubService) RemoteReleases(ctx context.Context, repositoryID string, page, pageSize int) (repositoryhub.ReleasePage, error) {
+	repo, client, token, err := s.remoteContext(ctx, repositoryID)
+	if err != nil {
+		return repositoryhub.ReleasePage{}, err
+	}
+	defer zeroBytes(token)
+	return client.ListReleases(ctx, string(token), repo, page, pageSize)
+}
+
+func (s *RepositoryHubService) RemoteTags(ctx context.Context, repositoryID string, page, pageSize int, cursor string) (repositoryhub.TagPage, error) {
+	repo, client, token, err := s.remoteContext(ctx, repositoryID)
+	if err != nil {
+		return repositoryhub.TagPage{}, err
+	}
+	defer zeroBytes(token)
+	return client.ListTags(ctx, string(token), repo, page, pageSize, cursor)
+}
+
+func (s *RepositoryHubService) CompareRemoteTags(ctx context.Context, repositoryID, from, to string) (repositoryhub.TagComparison, error) {
+	repo, client, token, err := s.remoteContext(ctx, repositoryID)
+	if err != nil {
+		return repositoryhub.TagComparison{}, err
+	}
+	defer zeroBytes(token)
+	return client.CompareTags(ctx, string(token), repo, from, to)
+}
+
 func (s *RepositoryHubService) RemoteTree(ctx context.Context, repositoryID, ref, path, treeSHA string, page int) (repositoryhub.TreePage, error) {
 	repo, client, token, err := s.remoteContext(ctx, repositoryID)
 	if err != nil {

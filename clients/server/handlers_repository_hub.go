@@ -302,6 +302,43 @@ func (s *Server) getHubBranches(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, items)
 }
+
+func (s *Server) getHubReleases(w http.ResponseWriter, r *http.Request) {
+	items, err := s.app.RemoteReleases(
+		requestContext(r), r.PathValue("ref"),
+		queryInt(r, "page", 1, 10000), queryInt(r, "page_size", 20, 50),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) getHubTags(w http.ResponseWriter, r *http.Request) {
+	items, err := s.app.RemoteTags(
+		requestContext(r), r.PathValue("ref"),
+		queryInt(r, "page", 1, 10000), queryInt(r, "page_size", 20, 50),
+		r.URL.Query().Get("cursor"),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) compareHubTags(w http.ResponseWriter, r *http.Request) {
+	item, err := s.app.CompareRemoteTags(
+		requestContext(r), r.PathValue("ref"),
+		r.URL.Query().Get("from"), r.URL.Query().Get("to"),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
 func (s *Server) getHubTree(w http.ResponseWriter, r *http.Request) {
 	items, err := s.app.RemoteTree(
 		requestContext(r), r.PathValue("ref"), r.URL.Query().Get("ref"),

@@ -574,6 +574,41 @@ export interface HubCommit {
   stats?: HubCommitStats; files?: HubCommitFile[]; diff?: string; diff_available: boolean;
   diff_unavailable_reason?: string;
 }
+export interface HubFeatureAvailability { available: boolean; state: string; reason?: string }
+export interface HubReleaseAsset {
+  id?: string; name: string; label?: string; platform?: string; platform_source?: string;
+  size?: number; content_type?: string; download_count?: number; digest?: string; url?: string;
+}
+export interface HubRelease {
+  id?: string; tag_name: string; name: string; target_commitish?: string; body?: string;
+  draft?: boolean; prerelease?: boolean; state: string; created_at?: string; published_at?: string;
+  url?: string; assets_available: boolean; assets: HubReleaseAsset[];
+}
+export interface HubReleasePage {
+  items: HubRelease[]; page: number; has_more: boolean; availability: HubFeatureAvailability;
+}
+export interface HubTag {
+  name: string; kind: 'lightweight' | 'annotated' | 'unknown' | string;
+  object_sha?: string; object_type?: string; target_sha?: string; annotation?: string;
+  created_at?: string; commit_created_at?: string; protected?: boolean;
+  release_name?: string; release_url?: string; url?: string;
+}
+export interface HubTagPage {
+  items: HubTag[]; page: number; has_more: boolean; next_cursor?: string; availability: HubFeatureAvailability;
+}
+export interface HubTagCompareCommit {
+  sha: string; title?: string; message?: string; author?: string; committer?: string;
+  committed_at?: string; url?: string;
+}
+export interface HubTagCompareFile {
+  path: string; previous_path?: string; status: string; additions: number; deletions: number; patch?: string;
+}
+export interface HubTagComparison {
+  from: string; to: string; state: string; merge_base_sha?: string;
+  ahead_by: number; behind_by: number; total_commits: number;
+  commits: HubTagCompareCommit[]; files: HubTagCompareFile[];
+  commits_truncated: boolean; files_truncated: boolean; counts_available: boolean; availability: HubFeatureAvailability;
+}
 export interface HubIssue {
   id: string; number: number; title: string; body: string; state: string;
   author?: string; assignee?: string; labels?: string[]; private?: boolean;

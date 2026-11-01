@@ -497,3 +497,301 @@ func safeGitPath(path string) bool {
 	}
 	return !filepath.IsAbs(path) && !strings.HasPrefix(path, "/")
 }
+
+func sourceForgeTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int) (TagPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if page > 200 {
+		return TagPage{}, fmt.Errorf("%w: SourceForge tag page is out of range", domain.ErrInvalid)
+	}
+	result := TagPage{
+		Items: make([]Tag, 0),
+		Page:  page,
+		Availability: FeatureAvailability{
+			Available: true,
+			State:     "available",
+		},
+	}
+	err := withSourceForgeClone(ctx, token, repo, repo.DefaultBranch, func(dir string) error {
+		if _, err := runGit(ctx, token, dir, "fetch", "--quiet", "--filter=blob:none", "--tags", "origin"); err != nil {
+			return err
+		}
+		limit := page*pageSize + 1
+		raw, err := runGit(
+			ctx, token, dir,
+			"for-each-ref", "--sort=-creatordate", "--count="+strconv.Itoa(limit),
+			"--format=%(refname:strip=2)%09%(objectname)%09%(objecttype)%09%(*objectname)%09%(creatordate:iso-strict)",
+			"refs/tags",
+		)
+		if err != nil {
+			return err
+		}
+		records := parseSourceForgeTagRefs(raw)
+		start := (page - 1) * pageSize
+		end := start + pageSize
+		result.HasMore = len(records) > end
+		if start >= len(records) {
+			return nil
+		}
+		if end > len(records) {
+			end = len(records)
+		}
+		for _, record := range records[start:end] {
+			if !validRemoteTagName(record.Name) {
+				continue
+			}
+			createdAt := parseSourceForgeTime(record.CreatedAt)
+			item := Tag{
+				Name:       record.Name,
+				ObjectSHA:  record.ObjectSHA,
+				ObjectType: record.ObjectType,
+				TargetSHA:  record.PeeledSHA,
+				URL:        providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(record.Name)),
+			}
+			if record.ObjectType == "tag" {
+				item.Kind = "annotated"
+				item.CreatedAt = createdAt
+				annotation, targetSHA, targetType, err := sourceForgeAnnotatedTag(ctx, token, dir, record.ObjectSHA)
+				if err != nil {
+					return err
+				}
+				item.Annotation = annotation
+				if targetSHA != "" {
+					item.TargetSHA = targetSHA
+				}
+				if targetType != "" {
+					item.ObjectType = targetType
+				}
+			} else {
+				item.Kind = "lightweight"
+				if item.TargetSHA == "" {
+					item.TargetSHA = record.ObjectSHA
+				}
+				item.CommitCreatedAt = createdAt
+			}
+			if item.TargetSHA != "" {
+				committed, err := runGit(ctx, token, dir, "show", "-s", "--format=%cI", item.TargetSHA)
+				if err == nil {
+					item.CommitCreatedAt = parseSourceForgeTime(strings.TrimSpace(string(committed)))
+				}
+			}
+			result.Items = append(result.Items, item)
+		}
+		return nil
+	})
+	return result, err
+}
+
+type sourceForgeTagRef struct {
+	Name       string
+	ObjectSHA  string
+	ObjectType string
+	PeeledSHA  string
+	CreatedAt  string
+}
+
+func parseSourceForgeTagRefs(raw []byte) []sourceForgeTagRef {
+	records := make([]sourceForgeTagRef, 0)
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 5)
+		if len(fields) < 4 || fields[0] == "" || fields[1] == "" {
+			continue
+		}
+		record := sourceForgeTagRef{
+			Name: fields[0], ObjectSHA: fields[1], ObjectType: fields[2], PeeledSHA: fields[3],
+		}
+		if len(fields) == 5 {
+			record.CreatedAt = fields[4]
+		}
+		records = append(records, record)
+	}
+	return records
+}
+
+func parseSourceForgeTime(value string) *time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+func sourceForgeAnnotatedTag(ctx context.Context, token, dir, objectSHA string) (string, string, string, error) {
+	current := objectSHA
+	annotation := ""
+	targetSHA := ""
+	targetType := ""
+	for depth := 0; depth < 5; depth++ {
+		raw, err := runGit(ctx, token, dir, "cat-file", "-p", current)
+		if err != nil {
+			return "", "", "", err
+		}
+		header, body, found := strings.Cut(string(raw), "\n\n")
+		if !found {
+			return "", "", "", fmt.Errorf("%w: SourceForge returned an invalid annotated tag object", domain.ErrUnavailable)
+		}
+		var object, objectType string
+		for _, line := range strings.Split(header, "\n") {
+			if strings.HasPrefix(line, "object ") {
+				object = strings.TrimSpace(strings.TrimPrefix(line, "object "))
+			}
+			if strings.HasPrefix(line, "type ") {
+				objectType = strings.TrimSpace(strings.TrimPrefix(line, "type "))
+			}
+		}
+		if object == "" || objectType == "" {
+			return "", "", "", fmt.Errorf("%w: SourceForge annotated tag has incomplete target metadata", domain.ErrUnavailable)
+		}
+		if depth == 0 {
+			annotation = strings.TrimSpace(body)
+		}
+		if objectType != "tag" {
+			targetSHA, targetType = object, objectType
+			return annotation, targetSHA, targetType, nil
+		}
+		current = object
+	}
+	return "", "", "", fmt.Errorf("%w: SourceForge tag object nesting exceeds the supported limit", domain.ErrUnavailable)
+}
+
+func sourceForgeCompareTags(ctx context.Context, token string, repo RemoteRepository, from, to string) (TagComparison, error) {
+	var result TagComparison
+	err := withSourceForgeClone(ctx, token, repo, repo.DefaultBranch, func(dir string) error {
+		fromRef := "refs/tags/" + from
+		toRef := "refs/tags/" + to
+		for _, ref := range []string{fromRef, toRef} {
+			if _, err := runGit(ctx, token, dir, "check-ref-format", ref); err != nil {
+				return fmt.Errorf("%w: invalid SourceForge tag reference", domain.ErrInvalid)
+			}
+		}
+		if _, err := runGit(ctx, token, dir, "fetch", "--quiet", "--filter=blob:none", "--deepen=10000", "origin",
+			fromRef+":"+fromRef, toRef+":"+toRef); err != nil {
+			return err
+		}
+		fromCommit, err := runGit(ctx, token, dir, "rev-parse", "--verify", fromRef+"^{commit}")
+		if err != nil {
+			return fmt.Errorf("%w: SourceForge tag %q does not resolve to a commit", domain.ErrNotFound, from)
+		}
+		toCommit, err := runGit(ctx, token, dir, "rev-parse", "--verify", toRef+"^{commit}")
+		if err != nil {
+			return fmt.Errorf("%w: SourceForge tag %q does not resolve to a commit", domain.ErrNotFound, to)
+		}
+		baseSHA, err := runGit(ctx, token, dir, "merge-base", fromRef, toRef)
+		if err != nil {
+			return fmt.Errorf("%w: SourceForge tag histories do not have a known common ancestor; deepen the clone and retry", domain.ErrUnavailable)
+		}
+		aheadRaw, err := runGit(ctx, token, dir, "rev-list", "--count", fromRef+".."+toRef)
+		if err != nil {
+			return err
+		}
+		behindRaw, err := runGit(ctx, token, dir, "rev-list", "--count", toRef+".."+fromRef)
+		if err != nil {
+			return err
+		}
+		ahead, _ := strconv.Atoi(strings.TrimSpace(string(aheadRaw)))
+		behind, _ := strconv.Atoi(strings.TrimSpace(string(behindRaw)))
+		state := "diverged"
+		switch {
+		case ahead == 0 && behind == 0:
+			state = "identical"
+		case ahead > 0 && behind == 0:
+			state = "ahead"
+		case ahead == 0 && behind > 0:
+			state = "behind"
+		}
+		result = TagComparison{
+			From: from, To: to, State: state,
+			CountsAvailable: true,
+			MergeBaseSHA:    strings.TrimSpace(string(baseSHA)),
+			AheadBy:         ahead, BehindBy: behind, TotalCommits: ahead,
+			Commits:      make([]TagCompareCommit, 0),
+			Files:        make([]TagCompareFile, 0),
+			Availability: FeatureAvailability{Available: true, State: "available"},
+		}
+		log, err := runGit(ctx, token, dir, "log", "--max-count=100",
+			"--format=%H%x1f%s%x1f%an%x1f%cn%x1f%cI", fromRef+".."+toRef)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
+			if line == "" {
+				continue
+			}
+			fields := strings.SplitN(line, "\x1f", 5)
+			if len(fields) != 5 {
+				continue
+			}
+			result.Commits = append(result.Commits, TagCompareCommit{
+				SHA: fields[0], Title: fields[1], Author: fields[2], Committer: fields[3],
+				CommittedAt: parseSourceForgeTime(fields[4]),
+			})
+		}
+		result.CommitsTruncated = ahead > len(result.Commits)
+
+		names, err := runGit(ctx, token, dir, "diff", "--name-status", "-M", fromRef+"..."+toRef)
+		if err != nil {
+			return err
+		}
+		numstats, err := runGit(ctx, token, dir, "diff", "--numstat", "-M", fromRef+"..."+toRef)
+		if err != nil {
+			return err
+		}
+		statsByPath := make(map[string][2]int)
+		for _, line := range strings.Split(strings.TrimSpace(string(numstats)), "\n") {
+			if line == "" {
+				continue
+			}
+			fields := strings.SplitN(line, "\t", 3)
+			if len(fields) != 3 {
+				continue
+			}
+			additions, _ := strconv.Atoi(fields[0])
+			deletions, _ := strconv.Atoi(fields[1])
+			statsByPath[fields[2]] = [2]int{additions, deletions}
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(names)), "\n") {
+			if line == "" {
+				continue
+			}
+			fields := strings.SplitN(line, "\t", 3)
+			if len(fields) < 2 {
+				continue
+			}
+			status := "modified"
+			path := fields[len(fields)-1]
+			previous := ""
+			switch {
+			case strings.HasPrefix(fields[0], "A"):
+				status = "added"
+			case strings.HasPrefix(fields[0], "D"):
+				status = "deleted"
+			case strings.HasPrefix(fields[0], "R"):
+				status = "renamed"
+				if len(fields) == 3 {
+					previous = fields[1]
+				}
+			}
+			counts := statsByPath[path]
+			result.Files = append(result.Files, TagCompareFile{
+				Path: path, PreviousPath: previous, Status: status,
+				Additions: counts[0], Deletions: counts[1],
+			})
+		}
+		if len(result.Files) > 300 {
+			result.Files = result.Files[:300]
+			result.FilesTruncated = true
+		}
+		_ = fromCommit
+		_ = toCommit
+		return nil
+	})
+	return result, err
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ArrowUpRight, Check, ChevronDown, Copy, FileCode2, GitBranch, GitCommitHorizontal,
@@ -7,13 +7,14 @@ import {
 import { api } from '@/lib/api';
 import type {
   HubBranch, HubChangeRequest, HubCollection, HubCommit, HubConnection, HubDiscoveredRepository, HubFile,
-  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
+  HubIssue, HubProjectRepository, HubProvider, HubRelease, HubRepository, HubRepositoryRelation,
+  HubStatus, HubTag, HubTagComparison, HubTreeEntry, Project,
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 import './RepositoryHubPanel.css';
 import { RemoteReadmePreview, RemoteTreeView } from './RepositoryBrowser';
 
-type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Settings';
+type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Releases' | 'Tags' | 'Settings';
 
 type DiffLine = { kind: 'context' | 'remove' | 'add'; text: string };
 
@@ -76,6 +77,8 @@ function remoteTabFromView(view?: string): RemoteTab {
     case 'changes':
     case 'change-requests': return 'Change Requests';
     case 'commits': return 'Commits';
+    case 'releases': return 'Releases';
+    case 'tags': return 'Tags';
     case 'settings': return 'Settings';
     default: return 'Overview';
   }
@@ -87,6 +90,8 @@ function remoteViewFromTab(tab: RemoteTab): string {
     case 'Issues': return 'issues';
     case 'Change Requests': return 'changes';
     case 'Commits': return 'commits';
+    case 'Releases': return 'releases';
+    case 'Tags': return 'tags';
     case 'Settings': return 'settings';
     default: return 'overview';
   }
@@ -104,6 +109,7 @@ function syncStateLabel(state: string): string {
 
 export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = false }: RepositoryHubPanelProps) {
   const navigate = useNavigate();
+  const selectedRepositoryIDRef = useRef<string | null>(null);
   const [status, setStatus] = useState<HubStatus | null>(null);
   const [connections, setConnections] = useState<HubConnection[]>([]);
   const [repositories, setRepositories] = useState<HubRepository[]>([]);
@@ -162,6 +168,28 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [commitDetails, setCommitDetails] = useState<Record<string, HubCommit>>({});
   const [commitDetailLoading, setCommitDetailLoading] = useState('');
   const [commitDetailErrors, setCommitDetailErrors] = useState<Record<string, string>>({});
+  const [latestRelease, setLatestRelease] = useState<HubRelease | null>(null);
+  const [latestReleaseLoading, setLatestReleaseLoading] = useState(false);
+  const [latestReleaseAvailability, setLatestReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [latestTag, setLatestTag] = useState<HubTag | null>(null);
+  const [latestTagLoading, setLatestTagLoading] = useState(false);
+  const [latestTagAvailability, setLatestTagAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [releases, setReleases] = useState<HubRelease[]>([]);
+  const [releasePage, setReleasePage] = useState(1);
+  const [releaseHasMore, setReleaseHasMore] = useState(false);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+  const [releaseAvailability, setReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [tags, setTags] = useState<HubTag[]>([]);
+  const [tagPage, setTagPage] = useState(1);
+  const [tagCursor, setTagCursor] = useState('');
+  const [tagHasMore, setTagHasMore] = useState(false);
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagAvailability, setTagAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [compareFrom, setCompareFrom] = useState('');
+  const [compareTo, setCompareTo] = useState('');
+  const [tagComparison, setTagComparison] = useState<HubTagComparison | null>(null);
+  const [tagCompareLoading, setTagCompareLoading] = useState(false);
+  const [tagCompareError, setTagCompareError] = useState('');
   const [relations, setRelations] = useState<HubRepositoryRelation[]>([]);
   const [targetRelation, setTargetRelation] = useState('');
   const [relationType, setRelationType] = useState('related_to');
@@ -251,6 +279,60 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   }, [reload]);
 
   useEffect(() => {
+    selectedRepositoryIDRef.current = selected?.id ?? null;
+  }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected) {
+      setLatestRelease(null);
+      setLatestReleaseAvailability(null);
+      setLatestReleaseLoading(false);
+      return;
+    }
+    let active = true;
+    setLatestRelease(null);
+    setLatestReleaseAvailability(null);
+    if (!selected.capabilities.includes('releases.read')) {
+      setLatestReleaseLoading(false);
+      return () => { active = false; };
+    }
+    setLatestReleaseLoading(true);
+    void api.hubReleases(selected.id, 1, 1).then((page) => {
+      if (!active) return;
+      setLatestRelease(page.items[0] ?? null);
+      setLatestReleaseAvailability(page.availability);
+    }).catch((err) => {
+      if (active) setLatestReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    }).finally(() => { if (active) setLatestReleaseLoading(false); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.capabilities]);
+
+  useEffect(() => {
+    if (!selected) {
+      setLatestTag(null);
+      setLatestTagAvailability(null);
+      setLatestTagLoading(false);
+      return;
+    }
+    let active = true;
+    setLatestTag(null);
+    setLatestTagAvailability(null);
+    if (!selected.capabilities.includes('tags.read')) {
+      setLatestTagLoading(false);
+      return () => { active = false; };
+    }
+    setLatestTagLoading(true);
+    void api.hubTags(selected.id, 1, 1, '').then((page) => {
+      if (!active) return;
+      setLatestTag(page.items[0] ?? null);
+      setLatestTagAvailability(page.availability);
+    }).catch((err) => {
+      if (active) setLatestTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    }).finally(() => { if (active) setLatestTagLoading(false); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.capabilities]);
+
+  useEffect(() => {
     if (!selected) {
       setBranches([]); setTree([]); setFile(null); setIssues([]); setChanges([]); setCommits([]); setRelations([]);
       setRepositoryAlias(''); setRepositoryNote(''); setRepositoryPinned(false);
@@ -336,6 +418,31 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
         setCommits(items); setCommitPage(1); setCommitHasMore(items.length === 50);
       }).catch((err) => { if (active) setError(messageFrom(err)); })
         .finally(() => { if (active) setCommitLoading(false); });
+    } else if (tab === 'Releases') {
+      setReleases([]);
+      setReleasePage(1); setReleaseHasMore(false); setReleaseAvailability(null);
+      if (!selected.capabilities.includes('releases.read')) return () => { active = false; };
+      setReleaseLoading(true);
+      void api.hubReleases(selected.id, 1, 20).then((page) => {
+        if (!active) return;
+        setReleases(page.items); setReleasePage(page.page); setReleaseHasMore(page.has_more);
+        setReleaseAvailability(page.availability);
+      }).catch((err) => {
+        if (active) setReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+      }).finally(() => { if (active) setReleaseLoading(false); });
+    } else if (tab === 'Tags') {
+      setTags([]);
+      setTagPage(1); setTagCursor(''); setTagHasMore(false); setTagAvailability(null);
+      setCompareFrom(''); setCompareTo(''); setTagComparison(null); setTagCompareError('');
+      if (!selected.capabilities.includes('tags.read')) return () => { active = false; };
+      setTagLoading(true);
+      void api.hubTags(selected.id, 1, 20, '').then((page) => {
+        if (!active) return;
+        setTags(page.items); setTagPage(page.page); setTagCursor(page.next_cursor ?? ''); setTagHasMore(page.has_more);
+        setTagAvailability(page.availability);
+      }).catch((err) => {
+        if (active) setTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+      }).finally(() => { if (active) setTagLoading(false); });
     } else if (tab === 'Settings') {
       void api.hubRepositoryRelations(selected.id).then((items) => { if (active) setRelations(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
     }
@@ -596,6 +703,62 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     }
     setExpandedCommitSHA(item.sha);
     if (!commitDetails[item.sha]) await loadCommitDetails(item);
+  }
+
+  async function loadMoreReleases() {
+    if (!selected || releaseLoading || !releaseHasMore) return;
+    const repositoryID = selected.id;
+    const nextPage = releasePage + 1;
+    setReleaseLoading(true);
+    try {
+      const result = await api.hubReleases(repositoryID, nextPage, 20);
+      if (selectedRepositoryIDRef.current !== repositoryID) return;
+      setReleases((current) => [...current, ...result.items]);
+      setReleasePage(result.page);
+      setReleaseHasMore(result.has_more);
+      setReleaseAvailability(result.availability);
+    } catch (err) {
+      setReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    } finally {
+      setReleaseLoading(false);
+    }
+  }
+
+  async function loadMoreTags() {
+    if (!selected || tagLoading || !tagHasMore) return;
+    const repositoryID = selected.id;
+    const nextPage = tagPage + 1;
+    setTagLoading(true);
+    try {
+      const cursor = selected.provider === 'github' ? tagCursor : '';
+      const result = await api.hubTags(repositoryID, nextPage, 20, cursor);
+      if (selectedRepositoryIDRef.current !== repositoryID) return;
+      setTags((current) => [...current, ...result.items]);
+      setTagPage(result.page);
+      setTagCursor(result.next_cursor ?? '');
+      setTagHasMore(result.has_more);
+      setTagAvailability(result.availability);
+    } catch (err) {
+      setTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    } finally {
+      setTagLoading(false);
+    }
+  }
+
+  async function compareSelectedTags() {
+    if (!selected || !compareFrom || !compareTo || compareFrom === compareTo) return;
+    const comparisonRepositoryID = selected.id;
+    setTagCompareLoading(true);
+    setTagCompareError('');
+    setTagComparison(null);
+    try {
+      const comparison = await api.hubCompareTags(comparisonRepositoryID, compareFrom, compareTo);
+      if (selectedRepositoryIDRef.current === comparisonRepositoryID) setTagComparison(comparison);
+    } catch (err) {
+      setTagCompareError(messageFrom(err));
+    } finally {
+      setTagCompareLoading(false);
+    }
   }
 
   async function openRemoteFile(path: string) {
@@ -881,7 +1044,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
           </div>
           <div className="hub-repository-header__actions"><Button variant="secondary" disabled={busy} onClick={() => void perform(async () => { const updated = await api.syncHubRepository(selected.id); await reload(); setSelected(updated); }, 'Repository metadata synchronized.') }><RefreshCw size={13}/> Sync metadata</Button></div>
           <div className="hub-repository-meta"><span>{selected.permission || 'Permission unknown'}</span><span>{selected.default_branch || 'Default branch unknown'}</span><span>{selected.sync_state}</span><span>{selected.open_issue_count} open issues</span></div>
-          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => {
+          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Releases','Tags','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => {
             setTab(item);
             if (standalone && selected) navigate(`/repositories/remote/${encodeURIComponent(selected.id)}/${remoteViewFromTab(item)}`);
           }}>{item}</button>)}</nav>
@@ -897,6 +1060,58 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               <article><span>Change requests</span><strong>{selected.capabilities.includes('changes.read') ? selected.open_change_request_count : '—'}</strong><small>{selected.capabilities.includes('changes.read') ? 'Reported by provider' : 'Not supported by this connection'}</small></article>
               <article><span>Synchronization</span><strong><Badge tone={selected.sync_state === 'ok' ? 'green' : selected.sync_state === 'error' ? 'red' : selected.sync_state === 'stale' ? 'amber' : 'neutral'}>{syncStateLabel(selected.sync_state)}</Badge></strong><small>{selected.last_synced_at ? `Last synced ${new Date(selected.last_synced_at).toLocaleString()}` : 'No successful sync recorded'}</small></article>
             </div>
+            <section className="hub-latest-release">
+              <div className="hub-detail-toolbar">
+                <div><strong>Latest release</strong><p className="hub-muted">The newest provider release is fetched independently from the full release history.</p></div>
+                <Button type="button" variant="ghost" disabled={!selected.capabilities.includes('releases.read')} onClick={() => setTab('Releases')}>Release history <ArrowUpRight size={12}/></Button>
+              </div>
+              {!selected.capabilities.includes('releases.read')
+                ? <p className="hub-muted">This provider does not expose a Releases API. Git tags can still be browsed separately.</p>
+                : latestRelease
+                  ? <article className="hub-latest-release__item">
+                      <div><strong>{latestRelease.name || latestRelease.tag_name}</strong><span>{latestRelease.tag_name}</span></div>
+                      <div className="hub-latest-release__meta">
+                        <Badge>{latestRelease.state}</Badge>
+                        <small>{latestRelease.published_at ? new Date(latestRelease.published_at).toLocaleDateString() : 'Publication date not reported'}</small>
+                        <small>{latestRelease.assets.length} assets</small>
+                      </div>
+                      {latestRelease.url && <a href={latestRelease.url} target="_blank" rel="noreferrer">Open release <ArrowUpRight size={12}/></a>}
+                    </article>
+                  : latestReleaseAvailability?.state === 'unsupported'
+                    ? <p className="hub-muted">{latestReleaseAvailability.reason}</p>
+                    : latestReleaseAvailability?.state === 'error'
+                      ? <p className="hub-muted">{latestReleaseAvailability.reason || 'Latest release could not be loaded.'}</p>
+                      : latestReleaseLoading
+                        ? <p className="hub-muted">Loading latest release…</p>
+                        : <p className="hub-muted">No published releases were returned.</p>}
+            </section>
+            <section className="hub-latest-release">
+              <div className="hub-detail-toolbar">
+                <div><strong>Latest tag</strong><p className="hub-muted">The newest Git tag is fetched independently from the full tag history.</p></div>
+                <Button type="button" variant="ghost" disabled={!selected.capabilities.includes('tags.read')} onClick={() => setTab('Tags')}>Tag history <ArrowUpRight size={12}/></Button>
+              </div>
+              {!selected.capabilities.includes('tags.read')
+                ? <p className="hub-muted">This provider does not expose repository tags.</p>
+                : latestTag
+                  ? <article className="hub-latest-release__item">
+                      <div><strong>{latestTag.name}</strong><span>{latestTag.kind} tag · {latestTag.target_sha ? latestTag.target_sha.slice(0, 12) : 'target unavailable'}</span></div>
+                      <div className="hub-latest-release__meta">
+                        <Badge>{latestTag.kind}</Badge>
+                        <small>{latestTag.created_at ? new Date(latestTag.created_at).toLocaleDateString() : latestTag.commit_created_at ? new Date(latestTag.commit_created_at).toLocaleDateString() : 'Date not reported'}</small>
+                      </div>
+                      {latestTag.release_name && (latestTag.release_url
+                        ? <a href={latestTag.release_url} target="_blank" rel="noreferrer">Release: {latestTag.release_name} <ArrowUpRight size={12}/></a>
+                        : <small>Release: {latestTag.release_name}</small>)}
+                      {latestTag.url && <a href={latestTag.url} target="_blank" rel="noreferrer">Browse tag <ArrowUpRight size={12}/></a>}
+                    </article>
+                  : latestTagAvailability?.state === 'unsupported'
+                    ? <p className="hub-muted">{latestTagAvailability.reason}</p>
+                    : latestTagAvailability?.state === 'error'
+                      ? <p className="hub-muted">{latestTagAvailability.reason || 'Latest tag could not be loaded.'}</p>
+                      : latestTagLoading
+                        ? <p className="hub-muted">Loading latest tag…</p>
+                        : <p className="hub-muted">No tags were returned for this repository.</p>}
+            </section>
             <section className="hub-overview-description">
               <div><span>Description</span><p>{selected.description || 'No description provided by the provider.'}</p></div>
               <div><span>Repository</span><code>{selected.full_path}</code></div>
@@ -1045,6 +1260,124 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               </div>
               {changeSource && changeTarget && changeSource === changeTarget && <p className="notice notice--warning">Choose two different branches for a change request.</p>}
             </Modal>}
+          </div>}
+
+          {tab === 'Releases' && <div className="hub-work-items">
+            <div className="hub-detail-toolbar">
+              <div><strong>Releases</strong><p className="hub-muted">Provider releases and downloadable assets. Tags without a release are shown separately.</p></div>
+              {releaseHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreReleases()} loading={releaseLoading}>Load older releases</Button>}
+            </div>
+            {!selected.capabilities.includes('releases.read')
+              ? <p className="hub-muted">This provider does not expose a Releases API.</p>
+              : releaseAvailability?.state === 'unsupported'
+                ? <p className="hub-muted">{releaseAvailability.reason}</p>
+                : releaseAvailability?.state === 'error'
+                  ? <div className="notice notice--error" role="alert">{releaseAvailability.reason || 'Releases could not be loaded.'}</div>
+                  : <>
+                    {releases.map((release) => (
+                      <article className="hub-release-card" key={release.id || release.tag_name}>
+                        <div className="hub-release-card__header">
+                          <div><strong>{release.name || release.tag_name}</strong><code>{release.tag_name}</code></div>
+                          <div className="hub-release-card__meta">
+                            <Badge tone={release.state === 'published' ? 'green' : release.state === 'prerelease' ? 'amber' : 'neutral'}>{release.state}</Badge>
+                            <small>{release.published_at ? new Date(release.published_at).toLocaleDateString() : 'Date not reported'}</small>
+                            {release.url && <a href={release.url} target="_blank" rel="noreferrer">Provider release <ArrowUpRight size={12}/></a>}
+                          </div>
+                        </div>
+                        {release.body && <details className="hub-release-notes"><summary>Release notes</summary><pre>{release.body}</pre></details>}
+                        <div className="hub-release-assets">
+                          <div className="hub-release-assets__heading"><strong>Assets</strong><span>{release.assets_available ? release.assets.length + ' reported' : 'Unavailable'}</span></div>
+                          {!release.assets_available
+                            ? <p className="hub-muted">Asset metadata is not available from this provider.</p>
+                            : !release.assets.length
+                              ? <p className="hub-muted">No downloadable assets were reported.</p>
+                              : release.assets.map((asset) => (
+                                <div className="hub-release-asset" key={asset.id || release.tag_name + ':' + asset.name}>
+                                  <div className="hub-release-asset__name">
+                                    <strong>{asset.name}</strong>
+                                    {asset.label && <small>{asset.label}</small>}
+                                    {asset.platform && <Badge>{asset.platform}</Badge>}
+                                  </div>
+                                  <div className="hub-release-asset__meta">
+                                    <small>{asset.size !== undefined ? (asset.size / (1024 * 1024)).toFixed(2) + ' MB' : 'Size not reported'}</small>
+                                    <small>{asset.content_type || 'Content type not reported'}</small>
+                                    <small>{asset.download_count !== undefined ? asset.download_count.toLocaleString() + ' downloads' : 'Download count not reported'}</small>
+                                    {asset.digest && <code title={asset.digest}>{asset.digest}</code>}
+                                    {asset.url && <a href={asset.url} target="_blank" rel="noreferrer">Download <ArrowUpRight size={12}/></a>}
+                                  </div>
+                                </div>
+                              ))}
+                        </div>
+                      </article>
+                    ))}
+                    {releaseLoading && !releases.length && <p className="hub-muted">Loading releases…</p>}
+                    {!releaseLoading && !releases.length && <p className="hub-muted">No releases were returned for this repository.</p>}
+                    {releaseHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreReleases()} loading={releaseLoading}>Load older releases</Button>}
+                  </>}
+          </div>}
+
+          {tab === 'Tags' && <div className="hub-work-items">
+            <div className="hub-detail-toolbar">
+              <div><strong>Tags</strong><p className="hub-muted">Git tags are separate from releases. History is loaded in bounded pages.</p></div>
+              {tagHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreTags()} loading={tagLoading}>Load older tags</Button>}
+            </div>
+            {!selected.capabilities.includes('tags.read')
+              ? <p className="hub-muted">This provider does not expose repository tags.</p>
+              : tagAvailability?.state === 'unsupported'
+                ? <p className="hub-muted">{tagAvailability.reason}</p>
+                : tagAvailability?.state === 'error'
+                  ? <div className="notice notice--error" role="alert">{tagAvailability.reason || 'Tags could not be loaded.'}</div>
+                  : <>
+                    {tags.map((tag) => (
+                      <article className="hub-tag-row" key={tag.name}>
+                        <div className="hub-tag-row__identity">
+                          <strong>{tag.name}</strong>
+                          <div><Badge>{tag.kind}</Badge>{tag.protected !== undefined && <Badge>{tag.protected ? 'Protected' : 'Unprotected'}</Badge>}</div>
+                          {tag.annotation && <p>{tag.annotation}</p>}
+                        </div>
+                        <div className="hub-tag-row__meta">
+                          <code title={tag.target_sha || tag.object_sha}>{tag.target_sha || tag.object_sha || 'Target not reported'}</code>
+                          <small>{tag.created_at ? 'Tag created ' + new Date(tag.created_at).toLocaleDateString() : tag.commit_created_at ? 'Target commit ' + new Date(tag.commit_created_at).toLocaleDateString() : 'Date not reported'}</small>
+                          {tag.release_name
+                            ? <small>{tag.release_url ? <a href={tag.release_url} target="_blank" rel="noreferrer">Release: {tag.release_name}</a> : 'Release: ' + tag.release_name}</small>
+                            : <small>No associated release reported</small>}
+                          {tag.url && <a href={tag.url} target="_blank" rel="noreferrer">Browse tag <ArrowUpRight size={12}/></a>}
+                        </div>
+                      </article>
+                    ))}
+                    {tagLoading && !tags.length && <p className="hub-muted">Loading tags…</p>}
+                    {!tagLoading && !tags.length && <p className="hub-muted">No tags were returned for this repository.</p>}
+                    {tagHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreTags()} loading={tagLoading}>Load older tags</Button>}
+                    {supports('tags.compare') && tags.length >= 2 && <section className="hub-tag-compare">
+                      <div><strong>Compare tags</strong><p className="hub-muted">Compare the commit interval and changed files between two loaded tags.</p></div>
+                      <div className="hub-tag-compare__controls">
+                        <Field label="From tag"><select value={compareFrom} onChange={(event) => { setCompareFrom(event.target.value); setTagComparison(null); }}><option value="">Choose tag…</option>{tags.map((tag) => <option key={tag.name} value={tag.name} disabled={tag.name === compareTo}>{tag.name}</option>)}</select></Field>
+                        <Field label="To tag"><select value={compareTo} onChange={(event) => { setCompareTo(event.target.value); setTagComparison(null); }}><option value="">Choose tag…</option>{tags.map((tag) => <option key={tag.name} value={tag.name} disabled={tag.name === compareFrom}>{tag.name}</option>)}</select></Field>
+                        <Button type="button" onClick={() => void compareSelectedTags()} disabled={!compareFrom || !compareTo || compareFrom === compareTo || tagCompareLoading} loading={tagCompareLoading}>Compare</Button>
+                      </div>
+                      {tagCompareError && <div className="notice notice--error" role="alert">{tagCompareError}</div>}
+                      {tagComparison && <div className="hub-tag-comparison">
+                        <div className="hub-tag-comparison__summary">
+                          <Badge>{tagComparison.state}</Badge>
+                          {tagComparison.counts_available
+                            ? <><span>{tagComparison.ahead_by} commits ahead</span><span>{tagComparison.behind_by} commits behind</span></>
+                            : <span>Commit interval counts not reported by this provider</span>}
+                          {tagComparison.merge_base_sha && <code title={tagComparison.merge_base_sha}>Base {tagComparison.merge_base_sha.slice(0, 12)}</code>}
+                        </div>
+                        {tagComparison.availability.state === 'partial' && <p className="hub-muted">{tagComparison.availability.reason}</p>}
+                        <div className="hub-tag-comparison__grid">
+                          <section><strong>Commits ({tagComparison.commits.length}{tagComparison.commits_truncated ? '+' : ''})</strong>
+                            {tagComparison.commits.map((commit) => <div className="hub-tag-comparison__item" key={commit.sha}><code>{commit.sha.slice(0, 12)}</code><span>{commit.title || commit.message || 'Commit'}</span><small>{commit.committer || commit.author || 'Identity unavailable'}</small></div>)}
+                            {tagComparison.commits_truncated && <p className="hub-muted">Commit list is capped at 100 entries.</p>}
+                          </section>
+                          <section><strong>Changed files ({tagComparison.files.length}{tagComparison.files_truncated ? '+' : ''})</strong>
+                            {tagComparison.files.map((file) => <div className="hub-tag-comparison__item" key={file.path + ':' + (file.previous_path || '')}><span>{file.path}</span><Badge>{file.status}</Badge><small>+{file.additions} / −{file.deletions}</small>{file.previous_path && <small>From {file.previous_path}</small>}{file.patch && <pre>{file.patch}</pre>}</div>)}
+                            {tagComparison.files_truncated && <p className="hub-muted">Changed file list is capped or truncated by the provider.</p>}
+                          </section>
+                        </div>
+                      </div>}
+                    </section>}
+                  </>}
           </div>}
 
           {tab === 'Commits' && <div className="hub-work-items">
