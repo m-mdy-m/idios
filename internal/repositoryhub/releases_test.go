@@ -17,7 +17,7 @@ func TestGitHubListReleasesMapsPublishedReleaseAndAssetMetadata(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer ghp_test" {
 			t.Errorf("missing GitHub authorization")
 		}
-		if r.URL.Path != "/repos/acme/app/releases" || r.URL.Query().Get("per_page") != "2" || r.URL.Query().Get("page") != "1" {
+		if r.URL.Path != "/repos/acme/app/releases" || r.URL.Query().Get("per_page") != "3" || r.URL.Query().Get("page") != "1" {
 			t.Errorf("unexpected release request: %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
@@ -129,7 +129,7 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 
 	provider := &Provider{kind: domain.RepositoryProviderGitHub, host: server.URL, base: server.URL, http: server.Client()}
 	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app", WebURL: "https://github.com/acme/app"}
-	page, err := provider.ListTags(context.Background(), "ghp_test", repo, 1, 2)
+	page, err := provider.ListTags(context.Background(), "ghp_test", repo, 1, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
