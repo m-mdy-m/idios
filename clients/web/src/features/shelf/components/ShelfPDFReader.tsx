@@ -803,6 +803,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setTranslationError('');
     try {
       const analysis = await requestTranslation(source, kind);
+      if (learningAnalysisSequenceRef.current !== requestSequence) return;
       pageLearningCache.current.set(analysisKey, analysis);
       if (currentPageTranslationKeyRef.current !== pageKey) return;
       const current = translationPageKey === pageKey ? pageTranslation : pageTranslationCache.current.get(pageKey) ?? null;
@@ -820,6 +821,8 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationPageKey]);
 
   const refreshPageTranslation = useCallback(() => {
+    learningAnalysisSequenceRef.current += 1;
+    setLearningAnalysisBusy(false);
     for (const job of translationJobs.list()) {
       if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
     }
