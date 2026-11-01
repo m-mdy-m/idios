@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  ArrowUpRight, Check, FileCode2, GitBranch, GitCommitHorizontal,
+  ArrowUpRight, Check, ChevronDown, Copy, FileCode2, GitBranch, GitCommitHorizontal,
   Link2, LockKeyhole, MoreHorizontal, Pin, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unplug,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -797,8 +797,13 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
             <section className="hub-overview-clone">
               <div><strong>Clone repository</strong><p>Use the URL with a local Git client or copy it for another device.</p></div>
               <div className="hub-overview-clone__actions">
-                {selected.clone_url ? <Button variant="secondary" onClick={() => void copyCloneURL(selected.clone_url || '', 'HTTPS')}>Copy HTTPS URL</Button> : <span>HTTPS URL unavailable</span>}
-                {selected.clone_ssh_url ? <Button variant="secondary" onClick={() => void copyCloneURL(selected.clone_ssh_url || '', 'SSH')}>Copy SSH URL</Button> : <span>SSH URL unavailable</span>}
+                {selected.clone_url || selected.clone_ssh_url ? <details className="hub-clone-menu">
+                  <summary><Copy size={13}/> Clone options <ChevronDown size={13}/></summary>
+                  <div className="hub-clone-menu__content">
+                    {selected.clone_url && <button type="button" onClick={(event) => { void copyCloneURL(selected.clone_url || '', 'HTTPS'); event.currentTarget.closest('details')?.removeAttribute('open'); }}>Copy HTTPS clone URL</button>}
+                    {selected.clone_ssh_url && <button type="button" onClick={(event) => { void copyCloneURL(selected.clone_ssh_url || '', 'SSH'); event.currentTarget.closest('details')?.removeAttribute('open'); }}>Copy SSH clone URL</button>}
+                  </div>
+                </details> : <span>Clone URLs are not available for this repository.</span>}
               </div>
             </section>
           </section>}
