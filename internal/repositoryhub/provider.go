@@ -78,13 +78,54 @@ type File struct {
 	Encoding     string `json:"encoding"`
 }
 
+type CommitStats struct {
+	Additions int `json:"additions"`
+	Deletions int `json:"deletions"`
+	Total     int `json:"total"`
+}
+
+type CommitFile struct {
+	Path       string `json:"path"`
+	Status     string `json:"status"`
+	Additions  int    `json:"additions"`
+	Deletions  int    `json:"deletions"`
+	Patch      string `json:"patch,omitempty"`
+	PreviousPath string `json:"previous_path,omitempty"`
+}
+
+type CommitCheck struct {
+	Name        string     `json:"name"`
+	Status      string     `json:"status"`
+	Conclusion  string     `json:"conclusion,omitempty"`
+	Description string     `json:"description,omitempty"`
+	URL         string     `json:"url,omitempty"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
 type Commit struct {
-	SHA       string    `json:"sha"`
-	Message   string    `json:"message"`
-	Author    string    `json:"author"`
-	Email     string    `json:"email,omitempty"`
-	Committed time.Time `json:"committed_at"`
-	URL       string    `json:"url,omitempty"`
+	SHA                  string       `json:"sha"`
+	Message              string       `json:"message"`
+	Author               string       `json:"author"`
+	Email                string       `json:"email,omitempty"`
+	AuthoredAt           *time.Time   `json:"authored_at,omitempty"`
+	Committer            string       `json:"committer,omitempty"`
+	CommitterEmail       string       `json:"committer_email,omitempty"`
+	Committed            time.Time    `json:"committed_at"`
+	URL                  string       `json:"url,omitempty"`
+	SignatureStatus      string       `json:"signature_status,omitempty"`
+	SignatureReason      string       `json:"signature_reason,omitempty"`
+	SignatureType        string       `json:"signature_type,omitempty"`
+	SignatureSource      string       `json:"signature_source,omitempty"`
+	SignatureVerifiedAt  *time.Time   `json:"signature_verified_at,omitempty"`
+	ChecksAvailable      bool         `json:"checks_available"`
+	ChecksState          string       `json:"checks_state,omitempty"`
+	Checks               []CommitCheck `json:"checks,omitempty"`
+	Stats                CommitStats  `json:"stats"`
+	Files                []CommitFile `json:"files,omitempty"`
+	Diff                 string       `json:"diff,omitempty"`
+	DiffAvailable        bool         `json:"diff_available"`
+	DiffUnavailableReason string      `json:"diff_unavailable_reason,omitempty"`
 }
 
 type IssueCreateOptions struct {
@@ -1046,50 +1087,88 @@ func (p *Provider) ListCommits(ctx context.Context, token string, repo RemoteRep
 		owner, name := splitFullPath(repo.FullPath)
 		q.Set("sha", ref)
 		var rows []struct {
-			SHA    string `json:"sha"`
-			HTML   string `json:"html_url"`
+			SHA  string `json:"sha"`
+			HTML string `json:"html_url"`
 			Commit struct {
 				Message string `json:"message"`
-				Author  struct {
+				Author struct {
 					Name  string    `json:"name"`
 					Email string    `json:"email"`
 					Date  time.Time `json:"date"`
 				} `json:"author"`
+				Committer struct {
+					Name  string    `json:"name"`
+					Email string    `json:"email"`
+					Date  time.Time `json:"date"`
+				} `json:"committer"`
+				Verification *struct {
+					Verified   bool       `json:"verified"`
+					Reason     string     `json:"reason"`
+					Signature  string     `json:"signature"`
+					VerifiedAt *time.Time `json:"verified_at"`
+				} `json:"verification"`
 			} `json:"commit"`
 		}
 		if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits", q, nil, &rows); err != nil {
 			return nil, err
 		}
 		out := make([]Commit, 0, len(rows))
-		for _, r := range rows {
-			out = append(out, Commit{SHA: r.SHA, Message: r.Commit.Message, Author: r.Commit.Author.Name, Email: r.Commit.Author.Email, Committed: r.Commit.Author.Date, URL: r.HTML})
+		for _, row := range rows {
+			signatureStatus, signatureType, signatureReason, signatureVerifiedAt := mapGitHubVerification(row.Commit.Verification)
+			out = append(out, Commit{
+				SHA: row.SHA, Message: row.Commit.Message,
+				Author: row.Commit.Author.Name, Email: row.Commit.Author.Email,
+				AuthoredAt: optionalTime(row.Commit.Author.Date),
+				Committer: row.Commit.Committer.Name, CommitterEmail: row.Commit.Committer.Email,
+				Committed: row.Commit.Committer.Date, URL: row.HTML,
+				SignatureStatus: signatureStatus, SignatureType: signatureType,
+				SignatureReason: signatureReason, SignatureSource: "provider",
+				SignatureVerifiedAt: signatureVerifiedAt,
+			})
 		}
 		return out, nil
+
 	case domain.RepositoryProviderGitLab:
 		q.Set("ref_name", ref)
+		q.Set("with_stats", "true")
 		var rows []struct {
 			ID      string `json:"id"`
 			Title   string `json:"title"`
 			Message string `json:"message"`
 			Web     string `json:"web_url"`
-			Author  struct {
-				Name  string `json:"name"`
-				Email string `json:"email"`
-			} `json:"author_name"`
-			Date time.Time `json:"created_at"`
+			AuthorName  string    `json:"author_name"`
+			AuthorEmail string    `json:"author_email"`
+			AuthoredDate time.Time `json:"authored_date"`
+			CommitterName string `json:"committer_name"`
+			CommitterEmail string `json:"committer_email"`
+			CommittedDate time.Time `json:"committed_date"`
+			Stats struct {
+				Additions int `json:"additions"`
+				Deletions int `json:"deletions"`
+				Total int `json:"total"`
+			} `json:"stats"`
 		}
 		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/repository/commits", q, nil, &rows); err != nil {
 			return nil, err
 		}
 		out := make([]Commit, 0, len(rows))
-		for _, r := range rows {
-			msg := r.Message
-			if msg == "" {
-				msg = r.Title
+		for _, row := range rows {
+			message := row.Message
+			if message == "" {
+				message = row.Title
 			}
-			out = append(out, Commit{SHA: r.ID, Message: msg, Author: r.Author.Name, Email: r.Author.Email, Committed: r.Date, URL: r.Web})
+			out = append(out, Commit{
+				SHA: row.ID, Message: message,
+				Author: row.AuthorName, Email: row.AuthorEmail,
+				AuthoredAt: optionalTime(row.AuthoredDate),
+				Committer: row.CommitterName, CommitterEmail: row.CommitterEmail,
+				Committed: row.CommittedDate, URL: row.Web,
+				SignatureStatus: "unknown", SignatureSource: "provider",
+				Stats: CommitStats{Additions: row.Stats.Additions, Deletions: row.Stats.Deletions, Total: row.Stats.Total},
+			})
 		}
 		return out, nil
+
 	case domain.RepositoryProviderSourceForge:
 		return sourceForgeCommits(ctx, token, repo, ref, page)
 	default:
@@ -1097,6 +1176,316 @@ func (p *Provider) ListCommits(ctx context.Context, token string, repo RemoteRep
 	}
 }
 
+func (p *Provider) GetCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
+	sha = strings.TrimSpace(sha)
+	if !validCommitSHA(sha) {
+		return Commit{}, fmt.Errorf("%w: a full commit SHA is required", domain.ErrInvalid)
+	}
+	switch p.kind {
+	case domain.RepositoryProviderGitHub:
+		return p.getGitHubCommit(ctx, token, repo, sha)
+	case domain.RepositoryProviderGitLab:
+		return p.getGitLabCommit(ctx, token, repo, sha)
+	case domain.RepositoryProviderSourceForge:
+		return sourceForgeCommit(ctx, token, repo, repo.DefaultBranch, sha)
+	default:
+		return Commit{}, fmt.Errorf("%w: commit details are not available for this provider", domain.ErrUnsupported)
+	}
+}
+
+func validCommitSHA(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func optionalTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
+}
+
+func mapGitHubVerification(verification *struct {
+	Verified   bool       `json:"verified"`
+	Reason     string     `json:"reason"`
+	Signature  string     `json:"signature"`
+	VerifiedAt *time.Time `json:"verified_at"`
+}) (string, string, string, *time.Time) {
+	if verification == nil {
+		return "unknown", "", "GitHub did not return signature verification data.", nil
+	}
+	signatureType := detectCommitSignatureType(verification.Signature)
+	if strings.EqualFold(verification.Reason, "unsigned") || strings.TrimSpace(verification.Signature) == "" {
+		return "unsigned", signatureType, verification.Reason, verification.VerifiedAt
+	}
+	if verification.Verified {
+		return "verified", signatureType, verification.Reason, verification.VerifiedAt
+	}
+	return "unverified", signatureType, verification.Reason, verification.VerifiedAt
+}
+
+func detectCommitSignatureType(signature string) string {
+	switch {
+	case strings.Contains(signature, "BEGIN PGP SIGNATURE"):
+		return "GPG"
+	case strings.Contains(signature, "BEGIN SSH SIGNATURE"):
+		return "SSH"
+	case strings.Contains(signature, "BEGIN SIGNED MESSAGE"):
+		return "S/MIME"
+	default:
+		return ""
+	}
+}
+
+func mapGitLabSignatureStatus(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "verified":
+		return "verified"
+	case "unverified":
+		return "unverified"
+	case "unsigned":
+		return "unsigned"
+	case "unknown":
+		return "unknown"
+	case "":
+		return "unknown"
+	default:
+		return "unknown"
+	}
+}
+
+func countCommitDiffLines(diff string) (int, int) {
+	additions, deletions := 0, 0
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			additions++
+		}
+		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			deletions++
+		}
+	}
+	return additions, deletions
+}
+
+func (p *Provider) getGitHubCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
+	owner, name := splitFullPath(repo.FullPath)
+	var raw struct {
+		SHA  string `json:"sha"`
+		HTML string `json:"html_url"`
+		Commit struct {
+			Message string `json:"message"`
+			Author struct {
+				Name string `json:"name"`
+				Email string `json:"email"`
+				Date time.Time `json:"date"`
+			} `json:"author"`
+			Committer struct {
+				Name string `json:"name"`
+				Email string `json:"email"`
+				Date time.Time `json:"date"`
+			} `json:"committer"`
+			Verification *struct {
+				Verified bool `json:"verified"`
+				Reason string `json:"reason"`
+				Signature string `json:"signature"`
+				VerifiedAt *time.Time `json:"verified_at"`
+			} `json:"verification"`
+		} `json:"commit"`
+		Stats struct {
+			Additions int `json:"additions"`
+			Deletions int `json:"deletions"`
+			Total int `json:"total"`
+		} `json:"stats"`
+		Files []struct {
+			Filename string `json:"filename"`
+			Status string `json:"status"`
+			PreviousFilename string `json:"previous_filename"`
+			Additions int `json:"additions"`
+			Deletions int `json:"deletions"`
+			Patch string `json:"patch"`
+		} `json:"files"`
+	}
+	if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha), nil, nil, &raw); err != nil {
+		return Commit{}, err
+	}
+	signatureStatus, signatureType, signatureReason, signatureVerifiedAt := mapGitHubVerification(raw.Commit.Verification)
+	item := Commit{
+		SHA: raw.SHA, Message: raw.Commit.Message,
+		Author: raw.Commit.Author.Name, Email: raw.Commit.Author.Email,
+		AuthoredAt: optionalTime(raw.Commit.Author.Date),
+		Committer: raw.Commit.Committer.Name, CommitterEmail: raw.Commit.Committer.Email,
+		Committed: raw.Commit.Committer.Date, URL: raw.HTML,
+		SignatureStatus: signatureStatus, SignatureType: signatureType,
+		SignatureReason: signatureReason, SignatureSource: "provider",
+		SignatureVerifiedAt: signatureVerifiedAt,
+		Stats: CommitStats{Additions: raw.Stats.Additions, Deletions: raw.Stats.Deletions, Total: raw.Stats.Total},
+		DiffAvailable: true, ChecksState: "unavailable",
+	}
+	item.Files = make([]CommitFile, 0, len(raw.Files))
+	for _, file := range raw.Files {
+		item.Files = append(item.Files, CommitFile{
+			Path: file.Filename, Status: file.Status, PreviousPath: file.PreviousFilename,
+			Additions: file.Additions, Deletions: file.Deletions, Patch: file.Patch,
+		})
+	}
+
+	var combined struct {
+		State       string `json:"state"`
+		TotalCount  int    `json:"total_count"`
+		Statuses    []struct {
+			Context     string    `json:"context"`
+			State       string    `json:"state"`
+			Description string    `json:"description"`
+			TargetURL   string    `json:"target_url"`
+			CreatedAt   time.Time `json:"created_at"`
+		} `json:"statuses"`
+	}
+	statusPath := "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha)+"/status"
+	if err := p.json(ctx, token, "GET", statusPath, nil, nil, &combined); err == nil {
+		item.ChecksAvailable = true
+		item.ChecksState = combined.State
+		for _, status := range combined.Statuses {
+			item.Checks = append(item.Checks, CommitCheck{
+				Name: status.Context, Status: status.State, Description: status.Description, URL: status.TargetURL,
+				CompletedAt: optionalTime(status.CreatedAt),
+			})
+		}
+	}
+
+	var checkRuns struct {
+		CheckRuns []struct {
+			Name        string     `json:"name"`
+			Status      string     `json:"status"`
+			Conclusion  string     `json:"conclusion"`
+			DetailsURL  string     `json:"details_url"`
+			StartedAt   *time.Time `json:"started_at"`
+			CompletedAt *time.Time `json:"completed_at"`
+		} `json:"check_runs"`
+	}
+	checkPath := "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha)+"/check-runs"
+	if err := p.json(ctx, token, "GET", checkPath, url.Values{"per_page": {"100"}}, nil, &checkRuns); err == nil {
+		item.ChecksAvailable = true
+		for _, check := range checkRuns.CheckRuns {
+			item.Checks = append(item.Checks, CommitCheck{
+				Name: check.Name, Status: check.Status, Conclusion: check.Conclusion, URL: check.DetailsURL,
+				StartedAt: check.StartedAt, CompletedAt: check.CompletedAt,
+			})
+		}
+	}
+	if item.ChecksAvailable && len(item.Checks) == 0 && item.ChecksState == "" {
+		item.ChecksState = "none"
+	}
+	return item, nil
+}
+
+func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
+	var raw struct {
+		ID string `json:"id"`
+		Title string `json:"title"`
+		Message string `json:"message"`
+		WebURL string `json:"web_url"`
+		AuthorName string `json:"author_name"`
+		AuthorEmail string `json:"author_email"`
+		AuthoredDate time.Time `json:"authored_date"`
+		CommitterName string `json:"committer_name"`
+		CommitterEmail string `json:"committer_email"`
+		CommittedDate time.Time `json:"committed_date"`
+		Stats struct {
+			Additions int `json:"additions"`
+			Deletions int `json:"deletions"`
+			Total int `json:"total"`
+		} `json:"stats"`
+		LastPipeline *struct {
+			ID int64 `json:"id"`
+			Status string `json:"status"`
+			WebURL string `json:"web_url"`
+		} `json:"last_pipeline"`
+	}
+	base := "projects/"+url.PathEscape(repo.ExternalID)+"/repository/commits/"+url.PathEscape(sha)
+	if err := p.json(ctx, token, "GET", base, url.Values{"stats": {"true"}}, nil, &raw); err != nil {
+		return Commit{}, err
+	}
+	message := raw.Message
+	if message == "" { message = raw.Title }
+	item := Commit{
+		SHA: raw.ID, Message: message,
+		Author: raw.AuthorName, Email: raw.AuthorEmail, AuthoredAt: optionalTime(raw.AuthoredDate),
+		Committer: raw.CommitterName, CommitterEmail: raw.CommitterEmail,
+		Committed: raw.CommittedDate, URL: raw.WebURL,
+		SignatureStatus: "unavailable", SignatureSource: "provider",
+		Stats: CommitStats{Additions: raw.Stats.Additions, Deletions: raw.Stats.Deletions, Total: raw.Stats.Total},
+		ChecksState: "unavailable",
+	}
+
+	var signature struct {
+		SignatureType string `json:"signature_type"`
+		VerificationStatus string `json:"verification_status"`
+		CommitSource string `json:"commit_source"`
+	}
+	if err := p.json(ctx, token, "GET", base+"/signature", nil, nil, &signature); err == nil {
+		item.SignatureStatus = mapGitLabSignatureStatus(signature.VerificationStatus)
+		item.SignatureType = signature.SignatureType
+		item.SignatureReason = signature.VerificationStatus
+	} else if errors.Is(err, domain.ErrNotFound) {
+		item.SignatureStatus = "unsigned"
+		item.SignatureReason = "GitLab did not return a signature for this commit."
+	}
+
+	var statuses []struct {
+		Name        string     `json:"name"`
+		Status      string     `json:"status"`
+		Description string     `json:"description"`
+		TargetURL   string     `json:"target_url"`
+		StartedAt   *time.Time `json:"started_at"`
+		FinishedAt  *time.Time `json:"finished_at"`
+	}
+	if err := p.json(ctx, token, "GET", base+"/statuses", url.Values{"per_page": {"100"}}, nil, &statuses); err == nil {
+		item.ChecksAvailable = true
+		if raw.LastPipeline != nil {
+			item.ChecksState = raw.LastPipeline.Status
+			item.Checks = append(item.Checks, CommitCheck{
+				Name: "Pipeline", Status: raw.LastPipeline.Status, URL: raw.LastPipeline.WebURL,
+			})
+		} else if len(statuses) == 0 {
+			item.ChecksState = "none"
+		}
+		for _, status := range statuses {
+			item.Checks = append(item.Checks, CommitCheck{
+				Name: status.Name, Status: status.Status, Description: status.Description, URL: status.TargetURL,
+				StartedAt: status.StartedAt, CompletedAt: status.FinishedAt,
+			})
+		}
+	}
+
+	var diffs []struct {
+		OldPath string `json:"old_path"`
+		NewPath string `json:"new_path"`
+		NewFile bool `json:"new_file"`
+		RenamedFile bool `json:"renamed_file"`
+		DeletedFile bool `json:"deleted_file"`
+		Diff string `json:"diff"`
+	}
+	if err := p.json(ctx, token, "GET", base+"/diff", url.Values{"per_page": {"100"}, "page": {"1"}}, nil, &diffs); err == nil {
+		item.DiffAvailable = true
+		for _, diff := range diffs {
+			status := "modified"
+			if diff.NewFile { status = "added" } else if diff.DeletedFile { status = "deleted" } else if diff.RenamedFile { status = "renamed" }
+			additions, deletions := countCommitDiffLines(diff.Diff)
+			item.Files = append(item.Files, CommitFile{
+				Path: diff.NewPath, PreviousPath: diff.OldPath, Status: status,
+				Additions: additions, Deletions: deletions, Patch: diff.Diff,
+			})
+		}
+	}
+	return item, nil
+}
 func (p *Provider) sourceForgeTicketIssue(ctx context.Context, token string, repo RemoteRepository, number int) (Issue, error) {
 	if number < 1 || repo.TrackerMountPoint == "" {
 		return Issue{}, fmt.Errorf("%w: SourceForge Tracker and positive ticket number are required", domain.ErrInvalid)
