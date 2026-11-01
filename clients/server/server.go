@@ -348,6 +348,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/hub/repositories/{ref}/file", s.getHubFile)
 	mux.HandleFunc("PUT /api/hub/repositories/{ref}/file", s.putHubFile)
 	mux.HandleFunc("GET /api/hub/repositories/{ref}/commits", s.getHubCommits)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/commits/{sha}", s.getHubCommit)
 	mux.HandleFunc("GET /api/hub/repositories/{ref}/issues", s.getHubIssues)
 	mux.HandleFunc("POST /api/hub/repositories/{ref}/issues", s.createHubIssue)
 	mux.HandleFunc("PATCH /api/hub/repositories/{ref}/issues/{number}", s.updateHubIssue)
