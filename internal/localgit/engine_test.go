@@ -122,3 +122,29 @@ func TestCLIEngineReportsUnavailableWithoutGit(t *testing.T) {
 		t.Fatalf("expected a clear unavailable reason: %+v", status)
 	}
 }
+
+func TestCLIEngineRejectsNestedDirectoryAsSeparateWorkingCopy(t *testing.T) {
+	engine := NewCLIEngine()
+	if !engine.Availability().Available {
+		t.Skip("Git CLI is not installed in this test environment")
+	}
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "parent-repository")
+	if err := engine.Init(ctx, root, "main"); err != nil {
+		t.Fatalf("initialize parent repository: %v", err)
+	}
+	nested := filepath.Join(root, "nested")
+	if err := os.Mkdir(nested, 0o700); err != nil {
+		t.Fatalf("create nested directory: %v", err)
+	}
+	status, err := engine.Status(ctx, nested)
+	if err != nil {
+		t.Fatalf("inspect nested directory: %v", err)
+	}
+	if status.Initialized {
+		t.Fatalf("nested directory must not be accepted as an independent working copy: %+v", status)
+	}
+	if err := engine.Stage(ctx, nested, nil); err == nil {
+		t.Fatal("staging from a nested path must not operate on the parent repository")
+	}
+}
