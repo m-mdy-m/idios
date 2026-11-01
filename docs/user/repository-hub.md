@@ -155,6 +155,7 @@ Open **Tags** to browse Git tags separately from Releases. Lightweight tags poin
 **Compare tags** compares two loaded tag names and reports the commit interval and changed files where the provider supports that operation. Some providers do not report ahead/behind counts or complete diff patches; IDIOS marks unavailable or truncated fields instead of inventing them.
 
 Provider differences are intentional:
+
 - GitHub exposes release assets with size, content type, download count and digest when present, and exposes annotated tag objects through its Git database API.
 - GitLab exposes release links and repository tags, including annotated tag messages and release relations, but its release links do not provide all GitHub-style asset metadata.
 - SourceForge Allura has no provider-backed Releases API in this integration. Git tags and comparisons are read from the temporary Git clone; provider-hosted release assets are therefore unavailable.
