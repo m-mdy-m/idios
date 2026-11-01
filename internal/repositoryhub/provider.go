@@ -71,7 +71,7 @@ type TreeEntry struct {
 
 type TreePage struct {
 	Items   []TreeEntry `json:"items"`
-	Page    int          `json:"page"`
+	Page    int         `json:"page"`
 	HasMore bool         `json:"has_more"`
 }
 
@@ -950,12 +950,12 @@ func (p *Provider) ListTree(ctx context.Context, token string, repo RemoteReposi
 		owner, name := splitFullPath(repo.FullPath)
 		var raw struct {
 			Truncated bool `json:"truncated"`
-			Tree []struct {
+			Tree      []struct {
 				Path string `json:"path"`
 				Type string `json:"type"`
-				Size int64 `json:"size"`
-				SHA string `json:"sha"`
-				URL string `json:"url"`
+				Size int64  `json:"size"`
+				SHA  string `json:"sha"`
+				URL  string `json:"url"`
 			} `json:"tree"`
 		}
 		if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/trees/"+url.PathEscape(treeRef), nil, nil, &raw); err != nil {
@@ -988,8 +988,8 @@ func (p *Provider) ListTree(ctx context.Context, token string, repo RemoteReposi
 			Path string `json:"path"`
 			Name string `json:"name"`
 			Type string `json:"type"`
-			Size int64 `json:"size"`
-			ID string `json:"id"`
+			Size int64  `json:"size"`
+			ID   string `json:"id"`
 		}
 		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/repository/tree", query, nil, &rows); err != nil {
 			return TreePage{}, err
