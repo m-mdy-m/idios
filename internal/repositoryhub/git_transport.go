@@ -498,7 +498,6 @@ func safeGitPath(path string) bool {
 	return !filepath.IsAbs(path) && !strings.HasPrefix(path, "/")
 }
 
-
 func sourceForgeTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int) (TagPage, error) {
 	if page < 1 {
 		page = 1
@@ -544,11 +543,11 @@ func sourceForgeTags(ctx context.Context, token string, repo RemoteRepository, p
 			}
 			createdAt := parseSourceForgeTime(record.CreatedAt)
 			item := Tag{
-				Name:      record.Name,
-				ObjectSHA: record.ObjectSHA,
+				Name:       record.Name,
+				ObjectSHA:  record.ObjectSHA,
 				ObjectType: record.ObjectType,
-				TargetSHA: record.PeeledSHA,
-				URL: providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(record.Name)),
+				TargetSHA:  record.PeeledSHA,
+				URL:        providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(record.Name)),
 			}
 			if record.ObjectType == "tag" {
 				item.Kind = "annotated"
@@ -711,10 +710,10 @@ func sourceForgeCompareTags(ctx context.Context, token string, repo RemoteReposi
 		result = TagComparison{
 			From: from, To: to, State: state,
 			CountsAvailable: true,
-			MergeBaseSHA: strings.TrimSpace(string(baseSHA)),
-			AheadBy: ahead, BehindBy: behind, TotalCommits: ahead,
-			Commits: make([]TagCompareCommit, 0),
-			Files: make([]TagCompareFile, 0),
+			MergeBaseSHA:    strings.TrimSpace(string(baseSHA)),
+			AheadBy:         ahead, BehindBy: behind, TotalCommits: ahead,
+			Commits:      make([]TagCompareCommit, 0),
+			Files:        make([]TagCompareFile, 0),
 			Availability: FeatureAvailability{Available: true, State: "available"},
 		}
 		log, err := runGit(ctx, token, dir, "log", "--max-count=100",
