@@ -622,6 +622,7 @@ func TestGitHubCommitDetailsPreserveProvenanceVerificationChecksAndDiff(t *testi
 }
 
 func TestGitLabCommitDetailsDistinguishUnknownSignatureFromUnavailableChecks(t *testing.T) {
+	t.Setenv("IDIOS_GITLAB_ALLOW_LOOPBACK", "true")
 	sha := strings.Repeat("b", 40)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("PRIVATE-TOKEN") != "glpat_test" {
