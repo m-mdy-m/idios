@@ -159,7 +159,6 @@ func TestCLIEngineRejectsNestedDirectoryAsSeparateWorkingCopy(t *testing.T) {
 	}
 }
 
-
 func TestWorkingCopyLockSerializesConcurrentMutations(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "repository")
 	release, err := lockWorkingCopy(directory, true)
