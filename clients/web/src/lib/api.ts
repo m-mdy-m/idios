@@ -19,7 +19,7 @@ import type {
   Branch, CompletionRecord, Concept, Label, Milestone, PullRequest, ProtocolCatalog, ProtocolOption, LogPayload, Quote, RepositorySetting, RepositoryFile, RepositoryTag, RepositoryTagComparison, ScheduledJob, WorkspacePin, UpdateCheck, UpdateStatus, FeatureCatalog, MonitoringSnapshot, ShelfState, ShelfBook, ShelfBookRelation, ShelfAsk, ShelfAnnotation, ShelfAnnotationRect, ShelfReadingSession,
   HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
   LocalGitStatus, LocalGitBranch, LocalGitCommit, LocalGitTag,
-  HubDiscoveryResult, HubBranch, HubTreeEntry, HubTreePage, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
+  HubDiscoveryResult, HubBranch, HubTreePage, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
 
