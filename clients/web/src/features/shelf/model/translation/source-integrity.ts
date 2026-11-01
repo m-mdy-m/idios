@@ -3,7 +3,7 @@ import { normalizeTranslationMatch, type ReaderTranslationData } from '../reader
 export type TranslationIntegrity = {
   valid: boolean;
   verified: boolean;
-  reason?: 'empty-source' | 'empty-translation' | 'malformed-structured-response' | 'missing-segments' | 'source-mismatch' | 'segment-order' | 'segment-coverage';
+  reason?: 'empty-source' | 'empty-translation' | 'malformed-structured-response' | 'missing-segments' | 'source-mismatch' | 'duplicate-segment' | 'segment-order' | 'segment-coverage';
   coverage: number;
 };
 
@@ -49,12 +49,15 @@ export function validateRawTranslationAlignment(raw: string, sourceText: string)
 
   let cursor = 0;
   let covered = 0;
+  const seenSegments = new Set<string>();
   for (const entry of parsed.segments) {
     if (!isRecord(entry) || typeof entry.source !== 'string' || typeof entry.translation !== 'string' || !entry.translation.trim()) {
       return { valid: false, verified: true, reason: 'source-mismatch', coverage: covered / Math.max(1, source.length) };
     }
     const fragment = normalizeTranslationMatch(entry.source);
     if (!fragment) return { valid: false, verified: true, reason: 'source-mismatch', coverage: covered / Math.max(1, source.length) };
+    if (seenSegments.has(fragment)) return { valid: false, verified: true, reason: 'duplicate-segment', coverage: covered / Math.max(1, source.length) };
+    seenSegments.add(fragment);
     const position = source.indexOf(fragment, cursor);
     if (position < 0) {
       const anywhere = source.indexOf(fragment);
@@ -86,8 +89,11 @@ export function validateTranslationIntegrity(sourceText: string, data: ReaderTra
 
   let cursor = 0;
   let covered = 0;
+  const seenSegments = new Set<string>();
   for (const segment of segments) {
     const fragment = normalizeTranslationMatch(segment.source);
+    if (seenSegments.has(fragment)) return { valid: false, verified: true, reason: 'duplicate-segment', coverage: covered / Math.max(1, source.length) };
+    seenSegments.add(fragment);
     const position = source.indexOf(fragment, cursor);
     if (!fragment || position < 0) {
       return { valid: false, verified: true, reason: 'source-mismatch', coverage: covered / Math.max(1, source.length) };
