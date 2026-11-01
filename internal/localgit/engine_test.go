@@ -8,6 +8,10 @@ import (
 )
 
 func TestCLIEngineOfflineWorkflow(t *testing.T) {
+	// A blank inherited committer name must not override the explicit/tag fallback identity.
+	t.Setenv("GIT_COMMITTER_NAME", "")
+	t.Setenv("GIT_AUTHOR_NAME", "")
+	t.Setenv("GIT_AUTHOR_EMAIL", "")
 	engine := NewCLIEngine()
 	if !engine.Availability().Available {
 		t.Skip("Git CLI is not installed in this test environment")

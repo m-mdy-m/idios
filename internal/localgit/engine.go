@@ -115,12 +115,23 @@ func (e *CLIEngine) run(ctx context.Context, dir string, args ...string) ([]byte
 		"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
 		"GIT_COMMON_DIR":                   true,
 	}
+	identityOverrides := map[string]bool{
+		"GIT_AUTHOR_NAME": true, "GIT_AUTHOR_EMAIL": true,
+		"GIT_COMMITTER_NAME": true, "GIT_COMMITTER_EMAIL": true,
+		"GIT_AUTHOR_DATE": true, "GIT_COMMITTER_DATE": true, "EMAIL": true,
+	}
 	env := make([]string, 0, len(os.Environ())+2)
 	for _, item := range os.Environ() {
-		key, _, _ := strings.Cut(item, "=")
-		if !blocked[key] && key != "GIT_TERMINAL_PROMPT" {
-			env = append(env, item)
+		key, value, _ := strings.Cut(item, "=")
+		if blocked[key] || key == "GIT_TERMINAL_PROMPT" {
+			continue
 		}
+		// Empty identity overrides take precedence over git -c and user config,
+		// producing an invalid blank author/committer. Preserve valid user values.
+		if identityOverrides[strings.ToUpper(key)] && strings.TrimSpace(value) == "" {
+			continue
+		}
+		env = append(env, item)
 	}
 	cmd.Env = append(env, "GIT_TERMINAL_PROMPT=0")
 	output, err := cmd.CombinedOutput()
