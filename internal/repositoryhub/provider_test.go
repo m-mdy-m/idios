@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"idios/internal/domain"
 )
@@ -552,5 +553,143 @@ func TestProviderEndpointPreservesAbsoluteHTTPAndHTTPSURLs(t *testing.T) {
 	}
 	if got := provider.endpoint("projects/42", nil); got != "https://gitlab.example.com/api/v4/projects/42" {
 		t.Errorf("relative provider endpoint = %q", got)
+	}
+}
+
+
+func TestGitHubCommitDetailsPreserveProvenanceVerificationChecksAndDiff(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer ghp_test" {
+			t.Errorf("missing GitHub authorization header")
+		}
+		switch r.URL.Path {
+		case "/repos/acme/app/commits/" + sha:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sha": sha, "html_url": "https://github.com/acme/app/commit/" + sha,
+				"commit": map[string]any{
+					"message": "feat: signed commit\n\nDetails",
+					"author": map[string]any{"name": "Alice", "email": "alice@example.test", "date": "2026-10-31T10:00:00Z"},
+					"committer": map[string]any{"name": "Bob", "email": "bob@example.test", "date": "2026-10-31T11:00:00Z"},
+					"verification": map[string]any{
+						"verified": true, "reason": "valid", "signature": "-----BEGIN PGP SIGNATURE-----",
+						"verified_at": "2026-10-31T11:01:00Z",
+					},
+				},
+				"stats": map[string]any{"additions": 8, "deletions": 2, "total": 10},
+				"files": []map[string]any{{"filename": "main.go", "status": "modified", "additions": 8, "deletions": 2, "patch": "@@ -1 +1 @@\n-old\n+new"}},
+			})
+		case "/repos/acme/app/commits/" + sha + "/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"state": "success", "total_count": 1,
+				"statuses": []map[string]any{{"context": "unit", "state": "success", "description": "Tests passed", "target_url": "https://ci.example.test/unit", "created_at": "2026-10-31T12:00:00Z"}},
+			})
+		case "/repos/acme/app/commits/" + sha + "/check-runs":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"check_runs": []map[string]any{{"name": "build", "status": "completed", "conclusion": "success", "details_url": "https://ci.example.test/build"}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := &Provider{kind: domain.RepositoryProviderGitHub, host: server.URL, base: server.URL, http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app", DefaultBranch: "main"}
+	commit, err := provider.GetCommit(context.Background(), "ghp_test", repo, "main", sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if commit.SHA != sha || commit.Author != "Alice" || commit.Email != "alice@example.test" ||
+		commit.Committer != "Bob" || commit.CommitterEmail != "bob@example.test" {
+		t.Fatalf("author and committer provenance was not preserved: %#v", commit)
+	}
+	if commit.AuthoredAt == nil || commit.AuthoredAt.Format(time.RFC3339) != "2026-10-31T10:00:00Z" ||
+		commit.Committed.Format(time.RFC3339) != "2026-10-31T11:00:00Z" {
+		t.Fatalf("author/committer dates were not preserved: authored=%v committed=%v", commit.AuthoredAt, commit.Committed)
+	}
+	if commit.SignatureStatus != "verified" || commit.SignatureType != "GPG" ||
+		commit.SignatureSource != "provider" || commit.SignatureReason != "valid" {
+		t.Fatalf("GitHub signature verification was not mapped from provider data: %#v", commit)
+	}
+	if !commit.ChecksAvailable || commit.ChecksState != "success" || len(commit.Checks) != 2 {
+		t.Fatalf("GitHub statuses and check runs were not kept separate from signatures: %#v", commit.Checks)
+	}
+	if commit.Stats != (CommitStats{Additions: 8, Deletions: 2, Total: 10}) ||
+		len(commit.Files) != 1 || commit.Files[0].Path != "main.go" || !commit.DiffAvailable {
+		t.Fatalf("GitHub diff metadata was incomplete: %#v", commit)
+	}
+}
+
+func TestGitLabCommitDetailsDistinguishUnknownSignatureFromUnavailableChecks(t *testing.T) {
+	sha := strings.Repeat("b", 40)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PRIVATE-TOKEN") != "glpat_test" {
+			t.Errorf("missing GitLab token")
+		}
+		switch r.URL.Path {
+		case "/api/v4/projects/42/repository/commits/" + sha:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": sha, "title": "fix: commit metadata", "message": "fix: commit metadata\n\nBody",
+				"web_url": "https://gitlab.example/group/app/-/commit/" + sha,
+				"author_name": "Carol", "author_email": "carol@example.test", "authored_date": "2026-10-30T09:00:00Z",
+				"committer_name": "Dana", "committer_email": "dana@example.test", "committed_date": "2026-10-30T09:30:00Z",
+				"stats": map[string]any{"additions": 4, "deletions": 1, "total": 5},
+				"last_pipeline": map[string]any{"id": 7, "status": "success", "web_url": "https://gitlab.example/group/app/-/pipelines/7"},
+			})
+		case "/api/v4/projects/42/repository/commits/" + sha + "/signature":
+			_ = json.NewEncoder(w).Encode(map[string]any{"signature_type": "SSH", "verification_status": "verified", "commit_source": "gitaly"})
+		case "/api/v4/projects/42/repository/commits/" + sha + "/statuses":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"name": "unit", "status": "success", "description": "All tests passed", "target_url": "https://ci.example.test/unit"}})
+		case "/api/v4/projects/42/repository/commits/" + sha + "/diff":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"old_path": "old.go", "new_path": "new.go", "renamed_file": true, "diff": "@@ -1 +1 @@\n-old\n+new"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := &Provider{kind: domain.RepositoryProviderGitLab, host: server.URL, base: server.URL + "/api/v4", http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitLab, ExternalID: "42", DefaultBranch: "main"}
+	commit, err := provider.GetCommit(context.Background(), "glpat_test", repo, "main", sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if commit.Author != "Carol" || commit.Committer != "Dana" || commit.Email != "carol@example.test" ||
+		commit.CommitterEmail != "dana@example.test" || commit.AuthoredAt == nil ||
+		commit.AuthoredAt.Format(time.RFC3339) != "2026-10-30T09:00:00Z" {
+		t.Fatalf("GitLab author/committer metadata was not preserved: %#v", commit)
+	}
+	if commit.SignatureStatus != "verified" || commit.SignatureType != "SSH" || commit.SignatureSource != "provider" {
+		t.Fatalf("GitLab signature response was not mapped: %#v", commit)
+	}
+	if !commit.ChecksAvailable || commit.ChecksState != "success" || len(commit.Checks) != 2 {
+		t.Fatalf("GitLab CI pipeline/statuses were not separated from signature: %#v", commit)
+	}
+	if !commit.DiffAvailable || len(commit.Files) != 1 || commit.Files[0].Status != "renamed" ||
+		commit.Files[0].PreviousPath != "old.go" || commit.Files[0].Path != "new.go" {
+		t.Fatalf("GitLab commit diff was not mapped: %#v", commit.Files)
+	}
+}
+
+func TestCommitSignatureParsingAndDiffLineCounting(t *testing.T) {
+	object := []byte("tree abc\nauthor Alice <a@example.test> 1 +0000\ncommitter Bob <b@example.test> 2 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n c2lnbmF0dXJl\n -----END PGP SIGNATURE-----\n\nmessage\n")
+	signature := gitCommitSignature(object)
+	if !strings.Contains(signature, "BEGIN PGP SIGNATURE") || !strings.Contains(signature, "END PGP SIGNATURE") {
+		t.Fatalf("Git commit signature header continuation was not parsed: %q", signature)
+	}
+	additions, deletions := countCommitDiffLines("--- a/main.go\n+++ b/main.go\n-old\n+new\n+second")
+	if additions != 2 || deletions != 1 {
+		t.Fatalf("diff line counts = +%d/-%d, want +2/-1", additions, deletions)
+	}
+}
+
+func TestGetCommitRejectsAbbreviatedOrMalformedSHA(t *testing.T) {
+	provider := &Provider{kind: domain.RepositoryProviderGitHub}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app"}
+	for _, sha := range []string{"abc1234", strings.Repeat("z", 40), strings.Repeat("a", 39)} {
+		if _, err := provider.GetCommit(context.Background(), "", repo, "main", sha); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("invalid full SHA %q was accepted: %v", sha, err)
+		}
 	}
 }
