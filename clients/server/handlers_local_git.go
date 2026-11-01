@@ -129,3 +129,28 @@ func (s *Server) getLocalGitDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"diff": item})
 }
+
+
+func (s *Server) getLocalGitTags(w http.ResponseWriter, r *http.Request) {
+	items, err := s.app.LocalGitService.Tags(requestContext(r), r.PathValue("ref"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) createLocalGitTag(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name    string `json:"name"`
+		Message string `json:"message"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := s.app.LocalGitService.CreateLocalTag(requestContext(r), r.PathValue("ref"), input.Name, input.Message); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]bool{"created": true})
+}

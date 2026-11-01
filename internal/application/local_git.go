@@ -179,3 +179,26 @@ func (s *LocalGitService) Diff(ctx context.Context, repositoryRef string, staged
 	}
 	return s.engine.Diff(ctx, path, staged)
 }
+
+
+func (s *LocalGitService) Tags(ctx context.Context, repositoryRef string) ([]localgit.Tag, error) {
+	path, err := s.workspacePath(ctx, repositoryRef)
+	if err != nil {
+		return nil, err
+	}
+	if !s.engine.Availability().Available {
+		return []localgit.Tag{}, nil
+	}
+	return s.engine.Tags(ctx, path)
+}
+
+func (s *LocalGitService) CreateLocalTag(ctx context.Context, repositoryRef, name, message string) error {
+	path, err := s.workspacePath(ctx, repositoryRef)
+	if err != nil {
+		return err
+	}
+	if !s.engine.Availability().Available {
+		return fmt.Errorf("%w: Git executable is not available", domain.ErrUnavailable)
+	}
+	return s.engine.CreateTag(ctx, path, name, message)
+}
