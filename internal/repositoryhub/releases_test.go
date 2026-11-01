@@ -2,12 +2,12 @@ package repositoryhub
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"idios/internal/domain"
 )
@@ -216,5 +216,4 @@ func TestNormalizeHubPageBoundsPagination(t *testing.T) {
 	if releasePlatformFromName("product-universal-macos.zip") != "macOS Universal" {
 		t.Fatal("universal macOS platform hint was not detected")
 	}
-	_ = time.UTC
 }
