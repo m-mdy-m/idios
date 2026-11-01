@@ -134,6 +134,103 @@ type Commit struct {
 	DiffUnavailableReason string        `json:"diff_unavailable_reason,omitempty"`
 }
 
+type FeatureAvailability struct {
+	Available bool   `json:"available"`
+	State     string `json:"state"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type ReleaseAsset struct {
+	ID              string `json:"id,omitempty"`
+	Name            string `json:"name"`
+	Label           string `json:"label,omitempty"`
+	Platform        string `json:"platform,omitempty"`
+	PlatformSource  string `json:"platform_source,omitempty"`
+	Size            *int64 `json:"size,omitempty"`
+	ContentType     string `json:"content_type,omitempty"`
+	DownloadCount   *int64 `json:"download_count,omitempty"`
+	Digest          string `json:"digest,omitempty"`
+	URL             string `json:"url,omitempty"`
+}
+
+type Release struct {
+	ID              string         `json:"id,omitempty"`
+	TagName         string         `json:"tag_name"`
+	Name            string         `json:"name"`
+	TargetCommitish string         `json:"target_commitish,omitempty"`
+	Body            string         `json:"body,omitempty"`
+	Draft           bool           `json:"draft"`
+	Prerelease      bool           `json:"prerelease"`
+	CreatedAt       *time.Time     `json:"created_at,omitempty"`
+	PublishedAt     *time.Time     `json:"published_at,omitempty"`
+	URL             string         `json:"url,omitempty"`
+	AssetsAvailable bool           `json:"assets_available"`
+	Assets          []ReleaseAsset `json:"assets"`
+}
+
+type ReleasePage struct {
+	Items        []Release          `json:"items"`
+	Page         int                `json:"page"`
+	HasMore      bool               `json:"has_more"`
+	Availability FeatureAvailability `json:"availability"`
+}
+
+type Tag struct {
+	Name             string     `json:"name"`
+	Kind             string     `json:"kind"`
+	ObjectSHA        string     `json:"object_sha,omitempty"`
+	ObjectType       string     `json:"object_type,omitempty"`
+	TargetSHA        string     `json:"target_sha,omitempty"`
+	Annotation       string     `json:"annotation,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	CommitCreatedAt  *time.Time `json:"commit_created_at,omitempty"`
+	Protected        *bool      `json:"protected,omitempty"`
+	ReleaseName      string     `json:"release_name,omitempty"`
+	ReleaseURL       string     `json:"release_url,omitempty"`
+	URL              string     `json:"url,omitempty"`
+}
+
+type TagPage struct {
+	Items        []Tag              `json:"items"`
+	Page         int                `json:"page"`
+	HasMore      bool               `json:"has_more"`
+	Availability FeatureAvailability `json:"availability"`
+}
+
+type TagCompareCommit struct {
+	SHA        string     `json:"sha"`
+	Title      string     `json:"title,omitempty"`
+	Message    string     `json:"message,omitempty"`
+	Author     string     `json:"author,omitempty"`
+	Committer  string     `json:"committer,omitempty"`
+	CommittedAt *time.Time `json:"committed_at,omitempty"`
+	URL        string     `json:"url,omitempty"`
+}
+
+type TagCompareFile struct {
+	Path         string `json:"path"`
+	PreviousPath string `json:"previous_path,omitempty"`
+	Status       string `json:"status"`
+	Additions    int    `json:"additions"`
+	Deletions    int    `json:"deletions"`
+	Patch        string `json:"patch,omitempty"`
+}
+
+type TagComparison struct {
+	From             string             `json:"from"`
+	To               string             `json:"to"`
+	State            string             `json:"state"`
+	MergeBaseSHA     string             `json:"merge_base_sha,omitempty"`
+	AheadBy          int                `json:"ahead_by"`
+	BehindBy         int                `json:"behind_by"`
+	TotalCommits     int                `json:"total_commits"`
+	Commits          []TagCompareCommit `json:"commits"`
+	Files            []TagCompareFile   `json:"files"`
+	CommitsTruncated bool               `json:"commits_truncated"`
+	FilesTruncated   bool               `json:"files_truncated"`
+	Availability     FeatureAvailability `json:"availability"`
+}
+
 type IssueCreateOptions struct {
 	Status             string
 	Assignee           string
@@ -643,7 +740,7 @@ func (p *Provider) ListRepositories(ctx context.Context, token, search string, p
 			} else if r.Permissions.Triage {
 				permission = "triage"
 			}
-			caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read"}
+			caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read", "releases.read", "tags.read", "tags.compare"}
 			if canWriteIssues {
 				caps = append(caps, "issues.write")
 			}
@@ -708,7 +805,7 @@ func (p *Provider) ListRepositories(ctx context.Context, token, search string, p
 			} else if access >= 30 {
 				permission = "write"
 			}
-			caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read"}
+			caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read", "releases.read", "tags.read", "tags.compare"}
 			if access >= 20 {
 				caps = append(caps, "issues.write")
 			}
@@ -764,7 +861,7 @@ func (p *Provider) ListRepositories(ctx context.Context, token, search string, p
 			if clone == "" {
 				clone = r.Clone
 			}
-			caps := []string{"code.clone", "code.read", "branches.read", "commits.read"}
+			caps := []string{"code.clone", "code.read", "branches.read", "commits.read", "tags.read", "tags.compare"}
 			if trackerByProject[r.ProjectName] != "" {
 				caps = append(caps, "issues.read", "issues.write")
 			}
@@ -834,7 +931,7 @@ func (p *Provider) GetRepository(ctx context.Context, token, externalID, fullPat
 		} else if r.Permissions.Triage {
 			permission = "triage"
 		}
-		caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read"}
+		caps := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read", "releases.read", "tags.read", "tags.compare"}
 		if canWriteIssues {
 			caps = append(caps, "issues.write")
 		}
