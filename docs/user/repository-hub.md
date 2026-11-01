@@ -138,6 +138,14 @@ The UI checks the capability list returned for each linked repository. Unsupport
 
 Collections, pins, aliases, and repository relations are local IDIOS metadata. Unlinking a repository removes the IDIOS link and its local preferences; it does not delete the remote repository or revoke the provider account connection. Disconnecting a provider removes the connection and all Hub links belonging to it.
 
+## Inspecting commit history
+
+Open **Commits** on a linked repository to browse its paginated history. The list shows the author and committer as separate identities, including their emails and timestamps when the provider returns them. Open **Details** on a commit to inspect its full SHA, signature verification, status checks, changed files, line counts and diff.
+
+Signature status is not inferred from an email address, avatar, or CI result. GitHub verification is shown from the provider's verification response; GitLab uses its commit-signature verification endpoint; SourceForge is checked locally with `git verify-commit` against the IDIOS server's configured Git keyring. A local verification result describes only that server's keyring and trust configuration.
+
+The UI distinguishes **Verified**, **Unverified**, **Unsigned**, **Unknown** and **Unavailable**. Status checks and pipelines are displayed separately from cryptographic signatures. Providers that do not expose a check or verification endpoint are reported as unavailable rather than as a passing or failing result. SourceForge does not expose provider-hosted CI checks through the current Allura integration. For SourceForge SSH-signed commits, set `IDIOS_SOURCEFORGE_SSH_ALLOWED_SIGNERS_FILE` to the absolute path of a trusted OpenSSH allowed-signers file in the IDIOS server environment. The file is read locally and is never sent to SourceForge. GPG verification uses the local GPG keyring available to the IDIOS server process.
+
 ## Data and security boundary
 
 - Provider credentials are encrypted at rest with AES-256-GCM. The provider, host, and stable account ID are authenticated as associated data.
