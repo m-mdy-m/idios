@@ -690,8 +690,8 @@ func TestGitHubCommitDetailsPreserveProvenanceVerificationChecksAndDiff(t *testi
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"sha": sha, "html_url": "https://github.com/acme/app/commit/" + sha,
 				"commit": map[string]any{
-					"message": "feat: signed commit\n\nDetails",
-					"author": map[string]any{"name": "Alice", "email": "alice@example.test", "date": "2026-10-31T10:00:00Z"},
+					"message":   "feat: signed commit\n\nDetails",
+					"author":    map[string]any{"name": "Alice", "email": "alice@example.test", "date": "2026-10-31T10:00:00Z"},
 					"committer": map[string]any{"name": "Bob", "email": "bob@example.test", "date": "2026-10-31T11:00:00Z"},
 					"verification": map[string]any{
 						"verified": true, "reason": "valid", "signature": "-----BEGIN PGP SIGNATURE-----",
@@ -754,10 +754,10 @@ func TestGitLabCommitDetailsDistinguishUnknownSignatureFromUnavailableChecks(t *
 		case "/api/v4/projects/42/repository/commits/" + sha:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id": sha, "title": "fix: commit metadata", "message": "fix: commit metadata\n\nBody",
-				"web_url": "https://gitlab.example/group/app/-/commit/" + sha,
+				"web_url":     "https://gitlab.example/group/app/-/commit/" + sha,
 				"author_name": "Carol", "author_email": "carol@example.test", "authored_date": "2026-10-30T09:00:00Z",
 				"committer_name": "Dana", "committer_email": "dana@example.test", "committed_date": "2026-10-30T09:30:00Z",
-				"stats": map[string]any{"additions": 4, "deletions": 1, "total": 5},
+				"stats":         map[string]any{"additions": 4, "deletions": 1, "total": 5},
 				"last_pipeline": map[string]any{"id": 7, "status": "success", "web_url": "https://gitlab.example/group/app/-/pipelines/7"},
 			})
 		case "/api/v4/projects/42/repository/commits/" + sha + "/signature":
