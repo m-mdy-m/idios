@@ -815,8 +815,9 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   }, [currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationPageKey]);
 
   const refreshPageTranslation = useCallback(() => {
-    const activeJob = translationJobs.list().find((job) => job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running');
-    if (activeJob) translationJobs.cancel(activeJob.id);
+    for (const job of translationJobs.list()) {
+      if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
+    }
     pageTranslationCache.current.delete(currentPageTranslationKey);
     pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`);
     pageLearningCache.current.delete(`${currentPageTranslationKey}:ielts`);
