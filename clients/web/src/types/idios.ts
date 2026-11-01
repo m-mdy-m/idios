@@ -402,6 +402,33 @@ export interface MonitoringSnapshot {
 
 
 
+export interface LocalGitStatus {
+  available: boolean;
+  initialized: boolean;
+  backend: string;
+  branch?: string;
+  clean: boolean;
+  staged: number;
+  unstaged: number;
+  untracked: number;
+  reason?: string;
+}
+export interface LocalGitBranch {
+  name: string;
+  commit_sha: string;
+  current: boolean;
+}
+export interface LocalGitCommit {
+  sha: string;
+  author: string;
+  author_email: string;
+  author_date: string;
+  committer: string;
+  commit_email: string;
+  commit_date: string;
+  message: string;
+}
+
 export type HubProvider = 'github' | 'gitlab' | 'sourceforge';
 export interface HubProviderDescriptor { id: HubProvider; label: string; oauth_available?: boolean; capabilities: string[] }
 export interface HubStatus {

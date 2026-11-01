@@ -1,0 +1,38 @@
+.local-git-workspace{display:flex;flex-direction:column;gap:16px;padding:18px;min-width:0}
+.local-git-workspace__intro,.local-git-workspace__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.local-git-workspace__intro{align-items:center;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-subtle)}
+.local-git-workspace__mark{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border:1px solid var(--border-strong);border-radius:10px;color:var(--accent);background:var(--surface)}
+.local-git-workspace__intro>div:last-child,.local-git-workspace__header>div{min-width:0}
+.local-git-workspace__intro h3,.local-git-workspace__header h3{margin:3px 0 5px;font-size:17px}
+.local-git-workspace__intro p:not(.eyebrow),.local-git-workspace__header p:not(.eyebrow){max-width:760px;margin:0;color:var(--muted);font-size:11px;line-height:1.65}
+.local-git-workspace__setup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.local-git-workspace__setup section{display:flex;align-items:flex-start;flex-direction:column;gap:9px;padding:16px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.local-git-workspace__setup section>svg{color:var(--accent)}
+.local-git-workspace__setup strong{font-size:12px}
+.local-git-workspace__setup p{flex:1;margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+.local-git-workspace__unavailable{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid var(--border-strong);border-radius:11px;background:var(--surface-subtle)}
+.local-git-workspace__unavailable>svg{color:var(--muted);flex:0 0 auto}
+.local-git-workspace__unavailable strong{font-size:12px}
+.local-git-workspace__unavailable p,.local-git-workspace__unavailable small{display:block;margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.6}
+.local-git-workspace__summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.local-git-workspace__summary>div{display:flex;min-width:0;flex-direction:column;gap:7px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface-subtle)}
+.local-git-workspace__summary span{color:var(--muted);font-size:10px}
+.local-git-workspace__summary strong{display:flex;align-items:center;gap:6px;font-size:13px}
+.local-git-workspace__toolbar{display:flex;align-items:flex-end;flex-wrap:wrap;gap:9px;padding:12px;border:1px solid var(--border);border-radius:10px}
+.local-git-workspace__toolbar .field{flex:1 1 190px;min-width:150px}
+.local-git-workspace__section{min-width:0;padding:14px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.local-git-workspace__section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.local-git-workspace__section-heading>div:first-child{display:flex;flex-direction:column;gap:4px}
+.local-git-workspace__section-heading strong{font-size:12px}
+.local-git-workspace__section-heading span{color:var(--muted);font-size:10px}
+.local-git-workspace__actions{display:flex;flex-wrap:wrap;gap:6px}
+.local-git-workspace__diff{max-height:360px;overflow:auto;margin:0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-subtle);color:var(--text-soft);font:10px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}
+.local-git-workspace__commits{display:flex;flex-direction:column}
+.local-git-workspace__commits article{display:grid;grid-template-columns:105px minmax(0,1fr);gap:12px;padding:11px 2px;border-top:1px solid var(--border)}
+.local-git-workspace__commits code{color:var(--muted);font-size:10px}
+.local-git-workspace__commits article>div{display:flex;min-width:0;flex-direction:column;gap:4px}
+.local-git-workspace__commits strong{font-size:11px;overflow-wrap:anywhere}
+.local-git-workspace__commits span,.local-git-workspace__commits small{color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+.local-git-workspace__identity{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(max-width:720px){.local-git-workspace__setup,.local-git-workspace__identity{grid-template-columns:minmax(0,1fr)}.local-git-workspace__summary{grid-template-columns:repeat(2,minmax(0,1fr))}.local-git-workspace__section-heading{align-items:flex-start;flex-direction:column}.local-git-workspace__header{align-items:stretch;flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.local-git-workspace *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
