@@ -1222,11 +1222,14 @@ func mapGitHubVerification(verification *struct {
 		return "unknown", "", "GitHub did not return signature verification data.", nil
 	}
 	signatureType := detectCommitSignatureType(verification.Signature)
-	if strings.EqualFold(verification.Reason, "unsigned") || strings.TrimSpace(verification.Signature) == "" {
+	if strings.EqualFold(verification.Reason, "unsigned") {
 		return "unsigned", signatureType, verification.Reason, verification.VerifiedAt
 	}
 	if verification.Verified {
 		return "verified", signatureType, verification.Reason, verification.VerifiedAt
+	}
+	if strings.TrimSpace(verification.Signature) == "" && strings.TrimSpace(verification.Reason) == "" {
+		return "unknown", signatureType, "GitHub did not return a signature or verification reason.", verification.VerifiedAt
 	}
 	return "unverified", signatureType, verification.Reason, verification.VerifiedAt
 }
@@ -1237,7 +1240,9 @@ func detectCommitSignatureType(signature string) string {
 		return "GPG"
 	case strings.Contains(signature, "BEGIN SSH SIGNATURE"):
 		return "SSH"
-	case strings.Contains(signature, "BEGIN SIGNED MESSAGE"):
+	case strings.Contains(signature, "BEGIN SIGNED MESSAGE"),
+		strings.Contains(signature, "BEGIN PKCS7"),
+		strings.Contains(signature, "BEGIN CMS"):
 		return "S/MIME"
 	default:
 		return ""
