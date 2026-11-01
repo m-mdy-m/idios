@@ -7,13 +7,14 @@ import {
 import { api } from '@/lib/api';
 import type {
   HubBranch, HubChangeRequest, HubCollection, HubCommit, HubConnection, HubDiscoveredRepository, HubFile,
-  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
+  HubIssue, HubProjectRepository, HubProvider, HubRelease, HubRepository, HubRepositoryRelation,
+  HubStatus, HubTag, HubTagComparison, HubTreeEntry, Project,
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 import './RepositoryHubPanel.css';
 import { RemoteReadmePreview, RemoteTreeView } from './RepositoryBrowser';
 
-type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Settings';
+type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Releases' | 'Tags' | 'Settings';
 
 type DiffLine = { kind: 'context' | 'remove' | 'add'; text: string };
 
@@ -76,6 +77,8 @@ function remoteTabFromView(view?: string): RemoteTab {
     case 'changes':
     case 'change-requests': return 'Change Requests';
     case 'commits': return 'Commits';
+    case 'releases': return 'Releases';
+    case 'tags': return 'Tags';
     case 'settings': return 'Settings';
     default: return 'Overview';
   }
@@ -87,6 +90,8 @@ function remoteViewFromTab(tab: RemoteTab): string {
     case 'Issues': return 'issues';
     case 'Change Requests': return 'changes';
     case 'Commits': return 'commits';
+    case 'Releases': return 'releases';
+    case 'Tags': return 'tags';
     case 'Settings': return 'settings';
     default: return 'overview';
   }
@@ -162,6 +167,23 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [commitDetails, setCommitDetails] = useState<Record<string, HubCommit>>({});
   const [commitDetailLoading, setCommitDetailLoading] = useState('');
   const [commitDetailErrors, setCommitDetailErrors] = useState<Record<string, string>>({});
+  const [latestRelease, setLatestRelease] = useState<HubRelease | null>(null);
+  const [latestReleaseAvailability, setLatestReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [releases, setReleases] = useState<HubRelease[]>([]);
+  const [releasePage, setReleasePage] = useState(1);
+  const [releaseHasMore, setReleaseHasMore] = useState(false);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+  const [releaseAvailability, setReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [tags, setTags] = useState<HubTag[]>([]);
+  const [tagPage, setTagPage] = useState(1);
+  const [tagHasMore, setTagHasMore] = useState(false);
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagAvailability, setTagAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
+  const [compareFrom, setCompareFrom] = useState('');
+  const [compareTo, setCompareTo] = useState('');
+  const [tagComparison, setTagComparison] = useState<HubTagComparison | null>(null);
+  const [tagCompareLoading, setTagCompareLoading] = useState(false);
+  const [tagCompareError, setTagCompareError] = useState('');
   const [relations, setRelations] = useState<HubRepositoryRelation[]>([]);
   const [targetRelation, setTargetRelation] = useState('');
   const [relationType, setRelationType] = useState('related_to');
@@ -252,6 +274,26 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
 
   useEffect(() => {
     if (!selected) {
+      setLatestRelease(null);
+      setLatestReleaseAvailability(null);
+      return;
+    }
+    let active = true;
+    setLatestRelease(null);
+    setLatestReleaseAvailability(null);
+    if (!selected.capabilities.includes('releases.read')) return () => { active = false; };
+    void api.hubReleases(selected.id, 1, 1).then((page) => {
+      if (!active) return;
+      setLatestRelease(page.items[0] ?? null);
+      setLatestReleaseAvailability(page.availability);
+    }).catch((err) => {
+      if (active) setLatestReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    });
+    return () => { active = false; };
+  }, [selected?.id, selected?.capabilities]);
+
+  useEffect(() => {
+    if (!selected) {
       setBranches([]); setTree([]); setFile(null); setIssues([]); setChanges([]); setCommits([]); setRelations([]);
       setRepositoryAlias(''); setRepositoryNote(''); setRepositoryPinned(false);
       setHubProjectLinks([]); setProjectToLink('');
@@ -336,6 +378,31 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
         setCommits(items); setCommitPage(1); setCommitHasMore(items.length === 50);
       }).catch((err) => { if (active) setError(messageFrom(err)); })
         .finally(() => { if (active) setCommitLoading(false); });
+    } else if (tab === 'Releases') {
+      setReleases([]);
+      setReleasePage(1); setReleaseHasMore(false); setReleaseAvailability(null);
+      if (!selected.capabilities.includes('releases.read')) return () => { active = false; };
+      setReleaseLoading(true);
+      void api.hubReleases(selected.id, 1, 20).then((page) => {
+        if (!active) return;
+        setReleases(page.items); setReleasePage(page.page); setReleaseHasMore(page.has_more);
+        setReleaseAvailability(page.availability);
+      }).catch((err) => {
+        if (active) setReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+      }).finally(() => { if (active) setReleaseLoading(false); });
+    } else if (tab === 'Tags') {
+      setTags([]);
+      setTagPage(1); setTagHasMore(false); setTagAvailability(null);
+      setCompareFrom(''); setCompareTo(''); setTagComparison(null); setTagCompareError('');
+      if (!selected.capabilities.includes('tags.read')) return () => { active = false; };
+      setTagLoading(true);
+      void api.hubTags(selected.id, 1, 20).then((page) => {
+        if (!active) return;
+        setTags(page.items); setTagPage(page.page); setTagHasMore(page.has_more);
+        setTagAvailability(page.availability);
+      }).catch((err) => {
+        if (active) setTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+      }).finally(() => { if (active) setTagLoading(false); });
     } else if (tab === 'Settings') {
       void api.hubRepositoryRelations(selected.id).then((items) => { if (active) setRelations(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
     }
@@ -596,6 +663,60 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     }
     setExpandedCommitSHA(item.sha);
     if (!commitDetails[item.sha]) await loadCommitDetails(item);
+  }
+
+  async function loadMoreReleases() {
+    if (!selected || releaseLoading || !releaseHasMore) return;
+    const repositoryID = selected.id;
+    const nextPage = releasePage + 1;
+    setReleaseLoading(true);
+    try {
+      const result = await api.hubReleases(repositoryID, nextPage, 20);
+      if (selected?.id !== repositoryID) return;
+      setReleases((current) => [...current, ...result.items]);
+      setReleasePage(result.page);
+      setReleaseHasMore(result.has_more);
+      setReleaseAvailability(result.availability);
+    } catch (err) {
+      setReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    } finally {
+      setReleaseLoading(false);
+    }
+  }
+
+  async function loadMoreTags() {
+    if (!selected || tagLoading || !tagHasMore) return;
+    const repositoryID = selected.id;
+    const nextPage = tagPage + 1;
+    setTagLoading(true);
+    try {
+      const result = await api.hubTags(repositoryID, nextPage, 20);
+      if (selected?.id !== repositoryID) return;
+      setTags((current) => [...current, ...result.items]);
+      setTagPage(result.page);
+      setTagHasMore(result.has_more);
+      setTagAvailability(result.availability);
+    } catch (err) {
+      setTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
+    } finally {
+      setTagLoading(false);
+    }
+  }
+
+  async function compareSelectedTags() {
+    if (!selected || !compareFrom || !compareTo || compareFrom === compareTo) return;
+    const comparisonRepositoryID = selected.id;
+    setTagCompareLoading(true);
+    setTagCompareError('');
+    setTagComparison(null);
+    try {
+      const comparison = await api.hubCompareTags(comparisonRepositoryID, compareFrom, compareTo);
+      if (selected?.id === comparisonRepositoryID) setTagComparison(comparison);
+    } catch (err) {
+      setTagCompareError(messageFrom(err));
+    } finally {
+      setTagCompareLoading(false);
+    }
   }
 
   async function openRemoteFile(path: string) {
@@ -881,7 +1002,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
           </div>
           <div className="hub-repository-header__actions"><Button variant="secondary" disabled={busy} onClick={() => void perform(async () => { const updated = await api.syncHubRepository(selected.id); await reload(); setSelected(updated); }, 'Repository metadata synchronized.') }><RefreshCw size={13}/> Sync metadata</Button></div>
           <div className="hub-repository-meta"><span>{selected.permission || 'Permission unknown'}</span><span>{selected.default_branch || 'Default branch unknown'}</span><span>{selected.sync_state}</span><span>{selected.open_issue_count} open issues</span></div>
-          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => {
+          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Releases','Tags','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => {
             setTab(item);
             if (standalone && selected) navigate(`/repositories/remote/${encodeURIComponent(selected.id)}/${remoteViewFromTab(item)}`);
           }}>{item}</button>)}</nav>
@@ -897,6 +1018,29 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               <article><span>Change requests</span><strong>{selected.capabilities.includes('changes.read') ? selected.open_change_request_count : '—'}</strong><small>{selected.capabilities.includes('changes.read') ? 'Reported by provider' : 'Not supported by this connection'}</small></article>
               <article><span>Synchronization</span><strong><Badge tone={selected.sync_state === 'ok' ? 'green' : selected.sync_state === 'error' ? 'red' : selected.sync_state === 'stale' ? 'amber' : 'neutral'}>{syncStateLabel(selected.sync_state)}</Badge></strong><small>{selected.last_synced_at ? `Last synced ${new Date(selected.last_synced_at).toLocaleString()}` : 'No successful sync recorded'}</small></article>
             </div>
+            <section className="hub-latest-release">
+              <div className="hub-detail-toolbar">
+                <div><strong>Latest release</strong><p className="hub-muted">The newest provider release is fetched independently from the full release history.</p></div>
+                <Button type="button" variant="ghost" disabled={!selected.capabilities.includes('releases.read')} onClick={() => setTab('Releases')}>Release history <ArrowUpRight size={12}/></Button>
+              </div>
+              {!selected.capabilities.includes('releases.read')
+                ? <p className="hub-muted">This provider does not expose a Releases API. Git tags can still be browsed separately.</p>
+                : latestRelease
+                  ? <article className="hub-latest-release__item">
+                      <div><strong>{latestRelease.name || latestRelease.tag_name}</strong><span>{latestRelease.tag_name}</span></div>
+                      <div className="hub-latest-release__meta">
+                        <Badge>{latestRelease.state}</Badge>
+                        <small>{latestRelease.published_at ? new Date(latestRelease.published_at).toLocaleDateString() : 'Publication date not reported'}</small>
+                        <small>{latestRelease.assets.length} assets</small>
+                      </div>
+                      {latestRelease.url && <a href={latestRelease.url} target="_blank" rel="noreferrer">Open release <ArrowUpRight size={12}/></a>}
+                    </article>
+                  : latestReleaseAvailability?.state === 'unsupported'
+                    ? <p className="hub-muted">{latestReleaseAvailability.reason}</p>
+                    : latestReleaseAvailability?.state === 'error'
+                      ? <p className="hub-muted">{latestReleaseAvailability.reason || 'Latest release could not be loaded.'}</p>
+                      : <p className="hub-muted">No published releases were returned.</p>}
+            </section>
             <section className="hub-overview-description">
               <div><span>Description</span><p>{selected.description || 'No description provided by the provider.'}</p></div>
               <div><span>Repository</span><code>{selected.full_path}</code></div>
