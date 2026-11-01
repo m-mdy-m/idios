@@ -4,7 +4,7 @@ import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderS
 import { buildFaithfulTranslationInstructions, buildTranslationContext } from '../src/features/shelf/model/translation/context.ts';
 import { validateRawTranslationAlignment, validateTranslationIntegrity } from '../src/features/shelf/model/translation/source-integrity.ts';
 import { translationJobs } from '../src/features/shelf/model/translation/job-manager.ts';
-import { translationBenchmarkFixtures, translationBenchmarkRubric } from '../src/features/shelf/model/translation/benchmarks.ts';
+import { createTranslationBenchmarkReport, translationBenchmarkFixtures, translationBenchmarkRubric } from '../src/features/shelf/model/translation/benchmarks.ts';
 
 const source = 'A careful reader follows the argument. The result is not guaranteed.';
 const readerPageSource = await readFile(new URL('../src/features/shelf/ShelfPDFReaderPage.tsx', import.meta.url), 'utf8');
@@ -283,10 +283,17 @@ for (let index = 0; index < 60; index += 1) {
 assert.ok(manager.list().length <= 40);
 assert.equal(translationBenchmarkFixtures.length, 3);
 assert.equal(translationBenchmarkRubric.length, 6);
+const benchmarkReport = createTranslationBenchmarkReport();
+assert.equal(benchmarkReport.fixtureCount, 3);
+assert.deepEqual(benchmarkReport.domainCounts, { philosophy: 1, technical: 1, general: 1 });
+assert.equal(benchmarkReport.deterministicChecks, 'structural-and-required-meaning-markers');
+assert.equal(benchmarkReport.semanticReview.status, 'pending-maintainer-review');
+assert.equal(benchmarkReport.semanticReview.noQualityScoreClaimed, true);
 for (const fixture of translationBenchmarkFixtures) {
   assert.equal(fixture.proposedPersianReference.split(/\n\s*\n/).length, fixture.source.split(/\n\s*\n/).length);
   assert.equal(fixture.reviewStatus, 'maintainer-review-required');
   for (const marker of fixture.requiredMeaningChecks) assert.ok(fixture.source.includes(marker));
+  for (const marker of fixture.requiredTargetMeaningChecks) assert.ok(fixture.proposedPersianReference.includes(marker), fixture.id + ' must preserve target-language meaning marker: ' + marker);
   for (const term of fixture.terminology) {
     assert.ok(fixture.source.toLocaleLowerCase().includes(term.source.toLocaleLowerCase()));
     assert.ok(fixture.proposedPersianReference.includes(term.preferred));
@@ -322,4 +329,5 @@ assert.ok(hoverRules.length > 0 && !/box-shadow\s*:\s*0\s+0\s+0\s+2px/i.test(hov
 assert.ok(readerStyles.includes('background:rgb(251 191 36 / 36%)'), 'PDF word hover must use a restrained warm highlight');
 assert.ok(readerStyles.includes('background:rgb(58 118 238 / 38%)'), 'native text selection must remain visually distinct from word hover');
 
+console.log('Translation benchmark report:', JSON.stringify(benchmarkReport));
 console.log('Reader translation checks passed.');
