@@ -155,6 +155,13 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [issues, setIssues] = useState<HubIssue[]>([]);
   const [changes, setChanges] = useState<HubChangeRequest[]>([]);
   const [commits, setCommits] = useState<HubCommit[]>([]);
+  const [commitPage, setCommitPage] = useState(1);
+  const [commitHasMore, setCommitHasMore] = useState(false);
+  const [commitLoading, setCommitLoading] = useState(false);
+  const [expandedCommitSHA, setExpandedCommitSHA] = useState('');
+  const [commitDetails, setCommitDetails] = useState<Record<string, HubCommit>>({});
+  const [commitDetailLoading, setCommitDetailLoading] = useState('');
+  const [commitDetailErrors, setCommitDetailErrors] = useState<Record<string, string>>({});
   const [relations, setRelations] = useState<HubRepositoryRelation[]>([]);
   const [targetRelation, setTargetRelation] = useState('');
   const [relationType, setRelationType] = useState('related_to');
@@ -321,8 +328,14 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       void api.hubChanges(selected.id).then((items) => { if (active) setChanges(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
     } else if (tab === 'Commits') {
       setCommits([]);
+      setCommitPage(1); setCommitHasMore(false); setExpandedCommitSHA('');
       if (!selected.capabilities.includes('commits.read')) return () => { active = false; };
-      void api.hubCommits(selected.id, branch).then((items) => { if (active) setCommits(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
+      setCommitLoading(true);
+      void api.hubCommits(selected.id, branch, 1).then((items) => {
+        if (!active) return;
+        setCommits(items); setCommitPage(1); setCommitHasMore(items.length === 50);
+      }).catch((err) => { if (active) setError(messageFrom(err)); })
+        .finally(() => { if (active) setCommitLoading(false); });
     } else if (tab === 'Settings') {
       void api.hubRepositoryRelations(selected.id).then((items) => { if (active) setRelations(items); }).catch((err) => { if (active) setError(messageFrom(err)); });
     }
@@ -537,6 +550,52 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       if (collectionFilter === collection.id) setCollectionFilter('');
       await reload();
     }, 'Collection deleted.');
+  }
+
+  async function loadMoreCommits() {
+    if (!selected || !supports('commits.read') || commitLoading || !commitHasMore) return;
+    const repositoryID = selected.id;
+    const currentBranch = branch;
+    const nextPage = commitPage + 1;
+    setCommitLoading(true);
+    setError('');
+    try {
+      const items = await api.hubCommits(repositoryID, currentBranch, nextPage);
+      if (selected?.id !== repositoryID || branch !== currentBranch) return;
+      setCommits((current) => [...current, ...items]);
+      setCommitPage(nextPage);
+      setCommitHasMore(items.length === 50);
+    } catch (err) {
+      setError(messageFrom(err));
+    } finally {
+      setCommitLoading(false);
+    }
+  }
+
+  async function loadCommitDetails(item: HubCommit) {
+    if (!selected) return;
+    const repositoryID = selected.id;
+    const currentBranch = branch;
+    setCommitDetailLoading(item.sha);
+    setCommitDetailErrors((current) => ({ ...current, [item.sha]: '' }));
+    try {
+      const details = await api.hubCommit(repositoryID, item.sha, currentBranch);
+      if (selected?.id !== repositoryID || branch !== currentBranch) return;
+      setCommitDetails((current) => ({ ...current, [item.sha]: details }));
+    } catch (err) {
+      setCommitDetailErrors((current) => ({ ...current, [item.sha]: messageFrom(err) }));
+    } finally {
+      setCommitDetailLoading((current) => current === item.sha ? '' : current);
+    }
+  }
+
+  async function toggleCommitDetails(item: HubCommit) {
+    if (expandedCommitSHA === item.sha) {
+      setExpandedCommitSHA('');
+      return;
+    }
+    setExpandedCommitSHA(item.sha);
+    if (!commitDetails[item.sha]) await loadCommitDetails(item);
   }
 
   async function openRemoteFile(path: string) {
@@ -988,7 +1047,96 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
             </Modal>}
           </div>}
 
-          {tab === 'Commits' && <div className="hub-work-items">{supports('commits.read') && commits.map((item) => <article className="hub-commit-row" key={item.sha}><code>{item.sha.slice(0,12)}</code><div><strong>{item.message.split('\n')[0]}</strong><span>{item.author} · {new Date(item.committed_at).toLocaleString()}</span></div>{item.url && <a href={item.url} target="_blank" rel="noreferrer">Open <ArrowUpRight size={12}/></a>}</article>)}{!supports('commits.read') ? <p className="hub-muted">Commit browsing is not available through this provider's REST API. Use the clone URL with Git when provided.</p> : !commits.length && <p className="hub-muted">No commits returned for this repository.</p>}</div>}
+          {tab === 'Commits' && <div className="hub-work-items">
+            <div className="hub-detail-toolbar">
+              <div><strong>Commit history</strong><p className="hub-muted">Author and committer are shown separately. Signature verification and CI checks are independent signals.</p></div>
+              {branch && <Badge>{branch}</Badge>}
+            </div>
+            {!supports('commits.read') ? <p className="hub-muted">Commit browsing is not available through this provider's API. Use the clone URL with Git when provided.</p> : <>
+              {commits.map((item) => {
+                const expanded = expandedCommitSHA === item.sha;
+                const detail = commitDetails[item.sha];
+                const signature = item.signature_status || 'unknown';
+                const signatureLabel = signature === 'unavailable' ? 'Signature unavailable' : signature === 'unknown' ? 'Signature unknown' : signature[0].toUpperCase() + signature.slice(1);
+                return <article className="hub-commit-card" key={item.sha}>
+                  <div className="hub-commit-card__summary">
+                    <code title={item.sha}>{item.sha.slice(0, 12)}</code>
+                    <div className="hub-commit-card__message">
+                      <strong>{item.message.split('\n')[0]}</strong>
+                      <span>{item.author || 'Author not reported'}{item.email ? ` · ${item.email}` : ''} · {item.authored_at ? new Date(item.authored_at).toLocaleString() : 'Author date unavailable'}</span>
+                      <span>Committer: {item.committer || 'Not reported'}{item.committer_email ? ` · ${item.committer_email}` : ''} · {item.committed_at ? new Date(item.committed_at).toLocaleString() : 'Commit date unavailable'}</span>
+                    </div>
+                    <div className="hub-commit-card__signals">
+                      <Badge tone={signature === 'verified' ? 'green' : signature === 'unverified' ? 'amber' : 'neutral'}>{signatureLabel}</Badge>
+                      {item.checks_available
+                        ? <Badge tone={item.checks_state === 'success' ? 'green' : item.checks_state === 'failure' || item.checks_state === 'failed' ? 'red' : 'neutral'}>Checks: {item.checks_state || 'reported'}</Badge>
+                        : <Badge>Checks on details</Badge>}
+                    </div>
+                    <div className="hub-commit-card__actions">
+                      <Button type="button" variant="secondary" onClick={() => void toggleCommitDetails(item)} disabled={commitDetailLoading === item.sha}>
+                        {expanded ? 'Hide details' : commitDetailLoading === item.sha ? 'Loading…' : 'Details'}
+                      </Button>
+                      {item.url && <a href={item.url} target="_blank" rel="noreferrer">Open <ArrowUpRight size={12}/></a>}
+                    </div>
+                  </div>
+                  {expanded && <div className="hub-commit-details">
+                    {commitDetailLoading === item.sha && <p className="hub-muted">Loading commit details…</p>}
+                    {commitDetailErrors[item.sha] && <div className="notice notice--error" role="alert">{commitDetailErrors[item.sha]} <button type="button" onClick={() => {
+                      setCommitDetails((current) => { const next = { ...current }; delete next[item.sha]; return next; });
+                      void loadCommitDetails(item);
+                    }}>Retry</button></div>}
+                    {detail && <>
+                      <section className="hub-commit-detail-section">
+                        <h4>Commit identity</h4>
+                        <div className="hub-commit-provenance-grid">
+                          <div className="hub-commit-provenance-grid__wide"><span>Full SHA</span><code>{detail.sha}</code></div>
+                          <div className="hub-commit-provenance-grid__wide"><span>Full message</span><pre>{detail.message}</pre></div>
+                        </div>
+                      </section>
+                      <section className="hub-commit-detail-section">
+                        <h4>Cryptographic signature</h4>
+                        <div className="hub-commit-provenance-grid">
+                          <div><span>Status</span><strong>{detail.signature_status || 'unknown'}</strong></div>
+                          <div><span>Type</span><strong>{detail.signature_type || 'Not reported'}</strong></div>
+                          <div><span>Verification source</span><strong>{detail.signature_source || 'Not reported'}</strong></div>
+                          <div><span>Verified at</span><strong>{detail.signature_verified_at ? new Date(detail.signature_verified_at).toLocaleString() : 'Not reported'}</strong></div>
+                        </div>
+                        <p>{detail.signature_reason || (detail.signature_status === 'unavailable' ? 'This provider does not expose commit signature verification.' : 'The provider did not supply a verification reason.')}</p>
+                      </section>
+                      <section className="hub-commit-detail-section">
+                        <h4>CI and status checks</h4>
+                        {!detail.checks_available
+                          ? <p>Checks unavailable through this provider connection.</p>
+                          : !detail.checks?.length ? <p>No status checks were reported for this commit.</p>
+                          : <div className="hub-commit-check-list">{detail.checks.map((check, index) => <div key={`${check.name}-${index}`}>
+                            <strong>{check.name}</strong><Badge tone={check.conclusion === 'success' || check.status === 'success' ? 'green' : check.conclusion === 'failure' || check.status === 'failed' ? 'red' : 'neutral'}>{check.conclusion || check.status}</Badge>
+                            {check.description && <span>{check.description}</span>}
+                            {check.url && <a href={check.url} target="_blank" rel="noreferrer">Open check</a>}
+                          </div>)}</div>}
+                      </section>
+                      <section className="hub-commit-detail-section">
+                        <h4>Changed files · {detail.stats?.total ?? 0} lines</h4>
+                        <div className="hub-commit-provenance-grid">
+                          <div><span>Additions</span><strong>+{detail.stats?.additions ?? 0}</strong></div>
+                          <div><span>Deletions</span><strong>−{detail.stats?.deletions ?? 0}</strong></div>
+                          <div><span>Files</span><strong>{detail.files?.length ?? 0}</strong></div>
+                        </div>
+                        {detail.files?.map((file) => <div className="hub-commit-file" key={file.path}>
+                          <div><code>{file.path}</code><Badge>{file.status}</Badge><span>+{file.additions} / −{file.deletions}</span></div>
+                          {file.patch && <pre>{file.patch}</pre>}
+                        </div>)}
+                        {detail.diff && <details className="hub-commit-full-diff"><summary>Full commit diff</summary><pre>{detail.diff}</pre></details>}
+                        {!detail.diff_available && <p>{detail.diff_unavailable_reason || 'Commit diff unavailable from this provider.'}</p>}
+                      </section>
+                    </>}
+                  </div>}
+                </article>;
+              })}
+              {!commits.length && !commitLoading && <p className="hub-muted">No commits returned for this repository.</p>}
+              {commitHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreCommits()} loading={commitLoading}>Load more commits</Button>}
+              {commitLoading && !commits.length && <p className="hub-muted">Loading commit history…</p>}
+            </>}
+          </div>}
 
           {tab === 'Settings' && <div className="hub-work-items">
             <section className="hub-provider-settings hub-work-item">
