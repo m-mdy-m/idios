@@ -261,6 +261,11 @@ export const api = {
     const params = new URLSearchParams({ page: String(page) }); if (branch) params.set('ref', branch);
     return request<HubCommit[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/commits?${params}`);
   },
+  hubCommit: (ref: string, sha: string, branch = '') => {
+    const params = new URLSearchParams();
+    if (branch) params.set('ref', branch);
+    return request<HubCommit>(`/api/hub/repositories/${encodeURIComponent(ref)}/commits/${encodeURIComponent(sha)}?${params}`);
+  },
   hubIssues: (ref: string, state = 'open', page = 1) => request<HubIssue[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues?${new URLSearchParams({ state, page: String(page) })}`),
   createHubIssue: (ref: string, body: {
     title: string; body: string; labels?: string[]; status?: string; assignee?: string;
