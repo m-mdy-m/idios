@@ -24,7 +24,7 @@ type Availability struct {
 	Available  bool   `json:"available"`
 	Backend    string `json:"backend"`
 	Executable string `json:"executable,omitempty"`
-	Reason     string `json:"reason,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 type Status struct {
@@ -271,7 +271,7 @@ func (e *CLIEngine) isWorktree(ctx context.Context, directory string) bool {
 
 func (e *CLIEngine) Status(ctx context.Context, directory string) (Status, error) {
 	availability := e.Availability()
-	status := Status{Available: availability.Available, Backend: availability.Backend}
+	status := Status{Available: availability.Available, Backend: availability.Backend, Reason: availability.Reason}
 	if !availability.Available {
 		return status, nil
 	}

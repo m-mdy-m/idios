@@ -61,8 +61,8 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  async function perform(action: () => Promise<unknown>, success: string) {
-    if (busy) return;
+  async function perform(action: () => Promise<unknown>, success: string): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError('');
     setNotice('');
@@ -70,37 +70,38 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       await action();
       setNotice(success);
       await refresh();
+      return true;
     } catch (err) {
       setError(messageFrom(err));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function initialize() {
-    await perform(
+    if (await perform(
       () => api.initializeLocalGit(repository.id, { branch: initialBranch.trim() || 'main' }),
       'A real Git working copy was initialized locally.',
-    );
-    setInitOpen(false);
+    )) setInitOpen(false);
   }
 
   async function clone() {
-    await perform(
+    if (await perform(
       () => api.cloneLocalGit(repository.id, { remote_url: remoteURL.trim(), branch: cloneBranch.trim() }),
       'Repository cloned into the IDIOS-managed working-copy directory.',
-    );
-    setCloneOpen(false);
+    )) setCloneOpen(false);
   }
 
   async function createBranch() {
-    await perform(
+    if (await perform(
       () => api.createLocalGitBranch(repository.id, { name: newBranch.trim(), base: branchBase.trim() }),
       'Local branch created and checked out.',
-    );
-    setNewBranch('');
-    setBranchBase('');
-    setBranchOpen(false);
+    )) {
+      setNewBranch('');
+      setBranchBase('');
+      setBranchOpen(false);
+    }
   }
 
   async function switchBranch(name: string) {
@@ -113,16 +114,17 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
   }
 
   async function commit() {
-    await perform(
+    if (await perform(
       () => api.createLocalGitCommit(repository.id, {
         message: commitMessage.trim(),
         author_name: authorName.trim(),
         author_email: authorEmail.trim(),
       }),
       'Local Git commit created.',
-    );
-    setCommitMessage('');
-    setCommitOpen(false);
+    )) {
+      setCommitMessage('');
+      setCommitOpen(false);
+    }
   }
 
   async function loadDiff(staged: boolean) {
@@ -222,8 +224,8 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       <div className="local-git-workspace__section-heading">
         <div><strong>Diff</strong><span>Inspect unstaged or staged changes before committing.</span></div>
         <div className="local-git-workspace__actions">
-          <Button size="sm" variant={!diffStaged ? 'secondary' : 'ghost'} onClick={() => void loadDiff(false)}>Unstaged diff</Button>
-          <Button size="sm" variant={diffStaged ? 'secondary' : 'ghost'} onClick={() => void loadDiff(true)}>Staged diff</Button>
+          <Button className="local-git-workspace__small-button" variant={!diffStaged ? 'secondary' : 'ghost'} onClick={() => void loadDiff(false)}>Unstaged diff</Button>
+          <Button className="local-git-workspace__small-button" variant={diffStaged ? 'secondary' : 'ghost'} onClick={() => void loadDiff(true)}>Staged diff</Button>
         </div>
       </div>
       <pre className="local-git-workspace__diff">{diff || 'Choose a diff view. A clean working tree has no changes to display.'}</pre>

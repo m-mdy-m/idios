@@ -155,7 +155,8 @@ function RepositoryMarkdownPreview({ source }: { source: string }) {
 export function RepositoriesPage() {
   const { dashboard, load } = useWorkspaceStore();
   const navigate = useNavigate();
-  const { slug } = useParams();
+  const { slug, remoteRepositoryID, remoteView } = useParams();
+  const remoteRepositoryRoute = Boolean(remoteRepositoryID);
   const repositoryRoute = Boolean(slug);
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
@@ -525,9 +526,9 @@ export function RepositoriesPage() {
   }
 
   return <div className="page-stack">
-    <PageHeading eyebrow={repositoryRoute ? 'REPOSITORY' : workspaceMode === 'connected' ? 'REMOTE SOURCES' : 'WORKSPACES'} title={repositoryRoute && selected ? selected.name : workspaceMode === 'connected' ? 'Repository Hub' : 'Repositories'} description={repositoryRoute && selected ? (selected.description || 'Repository workspace, issues, branches and history.') : workspaceMode === 'connected' ? 'Connect GitHub, GitLab and SourceForge repositories without mixing them with local workspaces.' : 'Each repository has its own URL and a focused view of its work.'} actions={<>{!repositoryRoute && <Button variant="secondary" onClick={() => setWorkspaceMode((current) => current === 'local' ? 'connected' : 'local')}>{workspaceMode === 'local' ? 'Connected repositories' : 'Local repositories'}</Button>}{repositoryRoute && <Button variant="secondary" onClick={() => { setSelected(null); navigate('/repositories'); }}>All repositories</Button>}{workspaceMode === 'local' && <Button onClick={() => setOpen(true)}><Plus size={16} /> New repository</Button>}</>} />
+    <PageHeading eyebrow={remoteRepositoryRoute ? 'REMOTE REPOSITORY' : repositoryRoute ? 'REPOSITORY' : workspaceMode === 'connected' ? 'REMOTE SOURCES' : 'WORKSPACES'} title={remoteRepositoryRoute ? 'Repository' : repositoryRoute && selected ? selected.name : workspaceMode === 'connected' ? 'Repository Hub' : 'Repositories'} description={remoteRepositoryRoute ? 'A dedicated view of this provider-backed repository.' : repositoryRoute && selected ? (selected.description || 'Repository workspace, issues, branches and history.') : workspaceMode === 'connected' ? 'Connect GitHub, GitLab and SourceForge repositories without mixing them with local workspaces.' : 'Each repository has its own URL and a focused view of its work.'} actions={<>{remoteRepositoryRoute && <Button variant="secondary" onClick={() => navigate('/repositories')}>All repositories</Button>}{!remoteRepositoryRoute && !repositoryRoute && <Button variant="secondary" onClick={() => setWorkspaceMode((current) => current === 'local' ? 'connected' : 'local')}>{workspaceMode === 'local' ? 'Connected repositories' : 'Local repositories'}</Button>}{repositoryRoute && <Button variant="secondary" onClick={() => { setSelected(null); navigate('/repositories'); }}>All repositories</Button>}{!remoteRepositoryRoute && workspaceMode === 'local' && <Button onClick={() => setOpen(true)}><Plus size={16} /> New repository</Button>}</>} />
     {error && <div className="notice notice--error" role="alert">{error}</div>}
-    {workspaceMode === 'connected' && !repositoryRoute ? <RepositoryHubPanel /> : <>
+    {remoteRepositoryRoute ? <RepositoryHubPanel repositoryID={remoteRepositoryID} repositoryView={remoteView} standalone /> : workspaceMode === 'connected' && !repositoryRoute ? <RepositoryHubPanel /> : <>
     {!repositoryRoute && <><div className="repository-toolbar"><div className="repository-total"><span className="section-symbol"><Layers3 size={17} /></span><div><strong>{dashboard?.repositories.length ?? 0} repositories</strong><p>Independent workspaces · Main branch workflow</p></div></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a repository…" /></label></div>
     {repositories.length ? <div className="repository-grid">{repositories.map((repository, index) => {
       const issues = (dashboard?.issues ?? []).filter((issue) => issue.repository_id === repository.id);
