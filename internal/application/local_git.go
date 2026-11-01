@@ -71,7 +71,12 @@ func (s *LocalGitService) Status(ctx context.Context, repositoryRef string) (loc
 	if err != nil {
 		return localgit.Status{}, err
 	}
-	return s.engine.Status(ctx, path)
+	status, err := s.engine.Status(ctx, path)
+	if err != nil {
+		return localgit.Status{}, err
+	}
+	status.Path = path
+	return status, nil
 }
 
 func (s *LocalGitService) Initialize(ctx context.Context, repositoryRef, branch string) error {

@@ -77,3 +77,19 @@ func TestSafeRelativePathRejectsTraversal(t *testing.T) {
 		t.Fatalf("valid relative path rejected: %q, %v", got, err)
 	}
 }
+
+func TestCLIEngineReportsUnavailableWithoutGit(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	engine := NewCLIEngine()
+	status, err := engine.Status(context.Background(), filepath.Join(t.TempDir(), "not-initialized"))
+	if err != nil {
+		t.Fatalf("status should report unavailable Git as a capability, not an operation error: %v", err)
+	}
+	if status.Available || status.Initialized {
+		t.Fatalf("expected unavailable, uninitialized status: %+v", status)
+	}
+	if status.Backend != "git-cli" || status.Reason == "" {
+		t.Fatalf("expected a clear unavailable reason: %+v", status)
+	}
+}

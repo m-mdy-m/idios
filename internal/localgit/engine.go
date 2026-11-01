@@ -29,6 +29,7 @@ type Availability struct {
 
 type Status struct {
 	Available   bool   `json:"available"`
+	Path        string `json:"path,omitempty"`
 	Initialized bool   `json:"initialized"`
 	Backend     string `json:"backend"`
 	Reason      string `json:"reason,omitempty"`
