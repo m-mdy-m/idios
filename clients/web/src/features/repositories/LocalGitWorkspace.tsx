@@ -184,7 +184,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
     </div>;
   }
 
-  if (!status?.initialized) {
+  if (!status || !status.initialized) {
     return <div className="local-git-workspace">
       <div className="local-git-workspace__intro">
         <div className="local-git-workspace__mark"><GitBranch size={21}/></div>
@@ -196,7 +196,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       </div>
       {error && <div className="notice notice--error" role="alert">{error}</div>}
       {notice && <div className="notice notice--success" role="status">{notice}</div>}
-      {status.path && <div className="local-git-workspace__path"><div><span>Managed working-copy directory</span><code>{status.path}</code></div><Button variant="ghost" onClick={() => void copyWorkingDirectory()}><Copy size={13}/> Copy path</Button></div>}
+      {status?.path && <div className="local-git-workspace__path"><div><span>Managed working-copy directory</span><code>{status.path}</code></div><Button variant="ghost" onClick={() => void copyWorkingDirectory()}><Copy size={13}/> Copy path</Button></div>}
       <div className="local-git-workspace__setup">
         <section>
           <GitBranch size={19}/>
