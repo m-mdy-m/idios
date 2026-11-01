@@ -318,6 +318,10 @@ assert.ok(readerSource.includes('learningAnalysisSequenceRef.current !== request
 assert.ok(readerSource.includes('learningAnalysisSequenceRef.current += 1'), 'refresh must invalidate in-flight learning analysis for the same page key');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
 assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
+assert.ok(readerSource.includes('translationPageJobByKey.current.set(key, jobID)'), 'each page request must own an independent job identity');
+assert.ok(readerSource.includes('translationPageJobByKey.current.get(key) !== jobID'), 'a late same-page job must not overwrite or clear its replacement');
+assert.ok(readerSource.includes('!signal?.aborted'), 'aborted streams must not publish progress or partial translation UI');
+assert.ok(readerSource.includes('cancelledPageJobIDs.has(jobID)'), 'refresh must clear job identity for every cancelled page request');
 assert.ok(readerSource.includes('chunkCachePrefixes.some((prefix) => key.startsWith(prefix))'), 'refresh must evict cached page, grammar and IELTS chunks for the exact source');
 assert.ok(readerSource.includes('`${currentPageTranslationKey}:word:${normalizeTranslationMatch(word)}`'), 'word explanations must be cached against the exact page source');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
