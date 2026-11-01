@@ -120,10 +120,14 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 				"tagger": map[string]any{"date": "2026-08-01T10:00:00Z"},
 				"object": map[string]any{"sha": "commit-one", "type": "commit"},
 			})
-		case "/repos/acme/app/releases/tags/v1.0":
-			_ = json.NewEncoder(w).Encode(map[string]any{"name": "Version 1", "tag_name": "v1.0", "html_url": "https://github.com/acme/app/releases/tag/v1.0"})
-		case "/repos/acme/app/releases/tags/v2.0":
-			http.NotFound(w, r)
+		case "/repos/acme/app/releases":
+			if r.URL.Query().Get("per_page") != "100" || r.URL.Query().Get("page") != "1" {
+				t.Errorf("unexpected GitHub release association request: %v", r.URL.Query())
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"name": "Version 1", "tag_name": "v1.0",
+				"html_url": "https://github.com/acme/app/releases/tag/v1.0",
+			}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -218,5 +222,63 @@ func TestNormalizeHubPageBoundsPagination(t *testing.T) {
 	}
 	if releasePlatformFromName("product-universal-macos.zip") != "macOS Universal" {
 		t.Fatal("universal macOS platform hint was not detected")
+	}
+}
+
+
+func TestGitLabListTagsUsesAnnotationMessageAndKeepsObjectSHAUnknown(t *testing.T) {
+	t.Setenv("IDIOS_GITLAB_ALLOW_LOOPBACK", "true")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/projects/42/repository/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"name": "v2.0", "message": "", "target": "commit-two",
+				"created_at": "2026-10-02T10:00:00Z",
+				"commit": map[string]any{"id": "commit-two", "created_at": "2026-10-02T09:00:00Z"},
+			},
+			{
+				"name": "v1.0", "message": "annotated version one", "target": "commit-one",
+				"created_at": "2026-10-01T10:00:00Z",
+				"commit": map[string]any{"id": "commit-one", "created_at": "2026-10-01T09:00:00Z"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &Provider{kind: domain.RepositoryProviderGitLab, host: server.URL, base: server.URL + "/api/v4", http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitLab, ExternalID: "42", WebURL: "https://gitlab.example/group/app"}
+	page, err := provider.ListTags(context.Background(), "glpat_test", repo, 1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 || page.HasMore {
+		t.Fatalf("unexpected GitLab tag page: %#v", page)
+	}
+	if page.Items[0].Kind != "lightweight" || page.Items[0].TargetSHA != "commit-two" ||
+		page.Items[0].ObjectSHA != "" || page.Items[0].ObjectType != "commit" {
+		t.Fatalf("GitLab lightweight tag metadata was misclassified: %#v", page.Items[0])
+	}
+	if page.Items[1].Kind != "annotated" || page.Items[1].TargetSHA != "commit-one" ||
+		page.Items[1].ObjectSHA != "" || page.Items[1].ObjectType != "commit" ||
+		page.Items[1].Annotation != "annotated version one" {
+		t.Fatalf("GitLab annotated tag metadata was misclassified: %#v", page.Items[1])
+	}
+}
+
+func TestSourceForgeReleasesReportProviderLimitation(t *testing.T) {
+	provider := &Provider{kind: domain.RepositoryProviderSourceForge}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderSourceForge, FullPath: "project/code"}
+	page, err := provider.ListReleases(context.Background(), "token", repo, 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Availability.Available || page.Availability.State != "unsupported" || len(page.Items) != 0 {
+		t.Fatalf("SourceForge release limitation was not reported: %#v", page)
+	}
+	if !strings.Contains(page.Availability.Reason, "Git tags remain available separately") {
+		t.Fatalf("SourceForge limitation should direct users to Tags: %#v", page.Availability)
 	}
 }
