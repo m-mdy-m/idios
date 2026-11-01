@@ -47,3 +47,13 @@
 .hub-readme-table th{background:var(--surface-subtle);color:var(--text);font-weight:650}
 .hub-readme-content.is-plain-text pre{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:560px){.hub-readme-preview{padding:11px}.hub-readme-preview__header{align-items:flex-start;flex-direction:column}.hub-readme-preview__header small{text-align:left}}
+
+.hub-tree-search-hint{margin:-3px 0 2px;color:var(--muted);font-size:9px;line-height:1.5}
+.hub-tree-node-children{display:flex;min-width:0;flex-direction:column}
+.hub-tree-node-state{margin:0;padding:5px 12px;color:var(--muted);font-size:9px;line-height:1.5}
+.hub-tree-node-error{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 12px;color:var(--danger,#dc666d);font-size:9px;line-height:1.5}
+.hub-tree-node-error button,.hub-tree-load-more{width:fit-content;padding:5px 8px;border:0;border-radius:5px;background:transparent;color:var(--accent);font:inherit;font-size:9px;text-align:left;cursor:pointer}
+.hub-tree-node-error button:hover,.hub-tree-load-more:hover:not(:disabled){background:var(--surface-hover)}
+.hub-tree-load-more{margin:2px 0 4px}
+.hub-tree-load-more:disabled{opacity:.5;cursor:wait}
+.hub-tree-load-more--root{align-self:flex-start;margin:0 0 0 8px;border:1px solid var(--border);background:var(--surface-subtle)}

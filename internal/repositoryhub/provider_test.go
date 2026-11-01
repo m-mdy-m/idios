@@ -666,8 +666,8 @@ func TestSourceForgeTreeOutputPreservesNestedPathsAndEntryKinds(t *testing.T) {
 	blobSHA := strings.Repeat("b", 40)
 	treeSHA := strings.Repeat("c", 40)
 	raw := []byte(
-		"100644 blob " + blobSHA + " 24\\tREADME.md\\x00" +
-			"040000 tree " + treeSHA + " -\\tinternal\\x00",
+		"100644 blob " + blobSHA + " 24\tREADME.md\x00" +
+			"040000 tree " + treeSHA + " -\tinternal\x00",
 	)
 	entries := parseSourceForgeTreeOutput(raw, "src")
 	if len(entries) != 2 {

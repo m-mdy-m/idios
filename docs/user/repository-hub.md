@@ -101,6 +101,8 @@ SourceForge capabilities differ from GitHub and GitLab:
 | Branches, tree, file and commit reads | HTTPS Git transport when Git is installed and a clone URL is available |
 | Remote file writes / push | Not advertised through the Allura REST API |
 
+Remote repository trees are loaded directory by directory. Expanding a folder requests only its immediate entries; GitLab directory results are paginated, and the root directory exposes an explicit Load more action. Search operates on paths already loaded in the browser. SourceForge uses a temporary Git clone and `git ls-tree` to list only the requested directory rather than returning a recursive tree to the UI.
+
 SourceForge code browsing needs the `git` executable on the machine running IDIOS. By default, IDIOS uses the anonymous HTTPS clone URL returned by Allura. This is suitable for public repositories only. The Allura Bearer token is used for Tracker/REST calls and is deliberately not forwarded to Git transport.
 
 For private SourceForge repositories, configure SSH transport in the environment of the IDIOS server before starting it:

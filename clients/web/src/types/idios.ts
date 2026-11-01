@@ -554,6 +554,7 @@ export interface HubDiscoveredRepository {
 export interface HubDiscoveryResult { items: HubDiscoveredRepository[]; page: number }
 export interface HubBranch { name: string; commit_sha: string; protected: boolean; default: boolean }
 export interface HubTreeEntry { path: string; name: string; type: 'tree' | 'blob' | string; size: number; sha?: string; url?: string }
+export interface HubTreePage { items: HubTreeEntry[]; page: number; has_more: boolean }
 export interface HubFile { path: string; content: string; sha?: string; last_commit_id?: string; size: number; encoding: string }
 export interface HubCommit { sha: string; message: string; author: string; email?: string; committed_at: string; url?: string }
 export interface HubIssue {
