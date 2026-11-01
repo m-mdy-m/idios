@@ -458,6 +458,7 @@ func (p *Provider) compareGitHubTags(ctx context.Context, token string, repo Rem
 	}
 	result := TagComparison{
 		From: from, To: to, State: raw.Status, MergeBaseSHA: raw.MergeBase.SHA,
+		CountsAvailable: true,
 		AheadBy: raw.AheadBy, BehindBy: raw.BehindBy, TotalCommits: raw.TotalCommits,
 		Commits: make([]TagCompareCommit, 0, len(raw.Commits)),
 		Files: make([]TagCompareFile, 0, len(raw.Files)),
