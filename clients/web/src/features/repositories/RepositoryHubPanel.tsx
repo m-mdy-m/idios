@@ -178,6 +178,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [releaseAvailability, setReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
   const [tags, setTags] = useState<HubTag[]>([]);
   const [tagPage, setTagPage] = useState(1);
+  const [tagCursor, setTagCursor] = useState('');
   const [tagHasMore, setTagHasMore] = useState(false);
   const [tagLoading, setTagLoading] = useState(false);
   const [tagAvailability, setTagAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
@@ -403,13 +404,13 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       }).finally(() => { if (active) setReleaseLoading(false); });
     } else if (tab === 'Tags') {
       setTags([]);
-      setTagPage(1); setTagHasMore(false); setTagAvailability(null);
+      setTagPage(1); setTagCursor(''); setTagHasMore(false); setTagAvailability(null);
       setCompareFrom(''); setCompareTo(''); setTagComparison(null); setTagCompareError('');
       if (!selected.capabilities.includes('tags.read')) return () => { active = false; };
       setTagLoading(true);
-      void api.hubTags(selected.id, 1, 20).then((page) => {
+      void api.hubTags(selected.id, 1, 20, '').then((page) => {
         if (!active) return;
-        setTags(page.items); setTagPage(page.page); setTagHasMore(page.has_more);
+        setTags(page.items); setTagPage(page.page); setTagCursor(page.next_cursor ?? ''); setTagHasMore(page.has_more);
         setTagAvailability(page.availability);
       }).catch((err) => {
         if (active) setTagAvailability({ available: false, state: 'error', reason: messageFrom(err) });
@@ -701,10 +702,12 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     const nextPage = tagPage + 1;
     setTagLoading(true);
     try {
-      const result = await api.hubTags(repositoryID, nextPage, 20);
-      if (selected?.id !== repositoryID) return;
+      const cursor = selected.provider === 'github' ? tagCursor : '';
+      const result = await api.hubTags(repositoryID, nextPage, 20, cursor);
+      if (selectedRepositoryIDRef.current !== repositoryID) return;
       setTags((current) => [...current, ...result.items]);
       setTagPage(result.page);
+      setTagCursor(result.next_cursor ?? '');
       setTagHasMore(result.has_more);
       setTagAvailability(result.availability);
     } catch (err) {
