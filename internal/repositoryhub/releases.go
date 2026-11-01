@@ -51,19 +51,29 @@ func releasePlatformFromName(name string) string {
 	}
 	switch {
 	case strings.Contains(value, "windows"), strings.Contains(value, "win32"), strings.Contains(value, "win64"):
-		if architecture != "" { return "Windows " + architecture }
+		if architecture != "" {
+			return "Windows " + architecture
+		}
 		return "Windows"
 	case strings.Contains(value, "linux"):
-		if architecture != "" { return "Linux " + architecture }
+		if architecture != "" {
+			return "Linux " + architecture
+		}
 		return "Linux"
 	case strings.Contains(value, "darwin"), strings.Contains(value, "macos"), strings.Contains(value, "mac-os"), strings.Contains(value, "osx"):
-		if architecture != "" { return "macOS " + architecture }
+		if architecture != "" {
+			return "macOS " + architecture
+		}
 		return "macOS"
 	case strings.Contains(value, "android"):
-		if architecture != "" { return "Android " + architecture }
+		if architecture != "" {
+			return "Android " + architecture
+		}
 		return "Android"
 	case strings.Contains(value, "ios"), strings.Contains(value, "iphone"), strings.Contains(value, "ipad"):
-		if architecture != "" { return "iOS " + architecture }
+		if architecture != "" {
+			return "iOS " + architecture
+		}
 		return "iOS"
 	case strings.Contains(value, "web"), strings.Contains(value, "pwa"):
 		return "Web"
@@ -73,13 +83,17 @@ func releasePlatformFromName(name string) string {
 }
 
 func platformSource(name string) string {
-	if releasePlatformFromName(name) == "" { return "" }
+	if releasePlatformFromName(name) == "" {
+		return ""
+	}
 	return "filename"
 }
 
 func providerDownloadURL(raw string) string {
 	raw = strings.TrimSpace(raw)
-	if raw == "" { return "" }
+	if raw == "" {
+		return ""
+	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Host == "" || parsed.User != nil ||
 		(parsed.Scheme != "https" && parsed.Scheme != "http") {
@@ -89,9 +103,13 @@ func providerDownloadURL(raw string) string {
 }
 
 func validRemoteTagName(name string) bool {
-	if name == "" || len(name) > 255 || strings.TrimSpace(name) != name { return false }
+	if name == "" || len(name) > 255 || strings.TrimSpace(name) != name {
+		return false
+	}
 	for _, char := range name {
-		if char < 0x20 || char == 0x7f { return false }
+		if char < 0x20 || char == 0x7f {
+			return false
+		}
 	}
 	return true
 }
@@ -101,10 +119,12 @@ func validRemoteTagName(name string) bool {
 // of being confused with an empty release history.
 func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRepository, page, pageSize int) (ReleasePage, error) {
 	page, pageSize, err := normalizeHubPage(page, pageSize)
-	if err != nil { return ReleasePage{}, err }
+	if err != nil {
+		return ReleasePage{}, err
+	}
 	result := ReleasePage{
-		Items: make([]Release, 0),
-		Page: page,
+		Items:        make([]Release, 0),
+		Page:         page,
 		Availability: FeatureAvailability{Available: true, State: "available"},
 	}
 	query := url.Values{"per_page": {strconv.Itoa(pageSize)}, "page": {strconv.Itoa(page)}}
@@ -140,9 +160,15 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 		}
 		for _, row := range rows {
 			name := row.Name
-			if name == "" { name = row.TagName }
+			if name == "" {
+				name = row.TagName
+			}
 			state := "published"
-			if row.Draft { state = "draft" } else if row.Prerelease { state = "prerelease" }
+			if row.Draft {
+				state = "draft"
+			} else if row.Prerelease {
+				state = "prerelease"
+			}
 			item := Release{
 				ID: strconv.FormatInt(row.ID, 10), TagName: row.TagName, Name: name,
 				TargetCommitish: row.TargetCommitish, Body: row.Body,
@@ -164,11 +190,19 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 		}
 		sort.SliceStable(result.Items, func(i, j int) bool {
 			left := result.Items[i].PublishedAt
-			if left == nil { left = result.Items[i].CreatedAt }
+			if left == nil {
+				left = result.Items[i].CreatedAt
+			}
 			right := result.Items[j].PublishedAt
-			if right == nil { right = result.Items[j].CreatedAt }
-			if left == nil { return false }
-			if right == nil { return true }
+			if right == nil {
+				right = result.Items[j].CreatedAt
+			}
+			if left == nil {
+				return false
+			}
+			if right == nil {
+				return true
+			}
 			return left.After(*right)
 		})
 		result.HasMore = len(rows) == pageSize
@@ -200,13 +234,17 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 		}
 		for _, row := range rows {
 			name := row.Name
-			if name == "" { name = row.TagName }
+			if name == "" {
+				name = row.TagName
+			}
 			state := "published"
-			if row.UpcomingRelease { state = "upcoming" }
+			if row.UpcomingRelease {
+				state = "upcoming"
+			}
 			item := Release{
 				TagName: row.TagName, Name: name, Body: row.Description, State: state,
 				CreatedAt: row.CreatedAt, PublishedAt: row.ReleasedAt,
-				URL: providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/-/releases/" + url.PathEscape(row.TagName)),
+				URL:             providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/-/releases/" + url.PathEscape(row.TagName)),
 				AssetsAvailable: true, Assets: make([]ReleaseAsset, 0, len(row.Assets.Links)),
 			}
 			for _, asset := range row.Assets.Links {
@@ -236,7 +274,9 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 // local simulated RepositoryTag store.
 func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int) (TagPage, error) {
 	page, pageSize, err := normalizeHubPage(page, pageSize)
-	if err != nil { return TagPage{}, err }
+	if err != nil {
+		return TagPage{}, err
+	}
 	result := TagPage{
 		Items: make([]Tag, 0), Page: page,
 		Availability: FeatureAvailability{Available: true, State: "available"},
@@ -248,7 +288,7 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 		owner, name := splitFullPath(repo.FullPath)
 		endpoint := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/tags"
 		var rows []struct {
-			Name  string `json:"name"`
+			Name   string `json:"name"`
 			Commit struct {
 				SHA string `json:"sha"`
 			} `json:"commit"`
@@ -258,7 +298,9 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 		}
 		for _, row := range rows {
 			tag, err := p.getGitHubTag(ctx, token, repo, owner, name, row.Name, row.Commit.SHA)
-			if err != nil { return TagPage{}, err }
+			if err != nil {
+				return TagPage{}, err
+			}
 			result.Items = append(result.Items, tag)
 		}
 		result.HasMore = len(rows) == pageSize
@@ -274,7 +316,7 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 			Target    string     `json:"target"`
 			CreatedAt *time.Time `json:"created_at"`
 			Protected bool       `json:"protected"`
-			Commit struct {
+			Commit    struct {
 				ID        string     `json:"id"`
 				CreatedAt *time.Time `json:"created_at"`
 			} `json:"commit"`
@@ -334,7 +376,7 @@ func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRe
 	item := Tag{
 		Name: name, ObjectSHA: ref.Object.SHA, ObjectType: ref.Object.Type,
 		TargetSHA: fallbackSHA,
-		URL: providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(name)),
+		URL:       providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(name)),
 	}
 	switch ref.Object.Type {
 	case "tag":
@@ -343,7 +385,7 @@ func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRe
 		for depth := 0; depth < 5; depth++ {
 			var tagObject struct {
 				Message string `json:"message"`
-				Tagger struct {
+				Tagger  struct {
 					Date *time.Time `json:"date"`
 				} `json:"tagger"`
 				Object struct {
@@ -389,7 +431,9 @@ func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRe
 	}
 	if err := p.json(ctx, token, http.MethodGet, base+"/releases/tags/"+url.PathEscape(name), nil, nil, &release); err == nil {
 		item.ReleaseName = release.Name
-		if item.ReleaseName == "" { item.ReleaseName = release.TagName }
+		if item.ReleaseName == "" {
+			item.ReleaseName = release.TagName
+		}
 		item.ReleaseURL = providerDownloadURL(release.HTMLURL)
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return Tag{}, err
@@ -430,16 +474,16 @@ func (p *Provider) compareGitHubTags(ctx context.Context, token string, repo Rem
 			SHA string `json:"sha"`
 		} `json:"merge_base_commit"`
 		Commits []struct {
-			SHA  string `json:"sha"`
-			HTML string `json:"html_url"`
+			SHA    string `json:"sha"`
+			HTML   string `json:"html_url"`
 			Commit struct {
 				Message string `json:"message"`
-				Author struct {
-					Name string `json:"name"`
+				Author  struct {
+					Name string     `json:"name"`
 					Date *time.Time `json:"date"`
 				} `json:"author"`
 				Committer struct {
-					Name string `json:"name"`
+					Name string     `json:"name"`
 					Date *time.Time `json:"date"`
 				} `json:"committer"`
 			} `json:"commit"`
@@ -459,9 +503,9 @@ func (p *Provider) compareGitHubTags(ctx context.Context, token string, repo Rem
 	result := TagComparison{
 		From: from, To: to, State: raw.Status, MergeBaseSHA: raw.MergeBase.SHA,
 		CountsAvailable: true,
-		AheadBy: raw.AheadBy, BehindBy: raw.BehindBy, TotalCommits: raw.TotalCommits,
-		Commits: make([]TagCompareCommit, 0, len(raw.Commits)),
-		Files: make([]TagCompareFile, 0, len(raw.Files)),
+		AheadBy:         raw.AheadBy, BehindBy: raw.BehindBy, TotalCommits: raw.TotalCommits,
+		Commits:      make([]TagCompareCommit, 0, len(raw.Commits)),
+		Files:        make([]TagCompareFile, 0, len(raw.Files)),
 		Availability: FeatureAvailability{Available: true, State: "available"},
 	}
 	for _, commit := range raw.Commits {
@@ -489,7 +533,7 @@ func (p *Provider) compareGitLabTags(ctx context.Context, token string, repo Rem
 	var raw struct {
 		CompareTimeout bool `json:"compare_timeout"`
 		CompareSameRef bool `json:"compare_same_ref"`
-		Commits []struct {
+		Commits        []struct {
 			ID        string     `json:"id"`
 			Title     string     `json:"title"`
 			Message   string     `json:"message"`
@@ -514,7 +558,9 @@ func (p *Provider) compareGitLabTags(ctx context.Context, token string, repo Rem
 	}
 	state := "compared"
 	availability := FeatureAvailability{Available: true, State: "available"}
-	if raw.CompareSameRef { state = "identical" }
+	if raw.CompareSameRef {
+		state = "identical"
+	}
 	if raw.CompareTimeout {
 		state = "partial"
 		availability.State = "partial"
@@ -522,8 +568,8 @@ func (p *Provider) compareGitLabTags(ctx context.Context, token string, repo Rem
 	}
 	result := TagComparison{
 		From: from, To: to, State: state, TotalCommits: len(raw.Commits),
-		Commits: make([]TagCompareCommit, 0, len(raw.Commits)),
-		Files: make([]TagCompareFile, 0, len(raw.Diffs)),
+		Commits:      make([]TagCompareCommit, 0, len(raw.Commits)),
+		Files:        make([]TagCompareFile, 0, len(raw.Diffs)),
 		Availability: availability,
 	}
 	for _, commit := range raw.Commits {
@@ -536,16 +582,21 @@ func (p *Provider) compareGitLabTags(ctx context.Context, token string, repo Rem
 	for _, diff := range raw.Diffs {
 		status := "modified"
 		switch {
-		case diff.NewFile: status = "added"
-		case diff.DeletedFile: status = "deleted"
-		case diff.RenamedFile: status = "renamed"
+		case diff.NewFile:
+			status = "added"
+		case diff.DeletedFile:
+			status = "deleted"
+		case diff.RenamedFile:
+			status = "renamed"
 		}
 		additions, deletions := countCommitDiffLines(diff.Diff)
 		result.Files = append(result.Files, TagCompareFile{
 			Path: diff.NewPath, PreviousPath: diff.OldPath, Status: status,
 			Additions: additions, Deletions: deletions, Patch: diff.Diff,
 		})
-		if diff.Collapsed || diff.TooLarge { result.FilesTruncated = true }
+		if diff.Collapsed || diff.TooLarge {
+			result.FilesTruncated = true
+		}
 	}
 	return result, nil
 }
