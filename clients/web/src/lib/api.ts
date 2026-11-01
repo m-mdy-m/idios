@@ -255,9 +255,11 @@ export const api = {
   hubReleases: (ref: string, page = 1, pageSize = 20) => request<HubReleasePage>(
     `/api/hub/repositories/${encodeURIComponent(ref)}/releases?${new URLSearchParams({ page: String(page), page_size: String(pageSize) })}`,
   ),
-  hubTags: (ref: string, page = 1, pageSize = 20) => request<HubTagPage>(
-    `/api/hub/repositories/${encodeURIComponent(ref)}/tags?${new URLSearchParams({ page: String(page), page_size: String(pageSize) })}`,
-  ),
+  hubTags: (ref: string, page = 1, pageSize = 20, cursor = '') => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (cursor) params.set('cursor', cursor);
+    return request<HubTagPage>(`/api/hub/repositories/${encodeURIComponent(ref)}/tags?${params}`);
+  },
   hubCompareTags: (ref: string, from: string, to: string) => request<HubTagComparison>(
     `/api/hub/repositories/${encodeURIComponent(ref)}/tags/compare?${new URLSearchParams({ from, to })}`,
   ),
