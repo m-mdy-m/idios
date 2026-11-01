@@ -1048,7 +1048,12 @@ func (p *ollamaProvider) Stream(ctx context.Context, input GenerateRequest, emit
 	}
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 64*1024), 4<<20)
+	completed := false
 	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
 		var chunk struct {
 			Message struct {
 				Content string `json:"content"`
@@ -1056,10 +1061,10 @@ func (p *ollamaProvider) Stream(ctx context.Context, input GenerateRequest, emit
 			Done  bool   `json:"done"`
 			Error string `json:"error"`
 		}
-		if json.Unmarshal(scanner.Bytes(), &chunk) != nil {
-			continue
+		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
+			return &Error{Code: "provider_request_failed", Message: "Ollama returned a malformed streaming event"}
 		}
-		if chunk.Error != "" {
+		if strings.TrimSpace(chunk.Error) != "" {
 			return &Error{Code: "provider_request_failed", Message: "Ollama reported a streaming error"}
 		}
 		if chunk.Message.Content != "" {
@@ -1068,11 +1073,29 @@ func (p *ollamaProvider) Stream(ctx context.Context, input GenerateRequest, emit
 			}
 		}
 		if chunk.Done {
-			return nil
+			completed = true
+			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return &Error{Code: "provider_request_failed", Message: "Ollama stream ended unexpectedly"}
+		if errors.Is(err, context.Canceled) {
+			return &Error{Code: "request_cancelled", Message: "The AI request was cancelled"}
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return &Error{Code: "request_timed_out", Message: "The AI provider request timed out"}
+		}
+		return &Error{Code: "provider_request_failed", Message: "Ollama's stream was interrupted before completion"}
+	}
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return &Error{Code: "request_cancelled", Message: "The AI request was cancelled"}
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return &Error{Code: "request_timed_out", Message: "The AI provider request timed out"}
+		}
+	}
+	if !completed {
+		return &Error{Code: "provider_request_failed", Message: "Ollama closed the stream before sending its final completion event"}
 	}
 	return nil
 }
