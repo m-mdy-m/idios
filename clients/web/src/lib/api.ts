@@ -20,6 +20,7 @@ import type {
   HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
   LocalGitStatus, LocalGitBranch, LocalGitCommit, LocalGitTag,
   HubDiscoveryResult, HubBranch, HubTreePage, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
+  HubReleasePage, HubTagPage, HubTagComparison,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
 
