@@ -91,11 +91,11 @@ type CommitStats struct {
 }
 
 type CommitFile struct {
-	Path       string `json:"path"`
-	Status     string `json:"status"`
-	Additions  int    `json:"additions"`
-	Deletions  int    `json:"deletions"`
-	Patch      string `json:"patch,omitempty"`
+	Path         string `json:"path"`
+	Status       string `json:"status"`
+	Additions    int    `json:"additions"`
+	Deletions    int    `json:"deletions"`
+	Patch        string `json:"patch,omitempty"`
 	PreviousPath string `json:"previous_path,omitempty"`
 }
 
@@ -110,27 +110,27 @@ type CommitCheck struct {
 }
 
 type Commit struct {
-	SHA                  string       `json:"sha"`
-	Message              string       `json:"message"`
-	Author               string       `json:"author"`
-	Email                string       `json:"email,omitempty"`
-	AuthoredAt           *time.Time   `json:"authored_at,omitempty"`
-	Committer            string       `json:"committer,omitempty"`
-	CommitterEmail       string       `json:"committer_email,omitempty"`
-	Committed            time.Time    `json:"committed_at"`
-	URL                  string       `json:"url,omitempty"`
-	SignatureStatus      string       `json:"signature_status,omitempty"`
-	SignatureReason      string       `json:"signature_reason,omitempty"`
-	SignatureType        string       `json:"signature_type,omitempty"`
-	SignatureSource      string       `json:"signature_source,omitempty"`
-	SignatureVerifiedAt  *time.Time   `json:"signature_verified_at,omitempty"`
-	ChecksAvailable      bool         `json:"checks_available"`
-	ChecksState          string       `json:"checks_state,omitempty"`
-	Checks               []CommitCheck `json:"checks,omitempty"`
-	Stats                CommitStats  `json:"stats"`
-	Files                []CommitFile `json:"files,omitempty"`
-	Diff                 string       `json:"diff,omitempty"`
-	DiffAvailable        bool         `json:"diff_available"`
+	SHA                   string       `json:"sha"`
+	Message               string       `json:"message"`
+	Author                string       `json:"author"`
+	Email                 string       `json:"email,omitempty"`
+	AuthoredAt            *time.Time   `json:"authored_at,omitempty"`
+	Committer             string       `json:"committer,omitempty"`
+	CommitterEmail        string       `json:"committer_email,omitempty"`
+	Committed             time.Time    `json:"committed_at"`
+	URL                   string       `json:"url,omitempty"`
+	SignatureStatus       string       `json:"signature_status,omitempty"`
+	SignatureReason       string       `json:"signature_reason,omitempty"`
+	SignatureType         string       `json:"signature_type,omitempty"`
+	SignatureSource       string       `json:"signature_source,omitempty"`
+	SignatureVerifiedAt   *time.Time   `json:"signature_verified_at,omitempty"`
+	ChecksAvailable       bool         `json:"checks_available"`
+	ChecksState           string       `json:"checks_state,omitempty"`
+	Checks                []CommitCheck `json:"checks,omitempty"`
+	Stats                 CommitStats  `json:"stats"`
+	Files                 []CommitFile `json:"files,omitempty"`
+	Diff                  string       `json:"diff,omitempty"`
+	DiffAvailable         bool         `json:"diff_available"`
 	DiffUnavailableReason string      `json:"diff_unavailable_reason,omitempty"`
 }
 
@@ -680,7 +680,7 @@ func (p *Provider) ListRepositories(ctx context.Context, token, search string, p
 				ProjectAccess struct {
 					AccessLevel int `json:"access_level"`
 				} `json:"project_access"`
-				GroupAccess struct {
+				GroupAccess   struct {
 					AccessLevel int `json:"access_level"`
 				} `json:"group_access"`
 			} `json:"permissions"`
@@ -865,7 +865,7 @@ func (p *Provider) GetRepository(ctx context.Context, token, externalID, fullPat
 				ProjectAccess struct {
 					AccessLevel int `json:"access_level"`
 				} `json:"project_access"`
-				GroupAccess struct {
+				GroupAccess   struct {
 					AccessLevel int `json:"access_level"`
 				} `json:"group_access"`
 			} `json:"permissions"`
@@ -1166,16 +1166,16 @@ func (p *Provider) ListCommits(ctx context.Context, token string, repo RemoteRep
 		owner, name := splitFullPath(repo.FullPath)
 		q.Set("sha", ref)
 		var rows []struct {
-			SHA  string `json:"sha"`
-			HTML string `json:"html_url"`
+			SHA    string `json:"sha"`
+			HTML   string `json:"html_url"`
 			Commit struct {
-				Message string `json:"message"`
-				Author struct {
+				Message      string `json:"message"`
+				Author       struct {
 					Name  string    `json:"name"`
 					Email string    `json:"email"`
 					Date  time.Time `json:"date"`
 				} `json:"author"`
-				Committer struct {
+				Committer    struct {
 					Name  string    `json:"name"`
 					Email string    `json:"email"`
 					Date  time.Time `json:"date"`
@@ -1211,20 +1211,20 @@ func (p *Provider) ListCommits(ctx context.Context, token string, repo RemoteRep
 		q.Set("ref_name", ref)
 		q.Set("with_stats", "true")
 		var rows []struct {
-			ID      string `json:"id"`
-			Title   string `json:"title"`
-			Message string `json:"message"`
-			Web     string `json:"web_url"`
-			AuthorName  string    `json:"author_name"`
-			AuthorEmail string    `json:"author_email"`
-			AuthoredDate time.Time `json:"authored_date"`
-			CommitterName string `json:"committer_name"`
+			ID             string `json:"id"`
+			Title          string `json:"title"`
+			Message        string `json:"message"`
+			Web            string `json:"web_url"`
+			AuthorName     string    `json:"author_name"`
+			AuthorEmail    string    `json:"author_email"`
+			AuthoredDate   time.Time `json:"authored_date"`
+			CommitterName  string `json:"committer_name"`
 			CommitterEmail string `json:"committer_email"`
-			CommittedDate time.Time `json:"committed_date"`
-			Stats struct {
+			CommittedDate  time.Time `json:"committed_date"`
+			Stats          struct {
 				Additions int `json:"additions"`
 				Deletions int `json:"deletions"`
-				Total int `json:"total"`
+				Total     int `json:"total"`
 			} `json:"stats"`
 		}
 		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/repository/commits", q, nil, &rows); err != nil {
@@ -1297,20 +1297,20 @@ func mapGitHubVerification(verification *struct {
 	Signature  string     `json:"signature"`
 	VerifiedAt *time.Time `json:"verified_at"`
 }) (string, string, string, *time.Time) {
-	if verification == nil {
+	if         verification == nil {
 		return "unknown", "", "GitHub did not return signature verification data.", nil
 	}
 	signatureType := detectCommitSignatureType(verification.Signature)
-	if strings.EqualFold(verification.Reason, "unsigned") {
+	if         strings.EqualFold(verification.Reason, "unsigned") {
 		return "unsigned", signatureType, verification.Reason, verification.VerifiedAt
 	}
-	if verification.Verified {
+	if         verification.Verified {
 		return "verified", signatureType, verification.Reason, verification.VerifiedAt
 	}
-	if strings.TrimSpace(verification.Signature) == "" && strings.TrimSpace(verification.Reason) == "" {
+	if         strings.TrimSpace(verification.Signature) == "" && strings.TrimSpace(verification.Reason) == "" {
 		return "unknown", signatureType, "GitHub did not return a signature or verification reason.", verification.VerifiedAt
 	}
-	return "unverified", signatureType, verification.Reason, verification.VerifiedAt
+	return     "unverified", signatureType, verification.Reason, verification.VerifiedAt
 }
 
 func detectCommitSignatureType(signature string) string {
@@ -1361,39 +1361,39 @@ func countCommitDiffLines(diff string) (int, int) {
 func (p *Provider) getGitHubCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
 	owner, name := splitFullPath(repo.FullPath)
 	var raw struct {
-		SHA  string `json:"sha"`
-		HTML string `json:"html_url"`
+		SHA    string `json:"sha"`
+		HTML   string `json:"html_url"`
 		Commit struct {
-			Message string `json:"message"`
-			Author struct {
-				Name string `json:"name"`
+			Message      string `json:"message"`
+			Author       struct {
+				Name  string `json:"name"`
 				Email string `json:"email"`
-				Date time.Time `json:"date"`
+				Date  time.Time `json:"date"`
 			} `json:"author"`
-			Committer struct {
-				Name string `json:"name"`
+			Committer    struct {
+				Name  string `json:"name"`
 				Email string `json:"email"`
-				Date time.Time `json:"date"`
+				Date  time.Time `json:"date"`
 			} `json:"committer"`
 			Verification *struct {
-				Verified bool `json:"verified"`
-				Reason string `json:"reason"`
-				Signature string `json:"signature"`
+				Verified   bool `json:"verified"`
+				Reason     string `json:"reason"`
+				Signature  string `json:"signature"`
 				VerifiedAt *time.Time `json:"verified_at"`
 			} `json:"verification"`
 		} `json:"commit"`
-		Stats struct {
+		Stats  struct {
 			Additions int `json:"additions"`
 			Deletions int `json:"deletions"`
-			Total int `json:"total"`
+			Total     int `json:"total"`
 		} `json:"stats"`
-		Files []struct {
-			Filename string `json:"filename"`
-			Status string `json:"status"`
+		Files  []struct {
+			Filename         string `json:"filename"`
+			Status           string `json:"status"`
 			PreviousFilename string `json:"previous_filename"`
-			Additions int `json:"additions"`
-			Deletions int `json:"deletions"`
-			Patch string `json:"patch"`
+			Additions        int `json:"additions"`
+			Deletions        int `json:"deletions"`
+			Patch            string `json:"patch"`
 		} `json:"files"`
 	}
 	if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha), nil, nil, &raw); err != nil {
@@ -1421,9 +1421,9 @@ func (p *Provider) getGitHubCommit(ctx context.Context, token string, repo Remot
 	}
 
 	var combined struct {
-		State       string `json:"state"`
-		TotalCount  int    `json:"total_count"`
-		Statuses    []struct {
+		State      string `json:"state"`
+		TotalCount int    `json:"total_count"`
+		Statuses   []struct {
 			Context     string    `json:"context"`
 			State       string    `json:"state"`
 			Description string    `json:"description"`
@@ -1471,23 +1471,23 @@ func (p *Provider) getGitHubCommit(ctx context.Context, token string, repo Remot
 
 func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
 	var raw struct {
-		ID string `json:"id"`
-		Title string `json:"title"`
-		Message string `json:"message"`
-		WebURL string `json:"web_url"`
-		AuthorName string `json:"author_name"`
-		AuthorEmail string `json:"author_email"`
-		AuthoredDate time.Time `json:"authored_date"`
-		CommitterName string `json:"committer_name"`
+		ID             string `json:"id"`
+		Title          string `json:"title"`
+		Message        string `json:"message"`
+		WebURL         string `json:"web_url"`
+		AuthorName     string `json:"author_name"`
+		AuthorEmail    string `json:"author_email"`
+		AuthoredDate   time.Time `json:"authored_date"`
+		CommitterName  string `json:"committer_name"`
 		CommitterEmail string `json:"committer_email"`
-		CommittedDate time.Time `json:"committed_date"`
-		Stats struct {
+		CommittedDate  time.Time `json:"committed_date"`
+		Stats          struct {
 			Additions int `json:"additions"`
 			Deletions int `json:"deletions"`
-			Total int `json:"total"`
+			Total     int `json:"total"`
 		} `json:"stats"`
-		LastPipeline *struct {
-			ID int64 `json:"id"`
+		LastPipeline   *struct {
+			ID     int64 `json:"id"`
 			Status string `json:"status"`
 			WebURL string `json:"web_url"`
 		} `json:"last_pipeline"`
@@ -1516,9 +1516,9 @@ func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo Remot
 	}
 
 	var signature struct {
-		SignatureType string `json:"signature_type"`
+		SignatureType      string `json:"signature_type"`
 		VerificationStatus string `json:"verification_status"`
-		CommitSource string `json:"commit_source"`
+		CommitSource       string `json:"commit_source"`
 	}
 	if err := p.json(ctx, token, "GET", base+"/signature", nil, nil, &signature); err == nil {
 		item.SignatureStatus = mapGitLabSignatureStatus(signature.VerificationStatus)
@@ -1551,12 +1551,12 @@ func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo Remot
 	}
 
 	var diffs []struct {
-		OldPath string `json:"old_path"`
-		NewPath string `json:"new_path"`
-		NewFile bool `json:"new_file"`
+		OldPath     string `json:"old_path"`
+		NewPath     string `json:"new_path"`
+		NewFile     bool `json:"new_file"`
 		RenamedFile bool `json:"renamed_file"`
 		DeletedFile bool `json:"deleted_file"`
-		Diff string `json:"diff"`
+		Diff        string `json:"diff"`
 	}
 	if err := p.json(ctx, token, "GET", base+"/diff", url.Values{"per_page": {"100"}, "page": {"1"}}, nil, &diffs); err == nil {
 		item.DiffAvailable = true
@@ -1628,10 +1628,10 @@ func (p *Provider) ListIssues(ctx context.Context, token string, repo RemoteRepo
 			User    struct {
 				Login string `json:"login"`
 			} `json:"user"`
-			Labels []struct {
+			Labels  []struct {
 				Name string `json:"name"`
 			} `json:"labels"`
-			Pull json.RawMessage `json:"pull_request"`
+			Pull    json.RawMessage `json:"pull_request"`
 		}
 		if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/issues", q, nil, &rows); err != nil {
 			return nil, err
@@ -1671,7 +1671,7 @@ func (p *Provider) ListIssues(ctx context.Context, token string, repo RemoteRepo
 			Author      struct {
 				Username string `json:"username"`
 			} `json:"author"`
-			Labels []string `json:"labels"`
+			Labels      []string `json:"labels"`
 		}
 		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/issues", q, nil, &rows); err != nil {
 			return nil, err
@@ -1819,7 +1819,7 @@ func (p *Provider) CreateIssueWithOptions(ctx context.Context, token string, rep
 			form.Set("ticket_form.custom_fields."+key, value)
 		}
 		var raw struct {
-			Ticket struct {
+			Ticket       struct {
 				Summary     string `json:"summary"`
 				Description string `json:"description"`
 				Status      string `json:"status"`
@@ -1900,7 +1900,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, token string, repo RemoteRep
 			User    struct {
 				Login string `json:"login"`
 			} `json:"user"`
-			Labels []struct {
+			Labels  []struct {
 				Name string `json:"name"`
 			} `json:"labels"`
 		}
@@ -1956,7 +1956,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, token string, repo RemoteRep
 			Author       struct {
 				Username string `json:"username"`
 			} `json:"author"`
-			Labels []string `json:"labels"`
+			Labels       []string `json:"labels"`
 		}
 		if err := p.json(ctx, token, http.MethodPut, "projects/"+url.PathEscape(repo.ExternalID)+"/issues/"+strconv.Itoa(number), nil, payload, &raw); err != nil {
 			return Issue{}, err
@@ -2046,7 +2046,7 @@ func (p *Provider) CommentIssue(ctx context.Context, token string, repo RemoteRe
 		}
 		project, _ := splitFullPath(repo.FullPath)
 		var ticket struct {
-			Ticket struct {
+			Ticket        struct {
 				DiscussionDisabled bool `json:"discussion_disabled"`
 			} `json:"ticket"`
 			DiscussionURL string `json:"discussion_thread_url"`
@@ -2096,19 +2096,19 @@ func (p *Provider) ListChanges(ctx context.Context, token string, repo RemoteRep
 		}
 		q.Set("state", state)
 		var rows []struct {
-			Number int    `json:"number"`
-			Title  string `json:"title"`
-			Body   string `json:"body"`
-			State  string `json:"state"`
-			Draft  bool   `json:"draft"`
-			URL    string `json:"html_url"`
-			Head   struct {
+			Number  int    `json:"number"`
+			Title   string `json:"title"`
+			Body    string `json:"body"`
+			State   string `json:"state"`
+			Draft   bool   `json:"draft"`
+			URL     string `json:"html_url"`
+			Head    struct {
 				Ref string `json:"ref"`
 			} `json:"head"`
-			Base struct {
+			Base    struct {
 				Ref string `json:"ref"`
 			} `json:"base"`
-			User struct {
+			User    struct {
 				Login string `json:"login"`
 			} `json:"user"`
 			Created time.Time `json:"created_at"`
@@ -2143,8 +2143,8 @@ func (p *Provider) ListChanges(ctx context.Context, token string, repo RemoteRep
 		Author      struct {
 			Username string `json:"username"`
 		} `json:"author"`
-		Created time.Time `json:"created_at"`
-		Updated time.Time `json:"updated_at"`
+		Created     time.Time `json:"created_at"`
+		Updated     time.Time `json:"updated_at"`
 	}
 	if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/merge_requests", q, nil, &rows); err != nil {
 		return nil, err
@@ -2167,15 +2167,15 @@ func (p *Provider) CreateChange(ctx context.Context, token string, repo RemoteRe
 	if p.kind == domain.RepositoryProviderGitHub {
 		owner, name := splitFullPath(repo.FullPath)
 		var r struct {
-			Number int    `json:"number"`
-			Title  string `json:"title"`
-			Body   string `json:"body"`
-			State  string `json:"state"`
-			HTML   string `json:"html_url"`
-			Head   struct {
+			Number  int    `json:"number"`
+			Title   string `json:"title"`
+			Body    string `json:"body"`
+			State   string `json:"state"`
+			HTML    string `json:"html_url"`
+			Head    struct {
 				Ref string `json:"ref"`
 			} `json:"head"`
-			Base struct {
+			Base    struct {
 				Ref string `json:"ref"`
 			} `json:"base"`
 			Created time.Time `json:"created_at"`
