@@ -287,8 +287,22 @@ func (e *CLIEngine) isWorktree(ctx context.Context, directory string) bool {
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return false
 	}
-	output, err := e.run(ctx, path, "rev-parse", "--is-inside-work-tree")
-	return err == nil && strings.TrimSpace(string(output)) == "true"
+	output, err := e.run(ctx, path, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return false
+	}
+	topLevel, err := filepath.Abs(strings.TrimSpace(string(output)))
+	if err != nil {
+		return false
+	}
+	topInfo, topErr := os.Stat(topLevel)
+	pathInfo, pathErr := os.Stat(path)
+	if topErr != nil || pathErr != nil {
+		return false
+	}
+	// A path nested inside another repository is not an independent working copy.
+	// Refuse it so Stage/Commit never accidentally operate on the parent repository.
+	return os.SameFile(topInfo, pathInfo)
 }
 
 func (e *CLIEngine) Status(ctx context.Context, directory string) (Status, error) {
