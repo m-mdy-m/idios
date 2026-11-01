@@ -72,3 +72,35 @@
 .hub-clone-menu__content button{min-height:32px;padding:7px 9px;border:0;border-radius:6px;background:transparent;color:var(--text-soft);font:inherit;font-size:10px;text-align:left;white-space:nowrap;cursor:pointer}
 .hub-clone-menu__content button:hover{background:var(--surface-hover);color:var(--text)}
 .hub-clone-menu__content button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hub-commit-card{display:flex;min-width:0;flex-direction:column;gap:0;overflow:hidden;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.hub-commit-card__summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px}
+.hub-commit-card__summary>code{padding:4px 5px;border-radius:5px;background:var(--surface-subtle);color:var(--text-soft);font-size:9px}
+.hub-commit-card__message{display:flex;min-width:0;flex-direction:column;gap:5px}
+.hub-commit-card__message>strong{color:var(--text);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.hub-commit-card__message>span{color:var(--muted);font-size:9px;line-height:1.5;overflow-wrap:anywhere}
+.hub-commit-card__signals{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.hub-commit-card__actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;grid-column:2/-1}
+.hub-commit-card__actions>a{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:10px}
+.hub-commit-details{display:flex;min-width:0;flex-direction:column;gap:12px;padding:12px;border-top:1px solid var(--border);background:var(--surface-subtle)}
+.hub-commit-detail-section{display:flex;min-width:0;flex-direction:column;gap:8px}
+.hub-commit-detail-section h4{margin:0;color:var(--text);font-size:11px}
+.hub-commit-detail-section>p{margin:0;color:var(--muted);font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+.hub-commit-provenance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px}
+.hub-commit-provenance-grid>div{display:flex;min-width:0;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+.hub-commit-provenance-grid span{color:var(--muted);font-size:9px}
+.hub-commit-provenance-grid strong{color:var(--text);font-size:10px;overflow-wrap:anywhere}
+.hub-commit-check-list{display:flex;flex-direction:column;gap:5px}
+.hub-commit-check-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+.hub-commit-check-list>div>strong{font-size:10px;overflow-wrap:anywhere}
+.hub-commit-check-list>div>span,.hub-commit-check-list>div>a{grid-column:1/-1;color:var(--muted);font-size:9px;overflow-wrap:anywhere}
+.hub-commit-check-list>div>a{color:var(--accent)}
+.hub-commit-file{display:flex;min-width:0;flex-direction:column;gap:5px}
+.hub-commit-file>div{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.hub-commit-file code{font-size:10px;overflow-wrap:anywhere}
+.hub-commit-file>div>span{color:var(--muted);font-size:9px}
+.hub-commit-file pre,.hub-commit-full-diff pre{max-height:300px;overflow:auto;margin:0;padding:9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text-soft);font-size:9px;line-height:1.5;white-space:pre}
+.hub-commit-full-diff summary{color:var(--accent);font-size:10px;cursor:pointer}
+@media(max-width:640px){.hub-commit-card__summary{grid-template-columns:auto minmax(0,1fr)}.hub-commit-card__signals,.hub-commit-card__actions{grid-column:1/-1;justify-content:flex-start}}
+
+.hub-commit-provenance-grid__wide{grid-column:1/-1}
+.hub-commit-provenance-grid__wide code,.hub-commit-provenance-grid__wide pre{max-width:100%;overflow:auto;margin:0;padding:7px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-soft);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
