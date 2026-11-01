@@ -304,6 +304,8 @@ for (const fixture of translationBenchmarkFixtures) {
 }
 const readerSource = await readFile(new URL('../src/features/shelf/components/ShelfPDFReader.tsx', import.meta.url), 'utf8');
 const companionSource = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.tsx', import.meta.url), 'utf8');
+const panelStyles = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.css', import.meta.url), 'utf8');
+const readerStyles = await readFile(new URL('../src/features/shelf/components/ShelfPDFReader.css', import.meta.url), 'utf8');
 assert.ok(readerSource.includes('translationJobs.subscribe(setTranslationJobSnapshots)'));
 assert.ok(readerSource.includes("requestTranslation(currentPageText, 'page', signal, jobID)"));
 const pageTranslationEffect = readerSource.match(/useEffect\(\(\) => \{\s*if \(!translationOpen \|\| !currentPageText\.trim\(\) \|\| !pdf \|\| !translationModel\) return;[\s\S]*?\n\s*\}, \[([^\]]+)\]\);/);
@@ -335,8 +337,6 @@ assert.ok(readerStyles.includes('user-select:text'), 'PDF text must remain selec
 assert.ok(readerStyles.includes('.shelf-pdf-reader__word-hover {') && readerStyles.includes('pointer-events:none'), 'word hover overlays must not intercept PDF selection');
 assert.ok(readerStyles.includes('::selection') && readerStyles.includes('::highlight(idios-shelf-word-hover)'), 'native selection and word hover must retain separate rendering paths');
 assert.ok(companionSource.includes('onStopTranslation'));
-const panelStyles = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.css', import.meta.url), 'utf8');
-const readerStyles = await readFile(new URL('../src/features/shelf/components/ShelfPDFReader.css', import.meta.url), 'utf8');
 assert.ok(panelStyles.includes('@media (prefers-reduced-motion: reduce)'), 'the companion must respect reduced-motion preferences');
 assert.ok(panelStyles.includes('@media (max-width: 520px)'), 'the companion must have a narrow viewport layout');
 assert.ok(panelStyles.includes('.shelf-translation-panel[lang="fa"]') && panelStyles.includes('.shelf-translation-panel[lang="ar"]'), 'Persian and Arabic typography must be explicit');
