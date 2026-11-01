@@ -3,13 +3,12 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity, ArrowRight, Bell, Blocks, BookOpen, LibraryBig, CalendarClock, CalendarCheck, CheckSquare, ChevronRight, CircleUserRound,
-  Command, FolderKanban, GitBranch, GitPullRequest, Home, Menu, Moon, PanelLeftClose, PanelLeftOpen,
-  Plus, Quote, Search, Settings2, Sparkles, Sun, Tags, X, BrainCircuit, ScrollText, Trash2, CircleHelp, UserRound, ChevronDown,
+  Command, FolderKanban, GitBranch, GitPullRequest, Home, Menu, PanelLeftClose, PanelLeftOpen,
+  Plus, Quote, Search, Settings2, Sparkles, Tags, X, BrainCircuit, ScrollText, Trash2, CircleHelp, UserRound, ChevronDown,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { api } from '@/lib/api';
 import type { AppConfig, DashboardMetrics, FeatureDefinition, ProtocolCommand } from '@/types/idios';
-import { applyWebTheme } from '@/lib/web-theme';
 import { CommandRunner } from '@/features/commands';
 import { activateNotificationAudio, notificationSoundEnabled, playNotificationChime, playPlanReminderSequence, stopPlanReminderSequence } from '@/lib/notification-sound';
 
@@ -20,6 +19,9 @@ type NavigationItem = {
   count?: keyof DashboardMetrics
 }
 type NavigationGroup = { label: string; items: NavigationItem[] }
+
+const hiddenModulePaths = new Set(['/issues', '/projects', '/pull-requests']);
+const hiddenUtilityPaths = new Set(['/settings', '/notifications', '/help']);
 
 const iconByName: Record<string, LucideIcon> = {
   activity: Activity, bell: Bell, blocks: Blocks, 'book-open': BookOpen, 'library-big': LibraryBig, 'calendar-check': CalendarCheck,
@@ -89,9 +91,8 @@ export function AppShell() {
     const defaults: NavigationItem[] = [
       { to: '/', label: 'Overview', icon: Home },
       { to: '/shelf', label: 'Shelf', icon: LibraryBig },
-      { to: '/repositories', label: 'Repositories', icon: Blocks },
-      { to: '/issues', label: 'Issues', icon: CheckSquare, count: 'open_issues' },
-      { to: '/projects', label: 'Projects', icon: FolderKanban },
+      { to: '/repositories', label: 'Repos', icon: Blocks },
+
       { to: '/notes', label: 'Notes', icon: BookOpen },
       { to: '/activity', label: 'Activity', icon: Activity },
     ];
@@ -100,16 +101,16 @@ export function AppShell() {
   const primaryPaths = useMemo(() => new Set(primaryItems.map((item) => item.to)), [primaryItems]);
   const toolsGroups = useMemo(() => {
     const groups = nav.main
-      .map((group) => ({ ...group, items: group.items.filter((item) => !primaryPaths.has(item.to)) }))
+      .map((group) => ({ ...group, items: group.items.filter((item) => !primaryPaths.has(item.to) && !hiddenModulePaths.has(item.to)) }))
       .filter((group) => group.items.length > 0);
-    const bottomExtras = nav.bottom.filter((item) => !primaryPaths.has(item.to) && !['/settings', '/notifications', '/help'].includes(item.to));
+    const bottomExtras = nav.bottom.filter((item) => !primaryPaths.has(item.to) && !hiddenModulePaths.has(item.to) && !hiddenUtilityPaths.has(item.to));
     return bottomExtras.length ? [...groups, { label: 'Other', items: bottomExtras }] : groups;
   }, [nav, primaryPaths]);
   const applyConfig = useCallback((config: AppConfig) => {
     appConfigRef.current = config;
     setAppConfig(config);
     setCollapsed(config.web.sidebar_collapsed);
-    setTheme(applyWebTheme(config));
+    setTheme('dark');
   }, []);
   useEffect(() => {
     let active = true;
@@ -228,7 +229,7 @@ export function AppShell() {
     return dashboard.metrics[key] ?? 0;
   }
 
-  const corePaths = new Set(['/', '/repositories', '/issues', '/shelf', '/notes', '/activity']);
+  const corePaths = new Set(['/', '/repositories', '/shelf', '/notes', '/activity']);
   const coreItems = primaryItems.filter((item) => corePaths.has(item.to));
 
   return <div className={`unix-workspace ${collapsed ? 'unix-workspace--collapsed' : ''}`}>
@@ -284,7 +285,7 @@ export function AppShell() {
     <div className="unix-main-column">
       <header className="unix-topbar">
         <div className="unix-topbar-title"><button type="button" className="unix-icon-button unix-mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open navigation"><Menu size={17} /></button><span className="unix-topbar-root">IDIOS</span><span className="unix-path-separator">/</span><span className="unix-current-path">{pageTitle(location.pathname)}</span></div>
-        <div className="unix-topbar-actions"><span className="unix-local-first"><span className="unix-status is-online" />LOCAL-FIRST</span><button type="button" className="unix-new-button" onClick={() => { setQuickCreateOpen((value) => !value); setProfileMenuOpen(false); setSearchOpen(false); }} aria-expanded={quickCreateOpen} aria-haspopup="dialog"><Plus size={14} /><span>New</span></button><button type="button" className="unix-icon-button" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`} aria-label="Toggle theme" onClick={() => { const next = theme === 'light' ? 'dark' : 'light'; const selected = appConfig?.web.theme ?? theme; const custom = appConfig?.web.custom_themes?.[selected]; if (custom) persistWeb({ theme: selected, custom_themes: { ...(appConfig?.web.custom_themes ?? {}), [selected]: { ...custom, base: next } } }); else persistWeb({ theme: next }); }}>{theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}</button><NavLink to="/notifications" className="unix-icon-button unix-notification-link" aria-label="Notifications"><Bell size={16} />{(dashboard?.metrics.unread_notifications ?? 0) > 0 && <span className="unix-notification-dot" />}</NavLink><div className="unix-profile-anchor"><button type="button" className={`unix-profile-button ${profileMenuOpen ? 'is-active' : ''}`} onClick={() => { setProfileMenuOpen((value) => !value); setQuickCreateOpen(false); setSearchOpen(false); }} aria-label="Open profile menu" aria-expanded={profileMenuOpen}>{(dashboard?.profile.full_name || 'I').slice(0, 1).toUpperCase()}</button></div></div>
+        <div className="unix-topbar-actions"><span className="unix-local-first"><span className="unix-status is-online" />LOCAL-FIRST</span><button type="button" className="unix-new-button" onClick={() => { setQuickCreateOpen((value) => !value); setProfileMenuOpen(false); setSearchOpen(false); }} aria-expanded={quickCreateOpen} aria-haspopup="dialog"><Plus size={14} /><span>New</span></button><NavLink to="/notifications" className="unix-icon-button unix-notification-link" aria-label="Notifications"><Bell size={16} />{(dashboard?.metrics.unread_notifications ?? 0) > 0 && <span className="unix-notification-dot" />}</NavLink><div className="unix-profile-anchor"><button type="button" className={`unix-profile-button ${profileMenuOpen ? 'is-active' : ''}`} onClick={() => { setProfileMenuOpen((value) => !value); setQuickCreateOpen(false); setSearchOpen(false); }} aria-label="Open profile menu" aria-expanded={profileMenuOpen}>{(dashboard?.profile.full_name || 'I').slice(0, 1).toUpperCase()}</button></div></div>
       </header>
       <main className="unix-page-content"><Outlet /></main>
       <footer className="unix-footer"><span><span className={`unix-status ${health ? 'is-online' : ''}`} />{health ? 'Local engine running' : 'Waiting for local engine'}</span><span><code>CLI</code><span className="unix-footer-slash">/</span><code>WEB</code><span className="unix-footer-slash">·</span>{lastUpdated ? `Synced ${new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'No sync yet'}</span></footer>

@@ -400,3 +400,136 @@ export interface MonitoringSnapshot {
   logs: { path: string; size_bytes: number; modified_at?: string }
 }
 
+
+
+export type HubProvider = 'github' | 'gitlab' | 'sourceforge';
+export interface HubProviderDescriptor { id: HubProvider; label: string; oauth_available?: boolean; capabilities: string[] }
+export interface HubStatus {
+  credential_storage_ready: boolean;
+  credential_storage_error?: string;
+  providers: HubProviderDescriptor[];
+  connection_count: number;
+}
+export interface HubConnection {
+  id: string;
+  provider: HubProvider;
+  host: string;
+  account_id: string;
+  account_name: string;
+  display_name: string;
+  scopes: string[];
+  installation_id?: string;
+  status: 'connected' | 'reauthorize' | 'error' | string;
+  last_error?: string;
+  connected_at: string;
+  updated_at: string;
+}
+export interface HubRepository {
+  id: string;
+  connection_id: string;
+  provider: HubProvider;
+  host: string;
+  external_id: string;
+  namespace: string;
+  name: string;
+  full_path: string;
+  description: string;
+  web_url: string;
+  clone_url?: string;
+  clone_ssh_url?: string;
+  default_branch?: string;
+  language?: string;
+  visibility?: string;
+  repository_type: string;
+  tracker_mount_point?: string;
+  discussion_mount_point?: string;
+  permission?: string;
+  capabilities: string[];
+  open_issue_count: number;
+  open_change_request_count: number;
+  sync_state: 'never' | 'ok' | 'stale' | 'error' | string;
+  last_synced_at?: string;
+  last_error?: string;
+  linked_at: string;
+  updated_at: string;
+  local_alias?: string;
+  pinned: boolean;
+  collection_ids?: string[];
+}
+export interface HubCollection {
+  id: string;
+  name: string;
+  description?: string;
+  position: number;
+  repository_count: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface HubRepositoryPreferences {
+  repository_id: string;
+  local_alias?: string;
+  private_note?: string;
+  pinned: boolean;
+  updated_at?: string;
+}
+export interface HubProjectRepository {
+  project_id: string;
+  project_name: string;
+  repository_id: string;
+  repository_name: string;
+  full_path: string;
+  provider: HubProvider;
+  relationship: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface HubRepositoryRelation {
+  id: string;
+  source_repository_id: string;
+  target_repository_id: string;
+  relation_type: 'depends_on' | 'related_to' | 'implements' | 'documentation_for' | string;
+  description?: string;
+  target_name?: string;
+  target_full_path?: string;
+  target_provider?: HubProvider;
+  created_at: string;
+}
+export interface HubDiscoveredRepository {
+  provider: HubProvider;
+  host: string;
+  external_id: string;
+  namespace: string;
+  name: string;
+  full_path: string;
+  description: string;
+  web_url: string;
+  clone_url?: string;
+  clone_ssh_url?: string;
+  default_branch?: string;
+  language?: string;
+  visibility?: string;
+  repository_type: string;
+  permission?: string;
+  capabilities: string[];
+  open_issue_count: number;
+  open_change_request_count: number;
+  tracker_mount_point?: string;
+  discussion_mount_point?: string;
+}
+export interface HubDiscoveryResult { items: HubDiscoveredRepository[]; page: number }
+export interface HubBranch { name: string; commit_sha: string; protected: boolean; default: boolean }
+export interface HubTreeEntry { path: string; name: string; type: 'tree' | 'blob' | string; size: number; sha?: string; url?: string }
+export interface HubFile { path: string; content: string; sha?: string; last_commit_id?: string; size: number; encoding: string }
+export interface HubCommit { sha: string; message: string; author: string; email?: string; committed_at: string; url?: string }
+export interface HubIssue {
+  id: string; number: number; title: string; body: string; state: string;
+  author?: string; assignee?: string; labels?: string[]; private?: boolean;
+  discussion_disabled?: boolean; custom_fields?: Record<string, unknown>;
+  url?: string; created_at?: string; updated_at?: string;
+}
+export interface HubChangeRequest {
+  id: string; number: number; title: string; body: string; state: string; draft: boolean;
+  source_branch: string; target_branch: string; author?: string; url?: string;
+  created_at?: string; updated_at?: string;
+}

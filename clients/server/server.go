@@ -321,6 +321,50 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/protocol/options", s.getProtocolOptions)
 	mux.HandleFunc("POST /api/protocol/execute", s.executeProtocolCommand)
 	mux.HandleFunc("GET /api/dashboard", s.getDashboard)
+	// Remote Repository Hub (kept separate from local simulated repository routes).
+	mux.HandleFunc("GET /api/hub/status", s.getHubStatus)
+	mux.HandleFunc("GET /api/hub/oauth/start", s.startHubOAuth)
+	mux.HandleFunc("GET /api/hub/oauth/callback", s.completeHubOAuth)
+	mux.HandleFunc("GET /api/hub/connections", s.getHubConnections)
+	mux.HandleFunc("POST /api/hub/connections", s.createHubConnection)
+	mux.HandleFunc("DELETE /api/hub/connections/{ref}", s.deleteHubConnection)
+	mux.HandleFunc("GET /api/hub/discover", s.discoverHubRepositories)
+	mux.HandleFunc("GET /api/hub/repositories", s.getHubRepositories)
+	mux.HandleFunc("POST /api/hub/repositories/import", s.importHubRepository)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}", s.getHubRepository)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/sync", s.syncHubRepository)
+	mux.HandleFunc("DELETE /api/hub/repositories/{ref}", s.deleteHubRepository)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/preferences", s.getHubPreferences)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/projects", s.getHubProjects)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/projects", s.linkHubProject)
+	mux.HandleFunc("DELETE /api/hub/repositories/{ref}/projects/{project}", s.unlinkHubProject)
+	mux.HandleFunc("PUT /api/hub/repositories/{ref}/projects/{project}/primary", s.setHubProjectPrimary)
+	mux.HandleFunc("GET /api/projects/{ref}/hub-repositories", s.getProjectHubRepositories)
+	mux.HandleFunc("PATCH /api/hub/repositories/{ref}/preferences", s.patchHubPreferences)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/relations", s.getHubRelations)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/relations", s.createHubRelation)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/branches", s.getHubBranches)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/tree", s.getHubTree)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/file", s.getHubFile)
+	mux.HandleFunc("PUT /api/hub/repositories/{ref}/file", s.putHubFile)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/commits", s.getHubCommits)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/issues", s.getHubIssues)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/issues", s.createHubIssue)
+	mux.HandleFunc("PATCH /api/hub/repositories/{ref}/issues/{number}", s.updateHubIssue)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/issues/{number}/close", s.closeHubIssue)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/issues/{number}/comments", s.commentHubIssue)
+	mux.HandleFunc("GET /api/hub/repositories/{ref}/changes", s.getHubChanges)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/changes", s.createHubChange)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/changes/{number}/close", s.closeHubChange)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/changes/{number}/approve", s.approveHubChange)
+	mux.HandleFunc("POST /api/hub/repositories/{ref}/changes/{number}/merge", s.mergeHubChange)
+	mux.HandleFunc("GET /api/hub/collections", s.getHubCollections)
+	mux.HandleFunc("POST /api/hub/collections", s.saveHubCollection)
+	mux.HandleFunc("PUT /api/hub/collections/{ref}", s.saveHubCollection)
+	mux.HandleFunc("DELETE /api/hub/collections/{ref}", s.deleteHubCollection)
+	mux.HandleFunc("PUT /api/hub/collections/{collection}/repositories/{repo}", s.addHubCollectionRepository)
+	mux.HandleFunc("DELETE /api/hub/collections/{collection}/repositories/{repo}", s.removeHubCollectionRepository)
+	mux.HandleFunc("DELETE /api/hub/relations/{ref}", s.deleteHubRelation)
 	mux.HandleFunc("GET /api/repositories", s.getRepositories)
 	mux.HandleFunc("POST /api/repositories", s.createRepository)
 	mux.HandleFunc("GET /api/repositories/{ref}", s.getRepository)
@@ -720,10 +764,18 @@ func writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, domain.ErrInvalid), errors.Is(err, domain.ErrUnsupported):
+	case errors.Is(err, domain.ErrInvalid):
 		status = http.StatusBadRequest
+	case errors.Is(err, domain.ErrUnsupported):
+		status = http.StatusNotImplemented
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrBlocked), errors.Is(err, domain.ErrInvalidTransition):
 		status = http.StatusConflict
+	case errors.Is(err, domain.ErrPermission):
+		status = http.StatusForbidden
+	case errors.Is(err, domain.ErrRateLimited):
+		status = http.StatusTooManyRequests
+	case errors.Is(err, domain.ErrUnavailable):
+		status = http.StatusServiceUnavailable
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }

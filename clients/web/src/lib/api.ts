@@ -17,6 +17,8 @@ import type {
   ProjectRepository,
   Repository,
   Branch, CompletionRecord, Concept, Label, Milestone, PullRequest, ProtocolCatalog, ProtocolOption, LogPayload, Quote, RepositorySetting, RepositoryFile, RepositoryTag, RepositoryTagComparison, ScheduledJob, WorkspacePin, UpdateCheck, UpdateStatus, FeatureCatalog, MonitoringSnapshot, ShelfState, ShelfBook, ShelfBookRelation, ShelfAsk, ShelfAnnotation, ShelfAnnotationRect, ShelfReadingSession,
+  HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
+  HubDiscoveryResult, HubBranch, HubTreeEntry, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
 
@@ -193,6 +195,75 @@ export const api = {
   installUpdate: () => request<{ status: string }>('/api/update/install', json('POST')),
   dashboard: () => request<DashboardData>('/api/dashboard'),
   repositories: () => request<Repository[]>('/api/repositories'),
+  hubStatus: () => request<HubStatus>('/api/hub/status'),
+  hubConnections: () => request<HubConnection[]>('/api/hub/connections'),
+  hubOAuthStart: (provider: HubProvider, host = '') => {
+    const params = new URLSearchParams({ provider });
+    if (host.trim()) params.set('host', host.trim());
+    return request<{ authorization_url: string }>(`/api/hub/oauth/start?${params}`);
+  },
+  connectHubProvider: (body: { provider: HubProvider; host?: string; access_token: string }) => request<HubConnection>('/api/hub/connections', json('POST', body)),
+  deleteHubConnection: (ref: string) => request<{ deleted: boolean }>(`/api/hub/connections/${encodeURIComponent(ref)}`, json('DELETE')),
+  discoverHubRepositories: (connectionID: string, q = '', page = 1) => {
+    const params = new URLSearchParams({ connection_id: connectionID, page: String(page) });
+    if (q.trim()) params.set('q', q.trim());
+    return request<HubDiscoveryResult>(`/api/hub/discover?${params}`);
+  },
+  hubRepositories: (filters: { provider?: HubProvider; q?: string; collection_id?: string; pinned?: boolean } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.provider) params.set('provider', filters.provider);
+    if (filters.q?.trim()) params.set('q', filters.q.trim());
+    if (filters.collection_id) params.set('collection_id', filters.collection_id);
+    if (filters.pinned) params.set('pinned', 'true');
+    return request<HubRepository[]>(`/api/hub/repositories${params.size ? `?${params}` : ''}`);
+  },
+  importHubRepository: (body: { connection_id: string; external_id: string; full_path: string }) => request<HubRepository>('/api/hub/repositories/import', json('POST', body)),
+  unlinkHubRepository: (ref: string) => request<{ unlinked: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}`, json('DELETE')),
+  syncHubRepository: (ref: string) => request<HubRepository>(`/api/hub/repositories/${encodeURIComponent(ref)}/sync`, json('POST')),
+  hubRepositoryPreferences: (ref: string) => request<HubRepositoryPreferences>(`/api/hub/repositories/${encodeURIComponent(ref)}/preferences`),
+  hubRepositoryProjects: (ref: string) => request<HubProjectRepository[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/projects`),
+  linkHubRepositoryProject: (ref: string, body: { project_id: string; relationship: string; primary?: boolean }) => request<{ linked: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/projects`, json('POST', body)),
+  unlinkHubRepositoryProject: (ref: string, projectID: string) => request<{ unlinked: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/projects/${encodeURIComponent(projectID)}`, json('DELETE')),
+  setHubRepositoryProjectPrimary: (ref: string, projectID: string) => request<{ primary: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/projects/${encodeURIComponent(projectID)}/primary`, json('PUT')),
+  projectHubRepositories: (projectID: string) => request<HubProjectRepository[]>(`/api/projects/${encodeURIComponent(projectID)}/hub-repositories`),
+  saveHubRepositoryPreferences: (ref: string, body: { local_alias: string; private_note: string; pinned: boolean }) => request<HubRepositoryPreferences>(`/api/hub/repositories/${encodeURIComponent(ref)}/preferences`, json('PATCH', body)),
+  hubCollections: () => request<HubCollection[]>('/api/hub/collections'),
+  createHubCollection: (body: { name: string; description: string; position?: number }) => request<HubCollection>('/api/hub/collections', json('POST', body)),
+  updateHubCollection: (ref: string, body: { name: string; description: string; position?: number }) => request<HubCollection>(`/api/hub/collections/${encodeURIComponent(ref)}`, json('PUT', body)),
+  deleteHubCollection: (ref: string) => request<{ deleted: boolean }>(`/api/hub/collections/${encodeURIComponent(ref)}`, json('DELETE')),
+  addHubCollectionRepository: (collectionID: string, repositoryID: string) => request<{ added: boolean }>(`/api/hub/collections/${encodeURIComponent(collectionID)}/repositories/${encodeURIComponent(repositoryID)}`, json('PUT')),
+  removeHubCollectionRepository: (collectionID: string, repositoryID: string) => request<{ removed: boolean }>(`/api/hub/collections/${encodeURIComponent(collectionID)}/repositories/${encodeURIComponent(repositoryID)}`, json('DELETE')),
+  hubRepositoryRelations: (ref: string) => request<HubRepositoryRelation[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/relations`),
+  createHubRepositoryRelation: (ref: string, body: { target_repository_id: string; relation_type: string; description?: string }) => request<HubRepositoryRelation>(`/api/hub/repositories/${encodeURIComponent(ref)}/relations`, json('POST', body)),
+  deleteHubRepositoryRelation: (ref: string) => request<{ deleted: boolean }>(`/api/hub/relations/${encodeURIComponent(ref)}`, json('DELETE')),
+  hubBranches: (ref: string) => request<HubBranch[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/branches`),
+  hubTree: (ref: string, branch = '') => request<HubTreeEntry[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/tree?${new URLSearchParams(branch ? { ref: branch } : {})}`),
+  hubFile: (ref: string, path: string, branch = '') => {
+    const params = new URLSearchParams({ path }); if (branch) params.set('ref', branch);
+    return request<HubFile>(`/api/hub/repositories/${encodeURIComponent(ref)}/file?${params}`);
+  },
+  saveHubFile: (ref: string, body: { path: string; branch: string; content: string; commit_message: string; expected_sha?: string; create_only?: boolean }) => request<HubFile>(`/api/hub/repositories/${encodeURIComponent(ref)}/file`, json('PUT', body)),
+  hubCommits: (ref: string, branch = '', page = 1) => {
+    const params = new URLSearchParams({ page: String(page) }); if (branch) params.set('ref', branch);
+    return request<HubCommit[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/commits?${params}`);
+  },
+  hubIssues: (ref: string, state = 'open', page = 1) => request<HubIssue[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues?${new URLSearchParams({ state, page: String(page) })}`),
+  createHubIssue: (ref: string, body: {
+    title: string; body: string; labels?: string[]; status?: string; assignee?: string;
+    private?: boolean; discussion_disabled?: boolean; custom_fields?: Record<string, string>;
+  }) => request<HubIssue>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues`, json('POST', body)),
+  commentHubIssue: (ref: string, number: number, body: string) => request<{ commented: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues/${number}/comments`, json('POST', { body })),
+  updateHubIssue: (ref: string, number: number, body: {
+    title?: string; body?: string; state?: string; assignee?: string; labels?: string[];
+    private?: boolean; discussion_disabled?: boolean; custom_fields?: Record<string, string>;
+  }) => request<HubIssue>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues/${number}`, json('PATCH', body)),
+  closeHubIssue: (ref: string, number: number) => request<{ closed: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/issues/${number}/close`, json('POST')),
+  hubChanges: (ref: string, state = 'open', page = 1) => request<HubChangeRequest[]>(`/api/hub/repositories/${encodeURIComponent(ref)}/changes?${new URLSearchParams({ state, page: String(page) })}`),
+  createHubChange: (ref: string, body: { title: string; body: string; source_branch: string; target_branch: string }) => request<HubChangeRequest>(`/api/hub/repositories/${encodeURIComponent(ref)}/changes`, json('POST', body)),
+  closeHubChange: (ref: string, number: number) => request<{ closed: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/changes/${number}/close`, json('POST')),
+  approveHubChange: (ref: string, number: number) => request<{ approved: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/changes/${number}/approve`, json('POST')),
+  mergeHubChange: (ref: string, number: number) => request<{ merged: boolean }>(`/api/hub/repositories/${encodeURIComponent(ref)}/changes/${number}/merge`, json('POST')),
+
   createRepository: (body: { name: string; description: string; default_branch?: string }) => runCommand<Repository>('repository.create', { ...body, default_branch: body.default_branch || 'main' }),
   issue: (ref: string) => request<Issue>(`/api/issues/${encodeURIComponent(ref)}`),
   issueDependencies: (ref: string) => request<Issue[]>(`/api/issues/${encodeURIComponent(ref)}/dependencies`),

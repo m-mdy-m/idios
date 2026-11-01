@@ -63,7 +63,8 @@ The Web client includes an installable PWA shell. Android and iOS Capacitor buil
 
 | Area | What it is for |
 | --- | --- |
-| Repositories, Issues, Pull Requests | Organize work and record progress. These are IDIOS records, not Git operations. |
+| Local Repositories, Issues, Pull Requests | Organize IDIOS work and record progress. These are local workflow records, not Git operations. |
+| Connected Repository Hub | Explicitly link GitHub, GitLab, and SourceForge repositories to browse supported remote code and work items. |
 | Projects | Group related Issues across Repositories. |
 | Shelf | Connect a local book folder, read PDFs, and keep reading notes and highlights. |
 | Notes and Quotes | Keep reusable thoughts and excerpts. |

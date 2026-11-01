@@ -202,6 +202,7 @@ type ShelfStore interface {
 
 type Store interface {
 	CoreStore
+	RepositoryHubStore
 	RepositoryStore
 	ProjectStore
 	IssueStore

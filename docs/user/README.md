@@ -15,6 +15,7 @@ This section explains how to use IDIOS. You do not need programming knowledge to
 |---|---|
 | [Getting started](getting-started.md) | Install, open, and stop IDIOS. |
 | [Workspace](workspace.md) | Use Repositories, Issues, Projects, Pull Requests, Notes, and the knowledge graph. |
+| [Connected Repository Hub](repository-hub.md) | Connect GitHub, GitLab, and SourceForge repositories, browse remote data, and organize linked repositories. |
 | [Shelf](shelf.md) | Connect book folders, filter books, read PDFs, and save notes/highlights. |
 | [AI](ai.md) | Configure providers, refresh one provider's models, and use reading assistants safely. |
 | [Plans and jobs](plans-and-jobs.md) | Create daily checklists, reminders, and scheduled jobs. |
