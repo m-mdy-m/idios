@@ -172,19 +172,21 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
           <GitBranch size={19}/>
           <strong>Initialize local repository</strong>
           <p>Create a new Git repository in IDIOS-managed storage. This works without a network connection.</p>
-          <Button onClick={() => setInitOpen(true)}><Plus size={14}/> Initialize repository</Button>
+          <Button onClick={() => { setError(''); setInitOpen(true); }}><Plus size={14}/> Initialize repository</Button>
         </section>
         <section>
           <GitPullRequest size={19}/>
           <strong>Clone an existing repository</strong>
           <p>Fetch an upstream repository into a separate local working copy. Cloning requires network access.</p>
-          <Button variant="secondary" onClick={() => setCloneOpen(true)}>Clone repository</Button>
+          <Button variant="secondary" onClick={() => { setError(''); setCloneOpen(true); }}>Clone repository</Button>
         </section>
       </div>
       <Modal open={initOpen} title="Initialize local Git" description={`Create a working copy for ${repository.name}. No provider connection is required.`} onClose={() => setInitOpen(false)} onSubmit={initialize} submitLabel="Initialize" busy={busy}>
+        {error && <div className="notice notice--error" role="alert">{error}</div>}
         <Field label="Initial branch"><input autoFocus value={initialBranch} onChange={(event) => setInitialBranch(event.target.value)} required maxLength={240} placeholder="main"/></Field>
       </Modal>
       <Modal open={cloneOpen} title="Clone repository" description="The HTTPS or SSH URL is used only for this clone operation. Credentials embedded in the URL are rejected." onClose={() => setCloneOpen(false)} onSubmit={clone} submitLabel="Clone" busy={busy} wide>
+        {error && <div className="notice notice--error" role="alert">{error}</div>}
         <Field label="Clone URL"><input autoFocus value={remoteURL} onChange={(event) => setRemoteURL(event.target.value)} required placeholder="https://github.com/owner/repository.git"/></Field>
         <Field label="Branch (optional)"><input value={cloneBranch} onChange={(event) => setCloneBranch(event.target.value)} placeholder="Leave empty to use the remote default branch"/></Field>
       </Modal>
@@ -216,9 +218,9 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
           {branches.map((item) => <option key={item.name} value={item.name}>{item.name}{item.current ? ' · current' : ''}</option>)}
         </select>
       </Field>
-      <Button variant="secondary" onClick={() => { setBranchBase(status.branch || ''); setBranchOpen(true); }}><Plus size={14}/> New branch</Button>
+      <Button variant="secondary" onClick={() => { setError(''); setBranchBase(status.branch || ''); setBranchOpen(true); }}><Plus size={14}/> New branch</Button>
       <Button variant="secondary" disabled={!hasChanges || busy} onClick={() => void stageAll()}>Stage all changes</Button>
-      <Button disabled={!status.staged || busy} onClick={() => setCommitOpen(true)}><GitCommitHorizontal size={14}/> Commit staged</Button>
+      <Button disabled={!status.staged || busy} onClick={() => { setError(''); setCommitOpen(true); }}><GitCommitHorizontal size={14}/> Commit staged</Button>
     </div>
     <section className="local-git-workspace__section">
       <div className="local-git-workspace__section-heading">
@@ -240,10 +242,12 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       </article>)}</div> : <EmptyState title="No local commits yet" body="Stage your changes and create the first Git commit." icon={<GitCommitHorizontal size={20}/>}/>}
     </section>
     <Modal open={branchOpen} title="Create local branch" description="The new Git ref is created inside this working copy and is available offline." onClose={() => setBranchOpen(false)} onSubmit={createBranch} submitLabel="Create branch" busy={busy}>
+        {error && <div className="notice notice--error" role="alert">{error}</div>}
       <Field label="Branch name"><input autoFocus required value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="feature/my-change"/></Field>
       <Field label="Start from"><select value={branchBase} onChange={(event) => setBranchBase(event.target.value)}><option value="">Current HEAD</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field>
     </Modal>
     <Modal open={commitOpen} title="Commit staged changes" description="This writes a real Git commit to the local object database. It does not push anything." onClose={() => setCommitOpen(false)} onSubmit={commit} submitLabel="Create commit" busy={busy} wide>
+        {error && <div className="notice notice--error" role="alert">{error}</div>}
       <Field label="Commit message"><textarea autoFocus required rows={4} value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Describe the change"/></Field>
       <div className="local-git-workspace__identity">
         <Field label="Author name (optional)"><input value={authorName} onChange={(event) => setAuthorName(event.target.value)} placeholder="Use configured Git identity"/></Field>

@@ -827,7 +827,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
             <div className="hub-detail-toolbar">
               <Field label="Search issues"><input value={issueSearch} onChange={(event) => setIssueSearch(event.target.value)} placeholder="title, body, label, author or number" /></Field>
               <Field label="State"><select value={issueStateFilter} onChange={(event) => setIssueStateFilter(event.target.value as 'all' | 'open' | 'closed')}><option value="all">All</option><option value="open">Open</option><option value="closed">Closed</option></select></Field>
-              {supports('issues.write') && <Button type="button" onClick={() => setIssueCreateOpen(true)} disabled={busy}><Plus size={13}/> New issue</Button>}
+              {supports('issues.write') && <Button type="button" onClick={() => { setError(''); setIssueCreateOpen(true); }} disabled={busy}><Plus size={13}/> New issue</Button>}
             </div>
             {!supports('issues.read') && <p className="hub-muted">{selected.provider === 'sourceforge' ? 'This SourceForge project has no accessible Tracker tool mounted.' : 'This connection does not have permission to read Issues.'}</p>}
             {filteredIssues.map((item) => <article className="hub-work-item hub-issue-item" key={item.id}>
@@ -869,6 +869,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               busy={busy}
               wide
             >
+              {error && <div className="notice notice--error" role="alert">{error}</div>}
               <Field label="Title"><input autoFocus value={issueTitle} onChange={(event) => setIssueTitle(event.target.value)} required maxLength={256} placeholder="Describe the issue" /></Field>
               <Field label="Description"><textarea rows={5} value={issueBody} onChange={(event) => setIssueBody(event.target.value)} placeholder="Add context, expected behavior and reproduction steps." /></Field>
               <Field label="Labels (comma-separated)"><input value={issueLabels} onChange={(event) => setIssueLabels(event.target.value)} placeholder="bug, enhancement" /></Field>
@@ -887,7 +888,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
           {tab === 'Change Requests' && <div className="hub-work-items">
             <div className="hub-detail-toolbar">
               <div><strong>Change requests</strong><p className="hub-muted">Review proposed changes between repository branches.</p></div>
-              {supports('changes.write') && <Button type="button" onClick={() => setChangeCreateOpen(true)} disabled={busy || !branches.length}><Plus size={13}/> New change request</Button>}
+              {supports('changes.write') && <Button type="button" onClick={() => { setError(''); setChangeCreateOpen(true); }} disabled={busy || !branches.length}><Plus size={13}/> New change request</Button>}
             </div>
             {changes.map((item) => <article className="hub-work-item" key={item.id}><div><strong>#{item.number} · {item.title}</strong><Badge tone={remoteStateTone(item.state)}>{item.draft ? 'Draft' : item.state}</Badge><p>{item.source_branch} → {item.target_branch}</p><small>{item.author || 'Unknown author'} · {item.url ? <a href={item.url} target="_blank" rel="noreferrer">Open review</a> : 'Provider change request'}</small></div><div className="hub-item-actions"><Button variant="ghost" disabled={busy || !supports('changes.write')} onClick={() => void perform(async () => { await api.approveHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Review approved.')}>Approve</Button><Button variant="secondary" disabled={busy || !supports('changes.merge') || !['open','opened'].includes(item.state)} onClick={() => { if (window.confirm(`Merge ${selected.full_path} change #${item.number} on the provider?`)) void perform(async () => { await api.mergeHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Provider merged the change.'); }}>Merge</Button><Button variant="ghost" disabled={busy || !supports('changes.write') || !['open','opened'].includes(item.state)} onClick={() => { if (window.confirm(`Close change request #${item.number} on ${selected.full_path}?`)) void perform(async () => { await api.closeHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Provider change request closed.'); }}>Close</Button></div></article>)}
             {!supports('changes.read') && <p className="hub-muted">This provider does not expose merge/change requests through the current API. SourceForge Allura supports Tracker and Discussion workflows, not Pull/Merge Requests.</p>}
@@ -902,6 +903,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               busy={busy}
               wide
             >
+              {error && <div className="notice notice--error" role="alert">{error}</div>}
               <Field label="Title"><input autoFocus value={changeTitle} onChange={(event) => setChangeTitle(event.target.value)} required maxLength={256} placeholder="Summarize the proposed change" /></Field>
               <Field label="Description"><textarea rows={5} value={changeBody} onChange={(event) => setChangeBody(event.target.value)} placeholder="Explain the change and its impact." /></Field>
               <div className="hub-form-grid">
@@ -935,7 +937,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
               <label className="hub-checkbox"><input type="checkbox" checked={repositoryPinned} onChange={(event) => setRepositoryPinned(event.target.checked)}/><Pin size={13}/> Pin repository</label>
               <Button type="submit" disabled={busy}><Check size={13}/> Save preferences</Button>
             </form>
-            <div className="hub-collection-links"><strong>Collections</strong>{collections.map((item) => <label key={item.id}><input type="checkbox" checked={selectedCollectionIDs.includes(item.id)} disabled={busy} onChange={() => void (selectedCollectionIDs.includes(item.id) ? perform(async () => { await api.removeHubCollectionRepository(item.id,selected.id); await reload(); }) : addToCollection(item.id))}/>{item.name}</label>)}</div>
+            <div className="hub-collection-links"><strong>Collections</strong>{collections.map((item) => <label className="hub-checkbox" key={item.id}><input type="checkbox" checked={selectedCollectionIDs.includes(item.id)} disabled={busy} onChange={() => void (selectedCollectionIDs.includes(item.id) ? perform(async () => { await api.removeHubCollectionRepository(item.id,selected.id); await reload(); }) : addToCollection(item.id))}/>{item.name}</label>)}</div>
             <div className="hub-project-links">
               <strong>Linked IDIOS Projects</strong>
               {hubProjectLinks.map((item) => <div className="hub-project-link-row" key={item.project_id}>
