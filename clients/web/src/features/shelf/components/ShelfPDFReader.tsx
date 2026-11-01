@@ -827,9 +827,10 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
     }
     pageTranslationCache.current.delete(currentPageTranslationKey);
-    const pageChunkCachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:page:${translationSourceIdentity(currentPageText)}:`;
+    const chunkCachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:`;
+    const chunkCachePrefixes = ['page', 'grammar', 'ielts'].map((kind) => `${chunkCachePrefix}${kind}:${translationSourceIdentity(currentPageText)}:`);
     for (const key of translationChunkCache.current.keys()) {
-      if (key.startsWith(pageChunkCachePrefix)) translationChunkCache.current.delete(key);
+      if (chunkCachePrefixes.some((prefix) => key.startsWith(prefix))) translationChunkCache.current.delete(key);
     }
     pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`);
     pageLearningCache.current.delete(`${currentPageTranslationKey}:ielts`);
@@ -861,7 +862,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const explainHoveredWord = useCallback(async () => {
     const word = hoveredTextForAI.trim();
     if (!word || !translationOpen || !currentPageText.trim()) return;
-    const key = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${normalizeTranslationMatch(word)}`;
+    const key = `${currentPageTranslationKey}:word:${normalizeTranslationMatch(word)}`;
     const cached = wordTranslationCache.current.get(key);
     if (cached) { setWordTranslation(cached); setWordTranslationKey(key); return; }
     if (wordTranslationInFlight.current.has(key)) return;
@@ -879,7 +880,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       wordTranslationInFlight.current.delete(key);
       setWordTranslationLoadingKey((current) => current === key ? '' : current);
     }
-  }, [bookID, currentPageText, hoveredTextForAI, pageNumber, requestTranslation, translationModel, translationOpen, translationTargetLanguage]);
+  }, [currentPageText, currentPageTranslationKey, hoveredTextForAI, requestTranslation, translationOpen]);
 
   useEffect(() => {
     if (!translationOpen || !currentPageText.trim() || !pdf || !translationModel) return;
