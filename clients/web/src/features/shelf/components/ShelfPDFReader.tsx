@@ -786,7 +786,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const analyzePage = useCallback(async (kind: 'grammar' | 'ielts') => {
     const source = currentPageText.trim();
     if (!source || !translationModel || pageTranslationBusy) return;
-    const pageKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}`;
+    const pageKey = currentPageTranslationKey;
     const analysisKey = `${pageKey}:${kind}`;
     const cachedAnalysis = pageLearningCache.current.get(analysisKey);
     if (cachedAnalysis) {
@@ -812,10 +812,14 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     } finally {
       setLearningAnalysisBusy(false);
     }
-  }, [bookID, currentPageText, pageNumber, pageTranslation, pageTranslationBusy, requestTranslation, translationModel, translationPageKey, translationTargetLanguage]);
+  }, [currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationPageKey]);
 
   const refreshPageTranslation = useCallback(() => {
-    pageTranslationCache.current.delete(`${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`);
+    const activeJob = translationJobs.list().find((job) => job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running');
+    if (activeJob) translationJobs.cancel(activeJob.id);
+    pageTranslationCache.current.delete(currentPageTranslationKey);
+    pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`);
+    pageLearningCache.current.delete(`${currentPageTranslationKey}:ielts`);
     setPageTranslation(null);
     setTranslationPageKey('');
     translationPageInFlight.current = '';
@@ -823,7 +827,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
-  }, [bookID, currentPageText, pageNumber, translationModel, translationTargetLanguage]);
+  }, [bookID, currentPageTranslationKey, pageNumber]);
 
   const translateSelection = useCallback(async () => {
     const selected = selectedTextForAI.trim();
