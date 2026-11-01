@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -82,9 +83,29 @@ type Engine interface {
 	Diff(context.Context, string, bool) (string, error)
 }
 
+// workingCopyLocks serializes mutations and protects readers from observing an
+// in-flight index/ref update. The lock registry is process-wide so separate
+// CLIEngine instances in the same IDIOS server still coordinate.
+var workingCopyLocks sync.Map
+
 type CLIEngine struct{}
 
 func NewCLIEngine() *CLIEngine { return &CLIEngine{} }
+
+func lockWorkingCopy(directory string, exclusive bool) (func(), error) {
+	path, err := absoluteDirectory(directory)
+	if err != nil {
+		return nil, err
+	}
+	value, _ := workingCopyLocks.LoadOrStore(path, &sync.RWMutex{})
+	lock := value.(*sync.RWMutex)
+	if exclusive {
+		lock.Lock()
+		return lock.Unlock, nil
+	}
+	lock.RLock()
+	return lock.RUnlock, nil
+}
 
 func (e *CLIEngine) Availability() Availability {
 	binary, err := exec.LookPath("git")
@@ -182,6 +203,11 @@ func (e *CLIEngine) Init(ctx context.Context, directory, branch string) error {
 	if err != nil {
 		return err
 	}
+	unlock, err := lockWorkingCopy(path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if branch == "" {
 		branch = "main"
 	}
@@ -241,6 +267,11 @@ func (e *CLIEngine) Clone(ctx context.Context, remoteURL, directory, branch stri
 	if err != nil {
 		return err
 	}
+	unlock, err := lockWorkingCopy(path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if branch != "" {
 		if err := validateBranchName(ctx, e, branch); err != nil {
 			return err
@@ -308,6 +339,11 @@ func (e *CLIEngine) isWorktree(ctx context.Context, directory string) bool {
 func (e *CLIEngine) Status(ctx context.Context, directory string) (Status, error) {
 	availability := e.Availability()
 	status := Status{Available: availability.Available, Backend: availability.Backend, Reason: availability.Reason}
+	unlock, err := lockWorkingCopy(directory, false)
+	if err != nil {
+		return Status{}, err
+	}
+	defer unlock()
 	if !availability.Available {
 		return status, nil
 	}
@@ -351,6 +387,11 @@ func (e *CLIEngine) Status(ctx context.Context, directory string) (Status, error
 }
 
 func (e *CLIEngine) Branches(ctx context.Context, directory string) ([]Branch, error) {
+	unlock, err := lockWorkingCopy(directory, false)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return []Branch{}, nil
 	}
@@ -377,6 +418,11 @@ func (e *CLIEngine) CreateBranch(ctx context.Context, directory, name, base stri
 	if err := validateBranchName(ctx, e, name); err != nil {
 		return err
 	}
+	unlock, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return errors.New("initialize or clone a Git working copy first")
 	}
@@ -392,6 +438,11 @@ func (e *CLIEngine) SwitchBranch(ctx context.Context, directory, name string) er
 	if err := validateBranchName(ctx, e, name); err != nil {
 		return err
 	}
+	unlock, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return errors.New("initialize or clone a Git working copy first")
 	}
@@ -416,6 +467,11 @@ func safeRelativePath(raw string) (string, error) {
 }
 
 func (e *CLIEngine) Stage(ctx context.Context, directory string, paths []string) error {
+	unlock, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return errors.New("initialize or clone a Git working copy first")
 	}
@@ -436,6 +492,11 @@ func (e *CLIEngine) Stage(ctx context.Context, directory string, paths []string)
 }
 
 func (e *CLIEngine) Commit(ctx context.Context, directory, message, authorName, authorEmail string) (Commit, error) {
+	unlock, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		return Commit{}, err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return Commit{}, errors.New("initialize or clone a Git working copy first")
 	}
@@ -455,7 +516,7 @@ func (e *CLIEngine) Commit(ctx context.Context, directory, message, authorName, 
 	if _, err := e.run(ctx, directory, args...); err != nil {
 		return Commit{}, err
 	}
-	items, err := e.Log(ctx, directory, 1)
+	items, err := e.logUnlocked(ctx, directory, 1)
 	if err != nil {
 		return Commit{}, err
 	}
@@ -466,6 +527,15 @@ func (e *CLIEngine) Commit(ctx context.Context, directory, message, authorName, 
 }
 
 func (e *CLIEngine) Log(ctx context.Context, directory string, limit int) ([]Commit, error) {
+	unlock, err := lockWorkingCopy(directory, false)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	return e.logUnlocked(ctx, directory, limit)
+}
+
+func (e *CLIEngine) logUnlocked(ctx context.Context, directory string, limit int) ([]Commit, error) {
 	if !e.isWorktree(ctx, directory) {
 		return []Commit{}, nil
 	}
@@ -510,6 +580,11 @@ func validateTagName(ctx context.Context, e *CLIEngine, name string) error {
 }
 
 func (e *CLIEngine) Tags(ctx context.Context, directory string) ([]Tag, error) {
+	unlock, err := lockWorkingCopy(directory, false)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return []Tag{}, nil
 	}
@@ -545,6 +620,11 @@ func (e *CLIEngine) CreateTag(ctx context.Context, directory, name, message stri
 	if err := validateTagName(ctx, e, name); err != nil {
 		return err
 	}
+	unlock, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return errors.New("initialize or clone a Git working copy first")
 	}
@@ -586,6 +666,11 @@ func (e *CLIEngine) CreateTag(ctx context.Context, directory, name, message stri
 }
 
 func (e *CLIEngine) Diff(ctx context.Context, directory string, staged bool) (string, error) {
+	unlock, err := lockWorkingCopy(directory, false)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	if !e.isWorktree(ctx, directory) {
 		return "", errors.New("initialize or clone a Git working copy first")
 	}

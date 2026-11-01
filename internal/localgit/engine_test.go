@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestCLIEngineOfflineWorkflow(t *testing.T) {
@@ -155,5 +156,46 @@ func TestCLIEngineRejectsNestedDirectoryAsSeparateWorkingCopy(t *testing.T) {
 	}
 	if err := engine.Stage(ctx, nested, nil); err == nil {
 		t.Fatal("staging from a nested path must not operate on the parent repository")
+	}
+}
+
+
+func TestWorkingCopyLockSerializesConcurrentMutations(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "repository")
+	release, err := lockWorkingCopy(directory, true)
+	if err != nil {
+		t.Fatalf("acquire first working-copy lock: %v", err)
+	}
+	acquired := make(chan struct{})
+	go func() {
+		unlock, lockErr := lockWorkingCopy(directory, true)
+		if lockErr == nil {
+			close(acquired)
+			unlock()
+		}
+	}()
+	select {
+	case <-acquired:
+		release()
+		t.Fatal("a second writer acquired the same working-copy lock before the first writer released it")
+	case <-time.After(40 * time.Millisecond):
+	}
+	release()
+	select {
+	case <-acquired:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiting writer did not acquire the working-copy lock after release")
+	}
+}
+
+func TestCLIEngineHonorsCancelledCommandContext(t *testing.T) {
+	engine := NewCLIEngine()
+	if !engine.Availability().Available {
+		t.Skip("Git CLI is not installed in this test environment")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := engine.run(ctx, "", "version"); err == nil {
+		t.Fatal("expected a cancelled Git command to return an error")
 	}
 }
