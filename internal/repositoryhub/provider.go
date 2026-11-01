@@ -1423,6 +1423,13 @@ func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo Remot
 		Stats: CommitStats{Additions: raw.Stats.Additions, Deletions: raw.Stats.Deletions, Total: raw.Stats.Total},
 		ChecksState: "unavailable",
 	}
+	if raw.LastPipeline != nil {
+		item.ChecksAvailable = true
+		item.ChecksState = raw.LastPipeline.Status
+		item.Checks = append(item.Checks, CommitCheck{
+			Name: "Pipeline", Status: raw.LastPipeline.Status, URL: raw.LastPipeline.WebURL,
+		})
+	}
 
 	var signature struct {
 		SignatureType string `json:"signature_type"`
@@ -1448,12 +1455,7 @@ func (p *Provider) getGitLabCommit(ctx context.Context, token string, repo Remot
 	}
 	if err := p.json(ctx, token, "GET", base+"/statuses", url.Values{"per_page": {"100"}}, nil, &statuses); err == nil {
 		item.ChecksAvailable = true
-		if raw.LastPipeline != nil {
-			item.ChecksState = raw.LastPipeline.Status
-			item.Checks = append(item.Checks, CommitCheck{
-				Name: "Pipeline", Status: raw.LastPipeline.Status, URL: raw.LastPipeline.WebURL,
-			})
-		} else if len(statuses) == 0 {
+		if raw.LastPipeline == nil && len(statuses) == 0 {
 			item.ChecksState = "none"
 		}
 		for _, status := range statuses {
