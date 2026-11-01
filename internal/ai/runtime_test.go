@@ -2201,7 +2201,7 @@ func TestDiscussionReviewDoesNotEchoPriorChairConclusion(t *testing.T) {
 		AgentID: "discussion-chair", AgentName: "MIMI · Chair", Status: "completed",
 		Content: "The page explicitly rejects the reading that these chapters are merely applications. [source:page-21]",
 	}}
-	messages = discussionReviewMessages(messages, tutor, 2, previous, false)
+	messages = discussionReviewMessages(messages, tutor, 2, false, false, previous)
 	var prompt strings.Builder
 	for _, message := range messages {
 		prompt.WriteString(message.Content)
@@ -2272,7 +2272,7 @@ func TestDiscussionRepairPromptIncludesOnlyCompletedPeerInventory(t *testing.T) 
 		{AgentID: "concept-connector", AgentName: "Concept Connector", Status: "completed", Content: "Chapters IV–VIII matter because the theory must organize considered judgments. [source:rawls-page-21]"},
 		{AgentID: "lex", AgentName: "Lex · Ambiguity Scout", Status: "failed", Error: &Error{Code: "provider_unavailable", Message: "timeout"}},
 	}
-	prompt := discussionRepairInstructionWithPeers("the response does not identify an actual completed peer", map[string]bool{"rawls-page-21": true}, false, true, previous, "steelman")
+	prompt := discussionRepairInstructionWithPeers("the response does not identify an actual completed peer", map[string]bool{"rawls-page-21": true}, false, false, true, previous, "steelman")
 	if !strings.Contains(prompt, "Concept Connector") || !strings.Contains(prompt, "organize considered judgments") {
 		t.Fatalf("repair prompt omitted the exact completed peer and its claim: %s", prompt)
 	}
