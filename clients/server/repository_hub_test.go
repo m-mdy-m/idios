@@ -182,7 +182,7 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	treeRec := httptest.NewRecorder()
 	handler.ServeHTTP(treeRec, treeReq)
 	var rootPage struct {
-		Items   []struct {
+		Items []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
 			SHA  string `json:"sha"`
@@ -199,7 +199,7 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	childRec := httptest.NewRecorder()
 	handler.ServeHTTP(childRec, childReq)
 	var childPage struct {
-		Items   []struct {
+		Items []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
 			Size int64  `json:"size"`
@@ -224,9 +224,15 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 		CommitterEmail  string `json:"committer_email"`
 		SignatureStatus string `json:"signature_status"`
 		SignatureType   string `json:"signature_type"`
-		ChecksAvailable bool `json:"checks_available"`
-		Checks          []struct { Name string `json:"name"`; Status string `json:"status"` } `json:"checks"`
-		Files           []struct { Path string `json:"path"`; Status string `json:"status"` } `json:"files"`
+		ChecksAvailable bool   `json:"checks_available"`
+		Checks          []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"checks"`
+		Files []struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		} `json:"files"`
 	}
 	if commitRec.Code != http.StatusOK || json.Unmarshal(commitRec.Body.Bytes(), &commit) != nil {
 		t.Fatalf("commit detail endpoint status=%d body=%s", commitRec.Code, commitRec.Body.String())
