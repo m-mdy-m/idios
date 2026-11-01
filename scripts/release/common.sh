@@ -79,6 +79,9 @@ idios_verify_target() {
   if [[ -n "$unformatted" ]]; then
     echo "Go files need gofmt:" >&2
     printf '%s\n' "$unformatted" >&2
+    while IFS= read -r file; do
+      [[ -n "$file" ]] && gofmt -d "$file"
+    done <<< "$unformatted"
     exit 1
   fi
   go test ./...
