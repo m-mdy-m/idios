@@ -311,6 +311,8 @@ assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
 assert.ok(readerSource.includes('const pageKey = currentPageTranslationKey'), 'learning-analysis cache must share the exact page/source identity');
 assert.ok(readerSource.includes('currentPageTranslationKeyRef.current !== pageKey'), 'late learning-analysis results must not update a different page');
 assert.ok(readerSource.includes('learningAnalysisSequenceRef.current === requestSequence'), 'late learning-analysis results must not clear a newer request state');
+assert.ok(readerSource.includes('learningAnalysisSequenceRef.current !== requestSequence'), 'superseded analysis must not restore stale page data or cache entries');
+assert.ok(readerSource.includes('learningAnalysisSequenceRef.current += 1'), 'refresh must invalidate in-flight learning analysis for the same page key');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
 assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
