@@ -72,7 +72,7 @@ type TreeEntry struct {
 type TreePage struct {
 	Items   []TreeEntry `json:"items"`
 	Page    int         `json:"page"`
-	HasMore bool         `json:"has_more"`
+	HasMore bool        `json:"has_more"`
 }
 
 type File struct {
