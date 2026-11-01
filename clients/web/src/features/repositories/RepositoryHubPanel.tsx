@@ -1191,6 +1191,123 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
             </Modal>}
           </div>}
 
+          {tab === 'Releases' && <div className="hub-work-items">
+            <div className="hub-detail-toolbar">
+              <div><strong>Releases</strong><p className="hub-muted">Provider releases and downloadable assets. Tags without a release are shown separately.</p></div>
+              {releaseHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreReleases()} loading={releaseLoading}>Load older releases</Button>}
+            </div>
+            {!selected.capabilities.includes('releases.read')
+              ? <p className="hub-muted">This provider does not expose a Releases API.</p>
+              : releaseAvailability?.state === 'unsupported'
+                ? <p className="hub-muted">{releaseAvailability.reason}</p>
+                : releaseAvailability?.state === 'error'
+                  ? <div className="notice notice--error" role="alert">{releaseAvailability.reason || 'Releases could not be loaded.'}</div>
+                  : <>
+                    {releases.map((release) => (
+                      <article className="hub-release-card" key={release.id || release.tag_name}>
+                        <div className="hub-release-card__header">
+                          <div><strong>{release.name || release.tag_name}</strong><code>{release.tag_name}</code></div>
+                          <div className="hub-release-card__meta">
+                            <Badge tone={release.state === 'published' ? 'green' : release.state === 'prerelease' ? 'amber' : 'neutral'}>{release.state}</Badge>
+                            <small>{release.published_at ? new Date(release.published_at).toLocaleDateString() : 'Date not reported'}</small>
+                            {release.url && <a href={release.url} target="_blank" rel="noreferrer">Provider release <ArrowUpRight size={12}/></a>}
+                          </div>
+                        </div>
+                        {release.body && <details className="hub-release-notes"><summary>Release notes</summary><pre>{release.body}</pre></details>}
+                        <div className="hub-release-assets">
+                          <div className="hub-release-assets__heading"><strong>Assets</strong><span>{release.assets_available ? release.assets.length + ' reported' : 'Unavailable'}</span></div>
+                          {!release.assets_available
+                            ? <p className="hub-muted">Asset metadata is not available from this provider.</p>
+                            : !release.assets.length
+                              ? <p className="hub-muted">No downloadable assets were reported.</p>
+                              : release.assets.map((asset) => (
+                                <div className="hub-release-asset" key={asset.id || release.tag_name + ':' + asset.name}>
+                                  <div className="hub-release-asset__name">
+                                    <strong>{asset.name}</strong>
+                                    {asset.label && <small>{asset.label}</small>}
+                                    {asset.platform && <Badge>{asset.platform}</Badge>}
+                                  </div>
+                                  <div className="hub-release-asset__meta">
+                                    <small>{asset.size !== undefined ? (asset.size / (1024 * 1024)).toFixed(2) + ' MB' : 'Size not reported'}</small>
+                                    <small>{asset.content_type || 'Content type not reported'}</small>
+                                    <small>{asset.download_count !== undefined ? asset.download_count.toLocaleString() + ' downloads' : 'Download count not reported'}</small>
+                                    {asset.digest && <code title={asset.digest}>{asset.digest}</code>}
+                                    {asset.url && <a href={asset.url} target="_blank" rel="noreferrer">Download <ArrowUpRight size={12}/></a>}
+                                  </div>
+                                </div>
+                              ))}
+                        </div>
+                      </article>
+                    ))}
+                    {releaseLoading && !releases.length && <p className="hub-muted">Loading releases…</p>}
+                    {!releaseLoading && !releases.length && <p className="hub-muted">No releases were returned for this repository.</p>}
+                    {releaseHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreReleases()} loading={releaseLoading}>Load older releases</Button>}
+                  </>}
+          </div>}
+
+          {tab === 'Tags' && <div className="hub-work-items">
+            <div className="hub-detail-toolbar">
+              <div><strong>Tags</strong><p className="hub-muted">Git tags are separate from releases. History is loaded in bounded pages.</p></div>
+              {tagHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreTags()} loading={tagLoading}>Load older tags</Button>}
+            </div>
+            {!selected.capabilities.includes('tags.read')
+              ? <p className="hub-muted">This provider does not expose repository tags.</p>
+              : tagAvailability?.state === 'unsupported'
+                ? <p className="hub-muted">{tagAvailability.reason}</p>
+                : tagAvailability?.state === 'error'
+                  ? <div className="notice notice--error" role="alert">{tagAvailability.reason || 'Tags could not be loaded.'}</div>
+                  : <>
+                    {tags.map((tag) => (
+                      <article className="hub-tag-row" key={tag.name}>
+                        <div className="hub-tag-row__identity">
+                          <strong>{tag.name}</strong>
+                          <div><Badge>{tag.kind}</Badge>{tag.protected !== undefined && <Badge>{tag.protected ? 'Protected' : 'Unprotected'}</Badge>}</div>
+                          {tag.annotation && <p>{tag.annotation}</p>}
+                        </div>
+                        <div className="hub-tag-row__meta">
+                          <code title={tag.target_sha || tag.object_sha}>{tag.target_sha || tag.object_sha || 'Target not reported'}</code>
+                          <small>{tag.created_at ? 'Tag created ' + new Date(tag.created_at).toLocaleDateString() : tag.commit_created_at ? 'Target commit ' + new Date(tag.commit_created_at).toLocaleDateString() : 'Date not reported'}</small>
+                          {tag.release_name
+                            ? <small>{tag.release_url ? <a href={tag.release_url} target="_blank" rel="noreferrer">Release: {tag.release_name}</a> : 'Release: ' + tag.release_name}</small>
+                            : <small>No associated release reported</small>}
+                          {tag.url && <a href={tag.url} target="_blank" rel="noreferrer">Browse tag <ArrowUpRight size={12}/></a>}
+                        </div>
+                      </article>
+                    ))}
+                    {tagLoading && !tags.length && <p className="hub-muted">Loading tags…</p>}
+                    {!tagLoading && !tags.length && <p className="hub-muted">No tags were returned for this repository.</p>}
+                    {tagHasMore && <Button type="button" variant="secondary" onClick={() => void loadMoreTags()} loading={tagLoading}>Load older tags</Button>}
+                    {supports('tags.compare') && tags.length >= 2 && <section className="hub-tag-compare">
+                      <div><strong>Compare tags</strong><p className="hub-muted">Compare the commit interval and changed files between two loaded tags.</p></div>
+                      <div className="hub-tag-compare__controls">
+                        <Field label="From tag"><select value={compareFrom} onChange={(event) => { setCompareFrom(event.target.value); setTagComparison(null); }}><option value="">Choose tag…</option>{tags.map((tag) => <option key={tag.name} value={tag.name} disabled={tag.name === compareTo}>{tag.name}</option>)}</select></Field>
+                        <Field label="To tag"><select value={compareTo} onChange={(event) => { setCompareTo(event.target.value); setTagComparison(null); }}><option value="">Choose tag…</option>{tags.map((tag) => <option key={tag.name} value={tag.name} disabled={tag.name === compareFrom}>{tag.name}</option>)}</select></Field>
+                        <Button type="button" onClick={() => void compareSelectedTags()} disabled={!compareFrom || !compareTo || compareFrom === compareTo || tagCompareLoading} loading={tagCompareLoading}>Compare</Button>
+                      </div>
+                      {tagCompareError && <div className="notice notice--error" role="alert">{tagCompareError}</div>}
+                      {tagComparison && <div className="hub-tag-comparison">
+                        <div className="hub-tag-comparison__summary">
+                          <Badge>{tagComparison.state}</Badge>
+                          <span>{tagComparison.ahead_by} commits ahead</span>
+                          <span>{tagComparison.behind_by} commits behind</span>
+                          {tagComparison.merge_base_sha && <code title={tagComparison.merge_base_sha}>Base {tagComparison.merge_base_sha.slice(0, 12)}</code>}
+                        </div>
+                        {tagComparison.availability.state === 'partial' && <p className="hub-muted">{tagComparison.availability.reason}</p>}
+                        <div className="hub-tag-comparison__grid">
+                          <section><strong>Commits ({tagComparison.commits.length}{tagComparison.commits_truncated ? '+' : ''})</strong>
+                            {tagComparison.commits.map((commit) => <div className="hub-tag-comparison__item" key={commit.sha}><code>{commit.sha.slice(0, 12)}</code><span>{commit.title || commit.message || 'Commit'}</span><small>{commit.committer || commit.author || 'Identity unavailable'}</small></div>)}
+                            {tagComparison.commits_truncated && <p className="hub-muted">Commit list is capped at 100 entries.</p>}
+                          </section>
+                          <section><strong>Changed files ({tagComparison.files.length}{tagComparison.files_truncated ? '+' : ''})</strong>
+                            {tagComparison.files.map((file) => <div className="hub-tag-comparison__item" key={file.path + ':' + (file.previous_path || '')}><span>{file.path}</span><Badge>{file.status}</Badge><small>+{file.additions} / −{file.deletions}</small>{file.previous_path && <small>From {file.previous_path}</small>}{file.patch && <pre>{file.patch}</pre>}</div>)}
+                            {tagComparison.files_truncated && <p className="hub-muted">Changed file list is capped or truncated by the provider.</p>}
+                          </section>
+                        </div>
+                      </div>}
+                    </section>}
+                  </>}
+          </div>}
+
           {tab === 'Commits' && <div className="hub-work-items">
             <div className="hub-detail-toolbar">
               <div><strong>Commit history</strong><p className="hub-muted">Author and committer are shown separately. Signature verification and CI checks are independent signals.</p></div>
