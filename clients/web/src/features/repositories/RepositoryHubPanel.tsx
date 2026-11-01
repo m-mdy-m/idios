@@ -531,14 +531,20 @@ export function RepositoryHubPanel() {
 
   return <div className="hub-workspace">
     <div className="hub-heading">
-      <div><p className="eyebrow">CONNECTED SOURCES</p><h2>Repository Hub</h2><p>Provider repositories are linked explicitly and remain separate from local IDIOS workspaces.</p></div>
-      <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh</Button>
+      <p className="hub-heading__context">REMOTE SOURCES <span>·</span> SELECTIVE LINKING</p>
+      <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh status</Button>
     </div>
 
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {notice && <div className="notice notice--success" role="status">{notice}</div>}
 
-    {status && !status.credential_storage_ready && <div className="notice notice--warning"><LockKeyhole size={15}/><span>Provider credentials are not enabled. Set <code>IDIOS_PROVIDER_ENCRYPTION_KEY</code> to a base64-encoded or hex 32-byte key in the IDIOS server environment, then restart IDIOS.</span></div>}
+    {status && !status.credential_storage_ready && <div className="notice notice--warning hub-credential-warning" role="status">
+      <LockKeyhole size={16}/>
+      <div><strong>Encrypted credential storage is locked</strong>
+        <p>{status.credential_storage_error || 'The IDIOS server has not loaded a valid provider encryption key.'}</p>
+        <small>Set the key in the environment that launches IDIOS, stop the current server process, and start it again. The key is read when the server starts.</small>
+      </div>
+    </div>}
 
     {!selected && <div className="hub-setup-grid">
       <section className="hub-section">
@@ -552,6 +558,7 @@ export function RepositoryHubPanel() {
           {provider === 'sourceforge' && <p className="hub-muted">SourceForge Allura accepts a Bearer token generated from <a href="https://sourceforge.net/auth/oauth/" target="_blank" rel="noreferrer">SourceForge OAuth settings</a>; the account's API token is entered here directly.</p>}
           <Field label="Access token / Bearer token" hint="Fallback for personal access tokens and SourceForge. Sent only to the local IDIOS API and encrypted before storage."><input type="password" autoComplete="off" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} required placeholder="Paste a provider token" /></Field>
           <Button type="submit" disabled={!status?.credential_storage_ready || !accessToken.trim() || busy}><ShieldCheck size={14}/> {busy ? 'Verifying…' : 'Verify & connect with token'}</Button>
+          {!status?.credential_storage_ready && <p className="hub-muted hub-disabled-reason">Token verification unlocks after IDIOS confirms encrypted credential storage is ready.</p>}
         </form>
         {connections.length > 0 && <div className="hub-connections-list">{connections.map((item) => <div className="hub-connection-row" key={item.id}>
           <div><strong>{item.display_name || item.account_name}</strong><span>{item.provider} · {item.host} · {item.account_name}</span></div>
@@ -562,23 +569,25 @@ export function RepositoryHubPanel() {
 
       <section className="hub-section">
         <div className="hub-section-heading"><div><h3>Discover repositories</h3><p>Choose a connection and search. Nothing is imported until you click Link.</p></div></div>
-        <div className="hub-discovery-controls">
-          <Field label="Connection"><select value={discoveryConnection} onChange={(event) => setDiscoveryConnection(event.target.value)}><option value="">Choose provider connection…</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.provider} · {item.account_name}</option>)}</select></Field>
-          <Field label="Search"><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void discover(); } }} placeholder="namespace / repository" /></Field>
-          <Button onClick={() => void discover()} disabled={!discoveryConnection || discoveryBusy}><Search size={14}/> {discoveryBusy ? 'Searching…' : 'Search'}</Button>
-        </div>
-        <div className="hub-discovery-list">
-          {discovery.map((item) => <div className="hub-discovery-row" key={item.external_id}>
-            <div className="hub-discovery-main"><strong>{item.full_path}</strong><span>{item.description || item.visibility || 'Provider repository'} · {item.default_branch || 'No default branch'} · {item.permission || 'permission unknown'}</span><small>{item.capabilities.join(' · ')}</small></div>
-            <Button disabled={busy || repositories.some((saved) => saved.provider === item.provider && saved.host === item.host && saved.external_id === item.external_id)} onClick={() => void importRepository(item)}><Plus size={13}/> Link</Button>
-          </div>)}
-          {!discovery.length && <p className="hub-muted">Search a provider account to choose specific repositories.</p>}
-          {discoveryHasMore && <Button type="button" variant="secondary" disabled={discoveryBusy} onClick={() => void discover(discoveryPage + 1)}>{discoveryBusy ? 'Loading…' : 'Load more repositories'}</Button>}
-        </div>
+        {connections.length > 0 ? <>
+          <div className="hub-discovery-controls">
+            <Field label="Connection"><select value={discoveryConnection} onChange={(event) => setDiscoveryConnection(event.target.value)}><option value="">Choose provider connection…</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.provider} · {item.account_name}</option>)}</select></Field>
+            <Field label="Search"><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void discover(); } }} placeholder="namespace / repository" /></Field>
+            <Button onClick={() => void discover()} disabled={!discoveryConnection || discoveryBusy}><Search size={14}/> {discoveryBusy ? 'Searching…' : 'Search'}</Button>
+          </div>
+          <div className="hub-discovery-list">
+            {discovery.map((item) => <div className="hub-discovery-row" key={item.external_id}>
+              <div className="hub-discovery-main"><strong>{item.full_path}</strong><span>{item.description || item.visibility || 'Provider repository'} · {item.default_branch || 'No default branch'} · {item.permission || 'permission unknown'}</span><small>{item.capabilities.join(' · ')}</small></div>
+              <Button disabled={busy || repositories.some((saved) => saved.provider === item.provider && saved.host === item.host && saved.external_id === item.external_id)} onClick={() => void importRepository(item)}><Plus size={13}/> Link</Button>
+            </div>)}
+            {!discovery.length && <p className="hub-muted">Search a provider account to choose specific repositories.</p>}
+            {discoveryHasMore && <Button type="button" variant="secondary" disabled={discoveryBusy} onClick={() => void discover(discoveryPage + 1)}>{discoveryBusy ? 'Loading…' : 'Load more repositories'}</Button>}
+          </div>
+        </> : <div className="hub-discovery-locked"><GitBranch size={18}/><div><strong>Connect a provider first</strong><p>Once GitHub, GitLab or SourceForge is connected, search its account and link only the repositories you choose.</p></div></div>}
       </section>
     </div>}
 
-    <div className="hub-browser">
+    {repositories.length > 0 && <div className="hub-browser">
       <aside className="hub-sidebar">
         <div className="hub-section-heading"><div><h3>Linked repositories</h3><p>{repositories.length} remote workspaces</p></div><Badge>{repositories.filter((item) => item.pinned).length} pinned</Badge></div>
         <div className="hub-work-item hub-search-row"><Field label="Search repositories"><input value={repositorySearch} onChange={(event) => setRepositorySearch(event.target.value)} placeholder="name, namespace, description or host" /></Field><Field label="Provider"><select value={repositoryProviderFilter} onChange={(event) => setRepositoryProviderFilter(event.target.value as HubProvider | 'all')}><option value="all">All providers</option><option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="sourceforge">SourceForge</option></select></Field></div>
@@ -745,6 +754,10 @@ export function RepositoryHubPanel() {
           </details>}
         </>}
       </section>
-    </div>
+    </div>}
+    {repositories.length === 0 && <div className="hub-empty-workspace">
+      <GitBranch size={19}/>
+      <div><strong>No remote repositories linked</strong><p>Connect a provider, search its repositories, then choose Link. Nothing is added until you explicitly select it.</p></div>
+    </div>}
   </div>;
 }
