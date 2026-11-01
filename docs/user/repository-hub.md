@@ -142,7 +142,7 @@ Open **Commits** on a linked repository to browse its paginated history. The lis
 
 Signature status is not inferred from an email address, avatar, or CI result. GitHub verification is shown from the provider's verification response; GitLab uses its commit-signature verification endpoint; SourceForge is checked locally with `git verify-commit` against the IDIOS server's configured Git keyring. A local verification result describes only that server's keyring and trust configuration.
 
-The UI distinguishes **Verified**, **Unverified**, **Unsigned**, **Unknown** and **Unavailable**. Status checks and pipelines are displayed separately from cryptographic signatures. Providers that do not expose a check or verification endpoint are reported as unavailable rather than as a passing or failing result. SourceForge does not expose provider-hosted CI checks through the current Allura integration.
+The UI distinguishes **Verified**, **Unverified**, **Unsigned**, **Unknown** and **Unavailable**. Status checks and pipelines are displayed separately from cryptographic signatures. Providers that do not expose a check or verification endpoint are reported as unavailable rather than as a passing or failing result. SourceForge does not expose provider-hosted CI checks through the current Allura integration. For SourceForge SSH-signed commits, set `IDIOS_SOURCEFORGE_SSH_ALLOWED_SIGNERS_FILE` to the absolute path of a trusted OpenSSH allowed-signers file in the IDIOS server environment. The file is read locally and is never sent to SourceForge. GPG verification uses the local GPG keyring available to the IDIOS server process.
 
 ## Data and security boundary
 
