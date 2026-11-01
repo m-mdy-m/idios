@@ -248,6 +248,8 @@ const rawValid = validateRawTranslationAlignment(JSON.stringify({ translation: v
 assert.equal(rawValid.valid, true);
 assert.equal(rawValid.verified, true);
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A sentence that belongs to another page.', translation: 'x' }] }), source).reason, 'source-mismatch');
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'a careful reader follows the argument.', translation: 'x' }] }), source).reason, 'source-mismatch', 'source anchors must preserve original capitalization');
+assert.equal(validateTranslationIntegrity(source, { ...valid, segments: [{ ...valid.segments[0], source: 'a careful reader follows the argument.' }] }).reason, 'source-mismatch', 'cached source anchors must preserve original capitalization');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'The result is not guaranteed.', translation: 'x' }, { source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-order');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-coverage');
 assert.equal(validateRawTranslationAlignment('{"translation":"broken", "segments":[', source).reason, 'malformed-structured-response');
