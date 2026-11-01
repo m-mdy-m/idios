@@ -7,7 +7,7 @@ import {
 import { api } from '@/lib/api';
 import type {
   HubBranch, HubChangeRequest, HubCollection, HubCommit, HubConnection, HubDiscoveredRepository, HubFile,
-  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, HubTreePage, Project,
+  HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 import './RepositoryHubPanel.css';
