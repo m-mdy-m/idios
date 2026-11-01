@@ -292,7 +292,7 @@ assert.ok(readerSource.includes("requestTranslation(currentPageText, 'page', sig
 assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
 assert.ok(readerSource.includes('const pageKey = currentPageTranslationKey'), 'learning-analysis cache must share the exact page/source identity');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
-assert.ok(readerSource.includes('translationJobs.cancel(activeJob.id)'), 'refresh must cancel a stale in-flight page translation');
+assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
 assert.ok(companionSource.includes('dir={targetLanguage'));
 assert.ok(companionSource.includes('onStopTranslation'));
