@@ -346,7 +346,7 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 				"owner": owner, "name": name, "first": pageSize, "after": after,
 			},
 		}
-		if err := p.json(ctx, token, http.MethodPost, "https://api.github.com/graphql", nil, input, &raw); err != nil {
+		if err := p.json(ctx, token, http.MethodPost, strings.TrimRight(p.base, "/")+"/graphql", nil, input, &raw); err != nil {
 			return TagPage{}, err
 		}
 		if len(raw.Errors) > 0 {
