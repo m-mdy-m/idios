@@ -11,6 +11,7 @@ import type {
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 import './RepositoryHubPanel.css';
+import { RemoteReadmePreview, RemoteTreeView } from './RepositoryBrowser';
 
 type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Settings';
 
@@ -272,10 +273,21 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     void api.hubBranches(selected.id).then((items) => {
       if (!active) return;
       setBranches(items);
-      setBranch((current) => items.some((item) => item.name === current) ? current : items.find((item) => item.default)?.name ?? items[0]?.name ?? '');
+      const requestedBranch = new URLSearchParams(window.location.search).get('branch') ?? '';
+      setBranch((current) => {
+        if (requestedBranch && items.some((item) => item.name === requestedBranch)) return requestedBranch;
+        return items.some((item) => item.name === current) ? current : items.find((item) => item.default)?.name ?? items[0]?.name ?? '';
+      });
     }).catch((err) => { if (active) setError(messageFrom(err)); });
     return () => { active = false; };
   }, [selected?.id, tab]);
+
+  useEffect(() => {
+    if (!standalone || !selected || tab !== 'Code' || !branch) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('branch', branch);
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }, [standalone, selected?.id, tab, branch]);
 
   useEffect(() => {
     if (!selected || tab !== 'Code' || !branch) { setTree([]); return; }
@@ -388,6 +400,16 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       setError('');
     } catch {
       setError('Clipboard access is unavailable. Select and copy the clone URL manually.');
+    }
+  }
+
+  async function copyRemoteFileValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+      setError('');
+    } catch {
+      setError('Clipboard access is unavailable. Select and copy the value manually.');
     }
   }
 
@@ -806,18 +828,25 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                 </details> : <span>Clone URLs are not available for this repository.</span>}
               </div>
             </section>
+            <RemoteReadmePreview repository={selected} />
           </section>}
 
           {tab === 'Code' && !supports('code.read') && <div className="hub-provider-limitation"><GitBranch size={24}/><h4>Remote code browser unavailable</h4><p>{selected.provider === 'sourceforge' ? 'SourceForge Allura does not expose a REST tree/file API. Use the repository clone endpoint with Git for checkout, branches, commits, and pushes.' : 'This connection does not have permission to read repository code.'}</p>{selected.clone_url && <a href={selected.clone_url}>{selected.clone_url}</a>}</div>}
           {tab === 'Code' && supports('code.read') && <div className="hub-code-layout">
             <div className="hub-code-tree">
               <div className="hub-detail-toolbar"><strong>Remote tree</strong><Field label="Branch"><select value={branch} onChange={(event) => setBranch(event.target.value)}>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? ' · default' : ''}</option>)}</select></Field></div>
-              <div className="hub-tree-list">{tree.map((entry) => <button key={entry.path} type="button" disabled={entry.type === 'tree'} className="hub-tree-entry" onClick={() => entry.type === 'blob' && void openRemoteFile(entry.path)}><FileCode2 size={13}/><span>{entry.path}</span><small>{entry.type}</small></button>)}{!tree.length && <p className="hub-muted">{branches.length ? 'No files returned for this branch.' : 'This provider does not expose a REST tree browser for this repository.'}</p>}</div>
+              <RemoteTreeView tree={tree} selectedPath={filePath} onOpenFile={(path) => void openRemoteFile(path)} emptyMessage={branches.length ? "No files returned for this branch." : "This provider does not expose a REST tree browser for this repository."} />
             </div>
             <div className="hub-file-editor">
               <div className="hub-detail-toolbar"><strong>{file?.path || (fileCreateOnly ? 'New remote file' : 'Remote file viewer')}</strong><div className="hub-file-toolbar-actions">{fileLoading && <span>Loading…</span>}<Button type="button" variant="secondary" disabled={!supports('code.write') || busy} onClick={() => { setFile(null); setFilePath(''); setFileContent(''); setFileOriginalContent(''); setShowDiffPreview(false); setFileCreateOnly(true); setFileCommitMessage(''); }}><Plus size={13}/> New file</Button></div></div>
               {file || fileCreateOnly ? <form onSubmit={saveRemoteFile}>
-                <div className="hub-file-actions"><span>{file ? `Revision ${file.sha || file.last_commit_id || '—'}` : 'New file · not yet committed'}</span></div>
+                <div className="hub-file-actions">
+                  <span>{file ? `Revision ${file.sha || file.last_commit_id || '—'} · ${file.size.toLocaleString()} bytes` : 'New file · not yet committed'}</span>
+                  {file && <div className="hub-item-actions">
+                    <Button type="button" variant="ghost" onClick={() => void copyRemoteFileValue(file.path, 'File path')}><Copy size={13}/> Copy path</Button>
+                    <Button type="button" variant="ghost" onClick={() => void copyRemoteFileValue(fileContent, 'File content')}><Copy size={13}/> Copy content</Button>
+                  </div>}
+                </div>
                 <Field label="File path"><input value={filePath} onChange={(event) => setFilePath(event.target.value)} disabled={!fileCreateOnly} required /></Field>
                 <Field label="Content"><textarea className="hub-code-textarea" value={fileContent} onChange={(event) => { setFileContent(event.target.value); setShowDiffPreview(false); }} rows={18} spellCheck={false}/></Field>
                 <Field label="Commit message"><input value={fileCommitMessage} onChange={(event) => setFileCommitMessage(event.target.value)} required placeholder="Describe this remote commit" /></Field>
