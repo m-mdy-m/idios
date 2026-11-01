@@ -46,3 +46,19 @@
 @media(max-width:820px){.hub-overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.hub-overview-clone{align-items:flex-start;flex-direction:column}.hub-overview-clone__actions{justify-content:flex-start}}
 @media(max-width:560px){.hub-overview-hero{align-items:flex-start;flex-direction:column}.hub-overview-description{grid-template-columns:minmax(0,1fr)}.hub-overview-description>div:first-child{grid-column:auto}.hub-overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.hub-heading__actions{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.hub-checkbox input::before{transition:none}}
+
+.hub-heading__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hub-provider-group__badges{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.hub-provider-repository{position:relative}
+.hub-repository-menu{position:relative;display:flex;align-items:center;flex:0 0 auto}
+.hub-repository-menu>summary{display:grid;place-items:center;width:30px;height:30px;list-style:none;border:1px solid transparent;border-radius:7px;color:var(--muted);cursor:pointer}
+.hub-repository-menu>summary::-webkit-details-marker{display:none}
+.hub-repository-menu>summary:hover,.hub-repository-menu[open]>summary{border-color:var(--border);background:var(--surface-hover);color:var(--text)}
+.hub-repository-menu>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hub-repository-menu__content{position:absolute;z-index:30;top:calc(100% + 4px);right:0;display:flex;min-width:185px;max-width:min(270px,calc(100vw - 48px));flex-direction:column;gap:3px;padding:5px;border:1px solid var(--border-strong);border-radius:9px;background:var(--bg-elevated);box-shadow:0 12px 32px rgba(0,0,0,.22)}
+.hub-repository-menu__content button{display:flex;align-items:center;gap:8px;width:100%;min-height:31px;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--text-soft);font:inherit;font-size:10px;text-align:left;cursor:pointer}
+.hub-repository-menu__content button:hover:not(:disabled){background:var(--surface-hover);color:var(--text)}
+.hub-repository-menu__content button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hub-repository-menu__content button:disabled{opacity:.5;cursor:not-allowed}
+.hub-repository-menu__content .hub-repository-menu__danger{color:var(--danger,#dc666d)}
+.hub-repository-menu__content .hub-repository-menu__danger:hover:not(:disabled){background:color-mix(in srgb,var(--danger,#dc666d) 9%,transparent)}
