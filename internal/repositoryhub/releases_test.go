@@ -264,9 +264,9 @@ func TestGitHubListTagsUsesProviderCursorForOlderPages(t *testing.T) {
 		case "POST /graphql":
 			var input struct {
 				Variables struct {
-					After string \`json:"after"\`
-					First int    \`json:"first"\`
-				} \`json:"variables"\`
+					After string `json:"after"`
+					First int    `json:"first"`
+				} `json:"variables"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Fatal(err)
