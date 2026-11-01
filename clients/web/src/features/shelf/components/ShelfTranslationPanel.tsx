@@ -4,7 +4,7 @@ import {
   LoaderCircle, Settings2, Sparkles, X,
 } from 'lucide-react';
 import type { ReaderGrammarNote, ReaderIELTSTip, ReaderTranslationData, ReaderTranslationTerm } from '../model/reader-translation';
-import { normalizeTranslationMatch } from '../model/reader-translation';
+import { normalizeTranslationMatch, splitMixedDirectionText } from '../model/reader-translation';
 import './ShelfTranslationPanel.css';
 
 export type ShelfTranslationTab = 'translate' | 'vocabulary' | 'grammar' | 'ielts';
@@ -23,10 +23,9 @@ const modes: Array<{ value: ShelfTranslationTab; label: string; description: str
 ];
 
 function renderTextWithBidi(value: string, keyPrefix: string): ReactNode[] {
-  const parts = value.split(/([A-Za-z][A-Za-z0-9_’'–—-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_’'–—-]*)*)/g).filter(Boolean);
-  return parts.map((part, index) => /[A-Za-z]/.test(part)
-    ? <bdi key={keyPrefix + ':' + index} dir="ltr">{part}</bdi>
-    : <span key={keyPrefix + ':' + index}>{part}</span>);
+  return splitMixedDirectionText(value).map((part, index) => part.direction === 'ltr'
+    ? <bdi key={keyPrefix + ':' + index} dir="ltr">{part.text}</bdi>
+    : <span key={keyPrefix + ':' + index}>{part.text}</span>);
 }
 
 function renderMarkdownInline(value: string): ReactNode[] {
