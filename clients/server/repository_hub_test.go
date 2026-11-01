@@ -47,6 +47,14 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 			default:
 				http.NotFound(w, r)
 			}
+		case "GET /api/v4/projects/42/repository/commits/0123456789012345678901234567890123456789":
+			_, _ = w.Write([]byte(`{"id":"0123456789012345678901234567890123456789","title":"verified change","message":"verified change","web_url":"https://gitlab.example/m-mdy-m/idios/-/commit/0123456789012345678901234567890123456789","author_name":"Alice","author_email":"alice@example.test","authored_date":"2026-10-30T09:00:00Z","committer_name":"Bob","committer_email":"bob@example.test","committed_date":"2026-10-30T09:30:00Z","stats":{"additions":2,"deletions":1,"total":3},"last_pipeline":{"id":5,"status":"success","web_url":"https://gitlab.example/pipelines/5"}}`))
+		case "GET /api/v4/projects/42/repository/commits/0123456789012345678901234567890123456789/signature":
+			_, _ = w.Write([]byte(`{"signature_type":"SSH","verification_status":"verified"}`))
+		case "GET /api/v4/projects/42/repository/commits/0123456789012345678901234567890123456789/statuses":
+			_, _ = w.Write([]byte(`[{"name":"unit","status":"success","description":"Tests passed","target_url":"https://gitlab.example/jobs/5"}]`))
+		case "GET /api/v4/projects/42/repository/commits/0123456789012345678901234567890123456789/diff":
+			_, _ = w.Write([]byte(`[{"old_path":"old.go","new_path":"new.go","renamed_file":true,"diff":"@@ -1 +1 @@\n-old\n+new"}]`))
 		case "POST /api/v4/projects/42/issues":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -203,6 +211,33 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 		len(childPage.Items) != 1 || childPage.Items[0].Path != "src/main.go" ||
 		childPage.Items[0].Type != "blob" || childPage.Items[0].Size != 42 {
 		t.Fatalf("remote child tree endpoint returned an unexpected page: status=%d body=%s decoded=%#v", childRec.Code, childRec.Body.String(), childPage)
+	}
+
+	commitReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/commits/0123456789012345678901234567890123456789?ref=main", nil)
+	commitRec := httptest.NewRecorder()
+	handler.ServeHTTP(commitRec, commitReq)
+	var commit struct {
+		SHA string `json:"sha"`
+		Author string `json:"author"`
+		Email string `json:"email"`
+		Committer string `json:"committer"`
+		CommitterEmail string `json:"committer_email"`
+		SignatureStatus string `json:"signature_status"`
+		SignatureType string `json:"signature_type"`
+		ChecksAvailable bool `json:"checks_available"`
+		Checks []struct { Name string `json:"name"`; Status string `json:"status"` } `json:"checks"`
+		Files []struct { Path string `json:"path"`; Status string `json:"status"` } `json:"files"`
+	}
+	if commitRec.Code != http.StatusOK || json.Unmarshal(commitRec.Body.Bytes(), &commit) != nil {
+		t.Fatalf("commit detail endpoint status=%d body=%s", commitRec.Code, commitRec.Body.String())
+	}
+	if commit.SHA != "0123456789012345678901234567890123456789" || commit.Author != "Alice" ||
+		commit.Email != "alice@example.test" || commit.Committer != "Bob" || commit.CommitterEmail != "bob@example.test" {
+		t.Fatalf("commit provenance endpoint did not preserve separate identities: %#v", commit)
+	}
+	if commit.SignatureStatus != "verified" || commit.SignatureType != "SSH" || !commit.ChecksAvailable ||
+		len(commit.Checks) != 2 || len(commit.Files) != 1 || commit.Files[0].Status != "renamed" {
+		t.Fatalf("commit verification, checks, and diff data were not exposed: %#v", commit)
 	}
 
 	noteBody, _ := json.Marshal(map[string]any{
