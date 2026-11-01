@@ -14,6 +14,17 @@ import { PrivatePath } from '@/components/privacy/PrivatePath';
 
 type SettingsSection = 'appearance' | 'workspace' | 'notifications' | 'updates';
 
+const BUILTIN_WEB_THEMES = [
+  { id: 'dark', name: 'Classic', description: 'Graphite, muted terminal green, no glow.' },
+  { id: 'midnight', name: 'Midnight', description: 'Cool blue-black surfaces.' },
+  { id: 'oled', name: 'OLED', description: 'Near-black, high contrast.' },
+  { id: 'forest', name: 'Forest', description: 'Quiet green tones.' },
+  { id: 'violet', name: 'Violet', description: 'Low-light violet accents.' },
+  { id: 'rose', name: 'Rose', description: 'Muted rose on charcoal.' },
+  { id: 'light', name: 'Light', description: 'A restrained light workspace.' },
+  { id: 'system', name: 'System', description: 'Follow the operating-system preference.' },
+] as const;
+
 type QuoteReminderSettings = {
   enabled?: boolean;
   desktop_enabled?: boolean;
@@ -54,7 +65,7 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     try {
       const [payload, nextHealth] = await Promise.all([api.config(), api.health()]);
       setMeta(payload);
-      setConfig({ ...payload.config, web: { ...payload.config.web, theme: 'dark' } });
+      setConfig(payload.config);
       setHealth(nextHealth);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load settings.');
@@ -173,7 +184,7 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     setSaved(false);
     setError('');
     try {
-      const nextConfig = { ...config, web: { ...config.web, theme: 'dark' } };
+      const nextConfig = config;
       const result = await api.updateConfig(nextConfig);
       setConfig(nextConfig);
       setSaved(true);
@@ -250,7 +261,7 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
 
   const reminder = config.notifications.quote_reminders as QuoteReminderSettings;
   const sectionInfo: Record<SettingsSection, { title: string; description: string }> = {
-    appearance: { title: 'Theme & appearance', description: 'IDIOS uses one fixed dark graphite theme. Adjust workspace density and sidebar layout below.' },
+    appearance: { title: 'Theme & appearance', description: 'Choose a quiet palette and tune the density of your workspace.' },
     workspace: { title: 'Workspace & server', description: 'Control the local service and how often the workspace refreshes.' },
     notifications: { title: 'Notifications', description: 'Choose which reminders IDIOS creates and when they are delivered.' },
     updates: { title: 'Application updates', description: 'Check for a release and install a verified update.' },
@@ -276,13 +287,39 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
         <div className="settings-active-heading"><h2>{sectionInfo[activeSection].title}</h2><p>{sectionInfo[activeSection].description}</p></div>
         {activeSection === 'appearance' && <>
         <Card className="settings-card">
-          <div className="settings-card__heading"><span className="settings-heading-icon"><Palette size={17} /></span><div><h2>Themes</h2><p>IDIOS uses one consistent dark graphite theme.</p></div></div>
+          <div className="settings-card__heading"><span className="settings-heading-icon"><Palette size={17} /></span><div><h2>Color palette</h2><p>An old-school workstation aesthetic: dark surfaces, restrained contrast and no bright decorative colors.</p></div></div>
           <div className="settings-section">
-            <div className="settings-theme-fixed" aria-label="Active theme">
-              <span className="settings-theme-fixed__preview" aria-hidden="true" />
-              <div><strong>Dark graphite</strong><p>The workspace uses one consistent dark theme. Light and custom themes are disabled.</p></div>
-              <Badge tone="green">Active</Badge>
+            <div className="theme-options theme-options--extended" role="group" aria-label="Color themes">
+              {BUILTIN_WEB_THEMES.map((item) => {
+                const active = (config.web.theme || 'dark') === item.id;
+                return <button
+                  type="button"
+                  key={item.id}
+                  className={active ? 'theme-option theme-option--selected' : 'theme-option'}
+                  aria-pressed={active}
+                  onClick={() => patchConfig({ web: { ...config.web, theme: item.id } })}
+                >
+                  <span className={`theme-preview theme-preview--${item.id}`} aria-hidden="true"><span className="theme-preview__accent" /><span className="theme-preview__surface" /></span>
+                  <strong>{item.name}</strong>
+                  <small>{item.description}</small>
+                </button>;
+              })}
+              {Object.entries(config.web.custom_themes ?? {}).map(([id, item]) => {
+                const active = config.web.theme === id;
+                return <button
+                  type="button"
+                  key={id}
+                  className={active ? 'theme-option theme-option--selected' : 'theme-option'}
+                  aria-pressed={active}
+                  onClick={() => patchConfig({ web: { ...config.web, theme: id } })}
+                >
+                  <span className="theme-preview" style={{ background: item.background, color: item.accent }} aria-hidden="true"><span className="theme-preview__accent" /><span className="theme-preview__surface" /></span>
+                  <strong>{item.name}</strong>
+                  <small>Custom palette</small>
+                </button>;
+              })}
             </div>
+            <p className="settings-muted-copy">The selected palette applies immediately. Save changes to keep it in your IDIOS configuration.</p>
 
             <ToggleSetting title="Compact density" description="Fit more rows and activity into the same viewport." checked={config.web.compact} onChange={(value) => patchConfig({ web: { ...config.web, compact: value } })} />
             <ToggleSetting title="Collapse sidebar by default" description="Keep more space for content on smaller screens." checked={config.web.sidebar_collapsed} onChange={(value) => patchConfig({ web: { ...config.web, sidebar_collapsed: value } })} />
