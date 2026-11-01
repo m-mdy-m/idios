@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText, translationSourceIdentity } from '../src/features/shelf/model/reader-translation.ts';
+import { extractPartialReaderTranslation, extractReaderPDFText, normalizeReaderSelectionText, mergeReaderTranslations, normalizeTranslationMatch, parseReaderTranslation, splitReaderTranslationText, splitMixedDirectionText, translationSourceIdentity } from '../src/features/shelf/model/reader-translation.ts';
 import { buildFaithfulTranslationInstructions, buildTranslationContext } from '../src/features/shelf/model/translation/context.ts';
 import { validateRawTranslationAlignment, validateTranslationIntegrity } from '../src/features/shelf/model/translation/source-integrity.ts';
 import { translationJobs } from '../src/features/shelf/model/translation/job-manager.ts';
@@ -227,6 +227,11 @@ assert.equal(merged.segments.length, 2);
 assert.equal(merged.terms.length, 2, 'merged glossary entries should be deduplicated');
 
 
+const mixedRTL = splitMixedDirectionText('عدالت (Justice)، چاپ 2026، صفحهٔ 21.');
+assert.deepEqual(mixedRTL.filter((part) => part.direction === 'ltr').map((part) => part.text), ['Justice', '2026', '21'], 'Latin terminology and Western page numerals must be isolated inside RTL prose');
+assert.ok(mixedRTL.some((part) => part.text.includes('،')), 'Arabic punctuation must remain in the surrounding RTL run');
+assert.ok(mixedRTL.some((part) => part.text.includes('(') || part.text.includes(')')), 'paired punctuation must not be dropped during bidi segmentation');
+
 const architectureContext = buildTranslationContext({
   bookTitle: 'A Theory of Justice',
   pageNumber: 21,
@@ -303,5 +308,18 @@ assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPage
 assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
 assert.ok(companionSource.includes('dir={targetLanguage'));
+assert.ok(companionSource.includes('lang={targetLanguage}'), 'the companion must expose the selected language semantically');
+assert.ok(companionSource.includes('splitMixedDirectionText(value)'), 'embedded LTR words and Western numerals must use the tested bidi splitter');
 assert.ok(companionSource.includes('onStopTranslation'));
+const panelStyles = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.css', import.meta.url), 'utf8');
+const readerStyles = await readFile(new URL('../src/features/shelf/components/ShelfPDFReader.css', import.meta.url), 'utf8');
+assert.ok(panelStyles.includes('@media (prefers-reduced-motion: reduce)'), 'the companion must respect reduced-motion preferences');
+assert.ok(panelStyles.includes('@media (max-width: 520px)'), 'the companion must have a narrow viewport layout');
+assert.ok(panelStyles.includes('.shelf-translation-panel[lang="fa"]') && panelStyles.includes('.shelf-translation-panel[lang="ar"]'), 'Persian and Arabic typography must be explicit');
+assert.ok(panelStyles.includes('unicode-bidi: isolate'), 'embedded LTR runs must be isolated from surrounding RTL prose');
+const hoverRules = [...panelStyles.matchAll(/\.shelf-translation-panel__linked-segment:hover\s*\{([^}]*)\}/g)];
+assert.ok(hoverRules.length > 0 && !/box-shadow\s*:\s*0\s+0\s+0\s+2px/i.test(hoverRules.at(-1)[1]), 'linked-term hover must not add the previous blue glow');
+assert.ok(readerStyles.includes('background:rgb(251 191 36 / 36%)'), 'PDF word hover must use a restrained warm highlight');
+assert.ok(readerStyles.includes('background:rgb(58 118 238 / 38%)'), 'native text selection must remain visually distinct from word hover');
+
 console.log('Reader translation checks passed.');
