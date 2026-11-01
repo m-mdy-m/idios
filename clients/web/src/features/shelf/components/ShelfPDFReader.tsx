@@ -274,6 +274,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
   const [progressMessage, setProgressMessage] = useState('');
   const currentPageTranslationKey = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:${translationSourceIdentity(currentPageText)}`;
   const currentPageTranslationKeyRef = useRef(currentPageTranslationKey);
+  const learningAnalysisSequenceRef = useRef(0);
   useEffect(() => {
     currentPageTranslationKeyRef.current = currentPageTranslationKey;
   }, [currentPageTranslationKey]);
@@ -787,6 +788,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     const source = currentPageText.trim();
     if (!source || !translationModel || pageTranslationBusy) return;
     const pageKey = currentPageTranslationKey;
+    const requestSequence = ++learningAnalysisSequenceRef.current;
     const analysisKey = `${pageKey}:${kind}`;
     const cachedAnalysis = pageLearningCache.current.get(analysisKey);
     if (cachedAnalysis) {
@@ -802,15 +804,18 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     try {
       const analysis = await requestTranslation(source, kind);
       pageLearningCache.current.set(analysisKey, analysis);
+      if (currentPageTranslationKeyRef.current !== pageKey) return;
       const current = translationPageKey === pageKey ? pageTranslation : pageTranslationCache.current.get(pageKey) ?? null;
       const combined = current ? mergeReaderTranslations([current, analysis]) : analysis;
       pageTranslationCache.current.set(pageKey, combined);
       setPageTranslation(combined);
       setTranslationPageKey(pageKey);
     } catch (cause) {
-      setTranslationError(cause instanceof Error ? cause.message : `Could not analyse the page's ${kind}.`);
+      if (currentPageTranslationKeyRef.current === pageKey) {
+        setTranslationError(cause instanceof Error ? cause.message : `Could not analyse the page's ${kind}.`);
+      }
     } finally {
-      setLearningAnalysisBusy(false);
+      if (learningAnalysisSequenceRef.current === requestSequence) setLearningAnalysisBusy(false);
     }
   }, [currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationPageKey]);
 
