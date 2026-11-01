@@ -35,6 +35,21 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":42,"name":"idios","path_with_namespace":"m-mdy-m/idios","description":"IDIOS","web_url":"https://gitlab.example/m-mdy-m/idios","http_url_to_repo":"https://gitlab.example/m-mdy-m/idios.git","ssh_url_to_repo":"git@gitlab.example:m-mdy-m/idios.git","default_branch":"main","visibility":"private","open_issues_count":2,"namespace":{"full_path":"m-mdy-m"},"permissions":{"project_access":{"access_level":40}}}`))
 		case "GET /api/v4/projects/42/repository/branches":
 			_, _ = w.Write([]byte(`[{"name":"main","default":true,"protected":true,"commit":{"id":"commit-main"}}]`))
+		case "GET /api/v4/projects/42/releases":
+			if r.URL.Query().Get("order_by") != "released_at" || r.URL.Query().Get("sort") != "desc" {
+				t.Errorf("unexpected GitLab release ordering: %v", r.URL.Query())
+			}
+			_, _ = w.Write([]byte(`[{"tag_name":"v1.0","name":"Version 1","description":"Release notes","released_at":"2026-10-01T10:00:00Z","assets":{"links":[{"id":7,"name":"idios-linux-amd64.tar.gz","url":"https://gitlab.example/group/app/-/releases/v1.0/downloads/idios.tar.gz","link_type":"package"}]}}]`))
+		case "GET /api/v4/projects/42/repository/tags":
+			if r.URL.Query().Get("order_by") != "updated" || r.URL.Query().Get("sort") != "desc" {
+				t.Errorf("unexpected GitLab tag ordering: %v", r.URL.Query())
+			}
+			_, _ = w.Write([]byte(`[{"name":"v1.0","message":"annotated tag","target":"tag-object","created_at":"2026-10-01T09:00:00Z","protected":true,"commit":{"id":"commit-v1","created_at":"2026-10-01T08:00:00Z"},"release":{"tag_name":"v1.0"}}]`))
+		case "GET /api/v4/projects/42/repository/compare":
+			if r.URL.Query().Get("from") != "v1.0" || r.URL.Query().Get("to") != "v2.0" {
+				t.Errorf("unexpected GitLab tag comparison: %v", r.URL.Query())
+			}
+			_, _ = w.Write([]byte(`{"compare_same_ref":false,"compare_timeout":false,"commits":[{"id":"commit-v2","title":"next release","message":"next release","author_name":"Alice","committer_name":"Bob","committed_date":"2026-10-02T08:00:00Z","web_url":"https://gitlab.example/group/app/-/commit/commit-v2"}],"diffs":[{"old_path":"old.go","new_path":"new.go","renamed_file":true,"diff":"@@ -1 +1 @@\n-old\n+new"}]}`))
 		case "GET /api/v4/projects/42/repository/tree":
 			if r.URL.Query().Get("ref") != "main" || r.URL.Query().Get("per_page") != "100" {
 				t.Errorf("unexpected GitLab tree request: %v", r.URL.Query())
@@ -176,6 +191,67 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	}
 	if len(branches) != 1 || branches[0].Name != "main" || !branches[0].Default || branches[0].CommitSHA != "commit-main" {
 		t.Fatalf("unexpected remote branches: %#v", branches)
+	}
+
+	releaseReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/releases?page=1&page_size=20", nil)
+	releaseRec := httptest.NewRecorder()
+	handler.ServeHTTP(releaseRec, releaseReq)
+	var releasePage struct {
+		Items []struct {
+			TagName string `json:"tag_name"`
+			Name string `json:"name"`
+			State string `json:"state"`
+			PublishedAt string `json:"published_at"`
+			Assets []struct {
+				Name string `json:"name"`
+				Platform string `json:"platform"`
+				URL string `json:"url"`
+			} `json:"assets"`
+		} `json:"items"`
+		Availability struct { Available bool `json:"available"` } `json:"availability"`
+	}
+	if releaseRec.Code != http.StatusOK || json.Unmarshal(releaseRec.Body.Bytes(), &releasePage) != nil ||
+		!releasePage.Availability.Available || len(releasePage.Items) != 1 ||
+		releasePage.Items[0].TagName != "v1.0" || releasePage.Items[0].State != "published" ||
+		len(releasePage.Items[0].Assets) != 1 || releasePage.Items[0].Assets[0].Platform != "Linux x86_64" {
+		t.Fatalf("remote releases endpoint returned unexpected data: status=%d body=%s decoded=%#v", releaseRec.Code, releaseRec.Body.String(), releasePage)
+	}
+
+	tagReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/tags?page=1&page_size=20", nil)
+	tagRec := httptest.NewRecorder()
+	handler.ServeHTTP(tagRec, tagReq)
+	var tagPage struct {
+		Items []struct {
+			Name string `json:"name"`
+			Kind string `json:"kind"`
+			TargetSHA string `json:"target_sha"`
+			Annotation string `json:"annotation"`
+			ReleaseName string `json:"release_name"`
+		} `json:"items"`
+	}
+	if tagRec.Code != http.StatusOK || json.Unmarshal(tagRec.Body.Bytes(), &tagPage) != nil ||
+		len(tagPage.Items) != 1 || tagPage.Items[0].Name != "v1.0" ||
+		tagPage.Items[0].Kind != "annotated" || tagPage.Items[0].TargetSHA != "commit-v1" ||
+		tagPage.Items[0].Annotation != "annotated tag" || tagPage.Items[0].ReleaseName != "v1.0" {
+		t.Fatalf("remote tags endpoint returned unexpected data: status=%d body=%s decoded=%#v", tagRec.Code, tagRec.Body.String(), tagPage)
+	}
+
+	compareReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/tags/compare?from=v1.0&to=v2.0", nil)
+	compareRec := httptest.NewRecorder()
+	handler.ServeHTTP(compareRec, compareReq)
+	var comparison struct {
+		From string `json:"from"`
+		To string `json:"to"`
+		CountsAvailable bool `json:"counts_available"`
+		Commits []struct { SHA string `json:"sha"`; Committer string `json:"committer"` } `json:"commits"`
+		Files []struct { Path string `json:"path"`; PreviousPath string `json:"previous_path"`; Status string `json:"status"` } `json:"files"`
+	}
+	if compareRec.Code != http.StatusOK || json.Unmarshal(compareRec.Body.Bytes(), &comparison) != nil ||
+		comparison.From != "v1.0" || comparison.To != "v2.0" || comparison.CountsAvailable ||
+		len(comparison.Commits) != 1 || comparison.Commits[0].SHA != "commit-v2" ||
+		len(comparison.Files) != 1 || comparison.Files[0].Status != "renamed" ||
+		comparison.Files[0].PreviousPath != "old.go" || comparison.Files[0].Path != "new.go" {
+		t.Fatalf("remote tag comparison endpoint returned unexpected data: status=%d body=%s decoded=%#v", compareRec.Code, compareRec.Body.String(), comparison)
 	}
 
 	treeReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/tree?ref=main&page=1", nil)
