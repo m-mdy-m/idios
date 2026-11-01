@@ -346,17 +346,16 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 			return TagPage{}, err
 		}
 		for _, row := range rows {
-			kind, objectType := "lightweight", "commit"
-			if row.Message != "" || row.CreatedAt != nil {
-				kind, objectType = "annotated", "tag"
+			kind := "lightweight"
+			if row.Message != "" {
+				kind = "annotated"
 			}
 			commitSHA := row.Commit.ID
 			if commitSHA == "" {
 				commitSHA = row.Target
-				kind, objectType = "lightweight", "commit"
 			}
 			item := Tag{
-				Name: row.Name, Kind: kind, ObjectSHA: row.Target, ObjectType: objectType,
+				Name: row.Name, Kind: kind, ObjectType: "commit",
 				TargetSHA: commitSHA, Annotation: row.Message, CreatedAt: row.CreatedAt,
 				CommitCreatedAt: row.Commit.CreatedAt, Protected: boolPointer(row.Protected),
 				URL: providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/-/tree/" + url.PathEscape(row.Name)),
