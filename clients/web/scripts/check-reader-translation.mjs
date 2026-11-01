@@ -238,6 +238,7 @@ assert.ok(architectureContext.includes('interpretation only'));
 assert.ok(buildFaithfulTranslationInstructions('fa').includes('negation'));
 assert.ok(buildFaithfulTranslationInstructions('fa').includes('paragraph boundary'));
 assert.equal(validateTranslationIntegrity(source, valid).valid, true);
+assert.equal(validateTranslationIntegrity(source, { ...valid, segments: [valid.segments[0]!, valid.segments[0]!] }).reason, 'duplicate-segment', 'cached/legacy duplicate source anchors must also fail closed');
 const rawValid = validateRawTranslationAlignment(JSON.stringify({ translation: valid.translation, segments: valid.segments }), source);
 assert.equal(rawValid.valid, true);
 assert.equal(rawValid.verified, true);
@@ -248,6 +249,7 @@ assert.equal(validateRawTranslationAlignment('{"translation":"broken", "segments
 assert.equal(validateRawTranslationAlignment('Model response: {\"translation\":\"partial\", \"segments\":[', source).reason, 'malformed-structured-response', 'a preamble must not downgrade malformed structured output to plain text');
 assert.equal(validateRawTranslationAlignment('Here is JSON: ' + JSON.stringify({ translation: valid.translation, segments: valid.segments }), source).reason, 'malformed-structured-response', 'structured output with an unexpected preamble must fail closed');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [] }), source).reason, 'missing-segments');
+assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A careful reader follows the argument.', translation: 'x' }, { source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'duplicate-segment', 'duplicate source anchors must fail closed');
 const plain = validateRawTranslationAlignment('یک ترجمهٔ متنی ساده', source);
 assert.equal(plain.valid, true);
 assert.equal(plain.verified, false);
@@ -295,6 +297,8 @@ assert.match(pageTranslationEffect[1], /\btranslationOpen\b/, 'opening the compa
 assert.match(pageTranslationEffect[1], /\bcurrentPageTranslationKey\b/, 'page changes and exact-source changes must re-run the page effect');
 assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
 assert.ok(readerSource.includes('const pageKey = currentPageTranslationKey'), 'learning-analysis cache must share the exact page/source identity');
+assert.ok(readerSource.includes('currentPageTranslationKeyRef.current !== pageKey'), 'late learning-analysis results must not update a different page');
+assert.ok(readerSource.includes('learningAnalysisSequenceRef.current === requestSequence'), 'late learning-analysis results must not clear a newer request state');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
 assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
