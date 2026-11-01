@@ -60,7 +60,7 @@ func (s *Server) createLocalGitBranch(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if err := s.app.LocalGitService.CreateBranch(requestContext(r), r.PathValue("ref"), input.Name, input.Base); err != nil {
+	if err := s.app.LocalGitService.CreateLocalBranch(requestContext(r), r.PathValue("ref"), input.Name, input.Base); err != nil {
 		writeError(w, err)
 		return
 	}

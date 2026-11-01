@@ -109,7 +109,7 @@ func (s *LocalGitService) Branches(ctx context.Context, repositoryRef string) ([
 	return s.engine.Branches(ctx, path)
 }
 
-func (s *LocalGitService) CreateBranch(ctx context.Context, repositoryRef, name, base string) error {
+func (s *LocalGitService) CreateLocalBranch(ctx context.Context, repositoryRef, name, base string) error {
 	path, err := s.workspacePath(ctx, repositoryRef)
 	if err != nil {
 		return err
