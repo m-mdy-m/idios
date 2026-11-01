@@ -17,6 +17,8 @@
 
 ### Added
 
+- Add provider-backed Repository Hub Releases, separate Git Tags, bounded history loading, asset metadata, and tag-to-tag comparison for GitHub, GitLab and SourceForge where supported.
+
 - Expose separate commit author/committer provenance, provider-backed signature verification, CI/status checks, changed-file statistics and lazy commit details across the Repository Hub.
 
 - Load remote repository folders on demand, paginate GitLab tree responses, and expose bounded root-directory paging instead of requesting a full recursive tree for every browser view.
