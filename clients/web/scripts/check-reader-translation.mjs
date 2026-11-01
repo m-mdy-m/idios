@@ -245,6 +245,8 @@ assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', 
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'The result is not guaranteed.', translation: 'x' }, { source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-order');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'segment-coverage');
 assert.equal(validateRawTranslationAlignment('{"translation":"broken", "segments":[', source).reason, 'malformed-structured-response');
+assert.equal(validateRawTranslationAlignment('Model response: {\"translation\":\"partial\", \"segments\":[', source).reason, 'malformed-structured-response', 'a preamble must not downgrade malformed structured output to plain text');
+assert.equal(validateRawTranslationAlignment('Here is JSON: ' + JSON.stringify({ translation: valid.translation, segments: valid.segments }), source).reason, 'malformed-structured-response', 'structured output with an unexpected preamble must fail closed');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [] }), source).reason, 'missing-segments');
 const plain = validateRawTranslationAlignment('یک ترجمهٔ متنی ساده', source);
 assert.equal(plain.valid, true);
@@ -288,6 +290,9 @@ const companionSource = await readFile(new URL('../src/features/shelf/components
 assert.ok(readerSource.includes('translationJobs.subscribe(setTranslationJobSnapshots)'));
 assert.ok(readerSource.includes("requestTranslation(currentPageText, 'page', signal, jobID)"));
 assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
+assert.ok(readerSource.includes('const pageKey = currentPageTranslationKey'), 'learning-analysis cache must share the exact page/source identity');
+assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
+assert.ok(readerSource.includes('translationJobs.cancel(activeJob.id)'), 'refresh must cancel a stale in-flight page translation');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
 assert.ok(companionSource.includes('dir={targetLanguage'));
 assert.ok(companionSource.includes('onStopTranslation'));
