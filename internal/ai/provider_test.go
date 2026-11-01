@@ -77,8 +77,9 @@ func (roundTrip ollamaStreamRoundTripper) RoundTrip(request *http.Request) (*htt
 }
 
 type ollamaStreamErrorBody struct {
-	data []byte
-	err  error
+	data    []byte
+	err     error
+	onError func()
 }
 
 func (body *ollamaStreamErrorBody) Read(destination []byte) (int, error) {
@@ -86,6 +87,10 @@ func (body *ollamaStreamErrorBody) Read(destination []byte) (int, error) {
 		n := copy(destination, body.data)
 		body.data = body.data[n:]
 		return n, nil
+	}
+	if body.onError != nil {
+		body.onError()
+		body.onError = nil
 	}
 	return 0, body.err
 }
@@ -187,4 +192,17 @@ func TestOllamaStreamRejectsProviderErrorEvent(t *testing.T) {
 	provider := newOllamaStreamTestProvider(io.NopCloser(strings.NewReader("{\"error\":\"model stopped\"}\n")))
 	err := provider.Stream(context.Background(), GenerateRequest{Model: "qwen2.5:3b"}, func(string) error { return nil })
 	requireOllamaStreamErrorCode(t, err, "provider_request_failed")
+}
+
+
+func TestOllamaStreamCancellationTakesPrecedenceOverGenericReadError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	body := &ollamaStreamErrorBody{
+		data: []byte("{\"message\":{\"content\":\"partial\"}}\n"),
+		err:  io.ErrUnexpectedEOF,
+		onError: cancel,
+	}
+	provider := newOllamaStreamTestProvider(body)
+	err := provider.Stream(ctx, GenerateRequest{Model: "qwen2.5:3b"}, func(string) error { return nil })
+	requireOllamaStreamErrorCode(t, err, "request_cancelled")
 }
