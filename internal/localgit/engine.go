@@ -24,13 +24,14 @@ type Availability struct {
 	Available  bool   `json:"available"`
 	Backend    string `json:"backend"`
 	Executable string `json:"executable,omitempty"`
-	Reason      string `json:"reason,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 type Status struct {
 	Available   bool   `json:"available"`
 	Initialized bool   `json:"initialized"`
 	Backend     string `json:"backend"`
+	Reason      string `json:"reason,omitempty"`
 	Branch      string `json:"branch,omitempty"`
 	Clean       bool   `json:"clean"`
 	Staged      int    `json:"staged"`
