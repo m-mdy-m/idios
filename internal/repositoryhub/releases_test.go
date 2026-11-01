@@ -258,6 +258,57 @@ func TestNormalizeHubPageBoundsPagination(t *testing.T) {
 }
 
 
+func TestGitHubListTagsUsesProviderCursorForOlderPages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /graphql":
+			var input struct {
+				Variables struct {
+					After string \`json:"after"\`
+					First int    \`json:"first"\`
+				} \`json:"variables"\`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatal(err)
+			}
+			if input.Variables.After != "cursor-page-one" || input.Variables.First != 20 {
+				t.Errorf("GitHub next-page cursor was not passed through: %#v", input.Variables)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"repository": map[string]any{
+						"refs": map[string]any{
+							"nodes": []map[string]any{{
+								"name": "v0.9",
+								"target": map[string]any{
+									"__typename": "Commit", "oid": "commit-old",
+									"committedDate": "2026-01-01T00:00:00Z",
+								},
+							}},
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": "cursor-page-two"},
+						},
+					},
+				},
+			})
+		case "GET /repos/acme/app/releases":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	provider := &Provider{kind: domain.RepositoryProviderGitHub, host: server.URL, base: server.URL, http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app", WebURL: "https://github.com/acme/app"}
+	page, err := provider.ListTags(context.Background(), "ghp_test", repo, 2, 20, "cursor-page-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Page != 2 || page.HasMore || page.NextCursor != "" ||
+		len(page.Items) != 1 || page.Items[0].Name != "v0.9" || page.Items[0].TargetSHA != "commit-old" {
+		t.Fatalf("unexpected cursor page: %#v", page)
+	}
+}
+
 func TestGitLabListTagsUsesAnnotationMessageAndKeepsObjectSHAUnknown(t *testing.T) {
 	t.Setenv("IDIOS_GITLAB_ALLOW_LOOPBACK", "true")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
