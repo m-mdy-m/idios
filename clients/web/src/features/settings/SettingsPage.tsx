@@ -3,39 +3,16 @@ import { useNavigate } from 'react-router';
 import {
   BellRing, Check, ExternalLink, Palette, RefreshCw, Save,
   Server, Settings2, ShieldCheck, Sparkles, Download, ArrowUpRight,
-  CalendarClock, Volume2, VolumeX, Play, Plus, Trash2, Pencil, X,
+  CalendarClock, Volume2, VolumeX, Play,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Modal } from '@/design-system';
-import type { AppConfig, ConfigPayload, CustomWebTheme, HealthStatus } from '@/types/idios';
+import type { AppConfig, ConfigPayload, HealthStatus } from '@/types/idios';
 import { Badge, Button, Card, Field, LoadingState, PageHeading } from '@/design-system';
 import { activateNotificationAudio, notificationSoundEnabled, notificationSoundVolume, playPlanReminderDemo, setNotificationSoundEnabled, setNotificationSoundVolume } from '@/lib/notification-sound';
 import { PrivatePath } from '@/components/privacy/PrivatePath';
 
 type SettingsSection = 'appearance' | 'workspace' | 'notifications' | 'updates';
-const webThemeOptions = [
-  { id: 'dark', label: 'Dark', preview: 'dark', detail: 'Graphite' },
-  { id: 'light', label: 'Light', preview: 'light', detail: 'Bright' },
-  { id: 'system', label: 'System', preview: 'system', detail: 'Follow device' },
-  { id: 'midnight', label: 'Midnight', preview: 'midnight', detail: 'Deep blue' },
-  { id: 'forest', label: 'Forest', preview: 'forest', detail: 'Muted green' },
-  { id: 'violet', label: 'Violet', preview: 'violet', detail: 'Indigo purple' },
-  { id: 'rose', label: 'Rose', preview: 'rose', detail: 'Warm accent' },
-  { id: 'oled', label: 'OLED', preview: 'oled', detail: 'Pure black' },
-] as const;
-
-const customThemeColorFields: Array<{ key: keyof Omit<CustomWebTheme, 'name' | 'base'>; label: string }> = [
-  { key: 'background', label: 'Background' }, { key: 'surface', label: 'Card / surface' },
-  { key: 'text', label: 'Text' }, { key: 'muted', label: 'Muted text' },
-  { key: 'accent', label: 'Accent' }, { key: 'border', label: 'Borders' },
-  { key: 'success', label: 'Success' }, { key: 'warning', label: 'Warning' }, { key: 'danger', label: 'Danger' },
-];
-
-const defaultCustomTheme: CustomWebTheme = {
-  name: 'Aurora Drift', base: 'dark', background: '#0b1220', surface: '#111d30',
-  text: '#e8f0ff', muted: '#91a2be', accent: '#8bd7f0', border: '#2b3a55',
-  success: '#65d6a7', warning: '#f3c66d', danger: '#ff788e',
-};
 
 type QuoteReminderSettings = {
   enabled?: boolean;
@@ -70,9 +47,6 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
   const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateInProgress, setUpdateInProgress] = useState(false);
-  const [customThemeName, setCustomThemeName] = useState(defaultCustomTheme.name);
-  const [customThemeDraft, setCustomThemeDraft] = useState<CustomWebTheme>({ ...defaultCustomTheme });
-  const [editingCustomThemeKey, setEditingCustomThemeKey] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -80,7 +54,7 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     try {
       const [payload, nextHealth] = await Promise.all([api.config(), api.health()]);
       setMeta(payload);
-      setConfig(payload.config);
+      setConfig({ ...payload.config, web: { ...payload.config.web, theme: 'dark' } });
       setHealth(nextHealth);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load settings.');
@@ -192,57 +166,6 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     catch { setNotice('Could not request browser notification permission.'); }
   }
 
-  function customThemeKey(name: string): string {
-    return name.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  }
-
-  function saveCustomThemeToDraft() {
-    if (!config) return;
-    const name = customThemeName.trim();
-    const key = customThemeKey(name);
-    if (!name || !key) {
-      setError('Give the custom theme a name using letters or numbers.');
-      return;
-    }
-    if (webThemeOptions.some((option) => option.id === key)) {
-      setError(`“${key}” is a built-in theme name. Choose another name for your custom theme.`);
-      return;
-    }
-    const existingThemes = config.web.custom_themes ?? {};
-    if (existingThemes[key] && editingCustomThemeKey !== key) {
-      setError(`A custom theme named “${existingThemes[key].name}” already uses this name. Edit that theme or choose another name.`);
-      return;
-    }
-    const themes = { ...existingThemes };
-    if (editingCustomThemeKey && editingCustomThemeKey !== key) delete themes[editingCustomThemeKey];
-    themes[key] = { ...customThemeDraft, name };
-    patchConfig({ web: { ...config.web, theme: key, custom_themes: themes } });
-    setEditingCustomThemeKey(key);
-    setSaved(false);
-    setError('');
-    setNotice(`“${name}” is applied as a preview. Click Save changes to store it permanently.`);
-  }
-
-  function editCustomTheme(key: string, theme: CustomWebTheme) {
-    setEditingCustomThemeKey(key);
-    setCustomThemeName(theme.name);
-    setCustomThemeDraft({ ...theme });
-  }
-
-  function deleteCustomTheme(key: string) {
-    if (!config) return;
-    const themes = { ...(config.web.custom_themes ?? {}) };
-    delete themes[key];
-    const nextTheme = config.web.theme === key ? 'midnight' : config.web.theme;
-    patchConfig({ web: { ...config.web, theme: nextTheme, custom_themes: themes } });
-    if (editingCustomThemeKey === key) {
-      setEditingCustomThemeKey(null);
-      setCustomThemeName(defaultCustomTheme.name);
-      setCustomThemeDraft({ ...defaultCustomTheme });
-    }
-    setNotice(`Removed “${key}” from the settings draft. Click Save changes to persist this removal.`);
-  }
-
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!config) return;
@@ -250,10 +173,12 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
     setSaved(false);
     setError('');
     try {
-      const result = await api.updateConfig(config);
+      const nextConfig = { ...config, web: { ...config.web, theme: 'dark' } };
+      const result = await api.updateConfig(nextConfig);
+      setConfig(nextConfig);
       setSaved(true);
       setRestartRequired(Boolean(result.restart_required));
-      window.dispatchEvent(new CustomEvent('idios:config-updated', { detail: config }));
+      window.dispatchEvent(new CustomEvent('idios:config-updated', { detail: nextConfig }));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save settings.');
@@ -324,9 +249,8 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
   if (!config) return <div className="page-stack"><div className="notice notice--error">{error || 'Settings are unavailable.'}</div><Button onClick={() => void load()}>Try again</Button></div>;
 
   const reminder = config.notifications.quote_reminders as QuoteReminderSettings;
-  const customThemes = config.web.custom_themes ?? {};
   const sectionInfo: Record<SettingsSection, { title: string; description: string }> = {
-    appearance: { title: 'Theme & appearance', description: 'Choose a browser theme and tune the display. Changes preview immediately and are saved with your local settings.' },
+    appearance: { title: 'Theme & appearance', description: 'IDIOS uses one fixed dark graphite theme. Adjust workspace density and sidebar layout below.' },
     workspace: { title: 'Workspace & server', description: 'Control the local service and how often the workspace refreshes.' },
     notifications: { title: 'Notifications', description: 'Choose which reminders IDIOS creates and when they are delivered.' },
     updates: { title: 'Application updates', description: 'Check for a release and install a verified update.' },
@@ -352,29 +276,13 @@ export function SettingsPage({ focusSection }: { focusSection?: 'notifications' 
         <div className="settings-active-heading"><h2>{sectionInfo[activeSection].title}</h2><p>{sectionInfo[activeSection].description}</p></div>
         {activeSection === 'appearance' && <>
         <Card className="settings-card">
-          <div className="settings-card__heading"><span className="settings-heading-icon"><Palette size={17} /></span><div><h2>Themes</h2><p>Choose a colour theme for the web workspace. Dark, light, system and accent themes are available.</p></div></div>
+          <div className="settings-card__heading"><span className="settings-heading-icon"><Palette size={17} /></span><div><h2>Themes</h2><p>IDIOS uses one consistent dark graphite theme.</p></div></div>
           <div className="settings-section">
-            <Field label="Choose a theme"><div className="theme-options theme-options--extended">
-              {webThemeOptions.map((option) => <button key={option.id} type="button" className={`theme-option ${config.web.theme === option.id ? 'theme-option--selected' : ''}`} aria-pressed={config.web.theme === option.id} onClick={() => patchConfig({ web: { ...config.web, theme: option.id } })}><span className={`theme-preview theme-preview--${option.preview}`}><span className="theme-preview__surface" /><span className="theme-preview__accent" /></span><strong>{option.label}</strong><small>{option.detail}</small></button>)}
-              {Object.entries(customThemes).map(([key, theme]) => <button key={key} type="button" className={`theme-option ${config.web.theme === key ? 'theme-option--selected' : ''}`} aria-pressed={config.web.theme === key} onClick={() => patchConfig({ web: { ...config.web, theme: key } })}><span className="theme-preview theme-preview--custom" style={{ backgroundColor: theme.background, color: theme.accent, borderColor: theme.border }}><span className="theme-preview__surface" style={{ backgroundColor: theme.surface, borderColor: theme.border }} /><span className="theme-preview__accent" style={{ backgroundColor: theme.accent }} /></span><strong>{theme.name}</strong><small>Custom · {theme.base}</small></button>)}
-            </div></Field>
-
-            <section className="custom-theme-builder" aria-labelledby="custom-theme-builder-title">
-              <div className="custom-theme-builder__heading"><span className="settings-heading-icon settings-heading-icon--violet"><Palette size={16} /></span><div><p className="eyebrow">MAKE IT YOURS</p><h3 id="custom-theme-builder-title">Custom theme studio</h3><p>Build a palette of your own. Changes preview in the workspace immediately and become permanent when you save settings.</p></div></div>
-              <div className="custom-theme-builder__layout">
-                <div className="custom-theme-builder__fields">
-                  <Field label="Theme name"><input value={customThemeName} maxLength={60} onChange={(event) => setCustomThemeName(event.target.value)} placeholder="e.g. Aurora Drift" /></Field>
-                  <Field label="Base appearance"><select value={customThemeDraft.base} onChange={(event) => setCustomThemeDraft((current) => ({ ...current, base: event.target.value as 'dark' | 'light' }))}><option value="dark">Dark</option><option value="light">Light</option></select></Field>
-                  <div className="custom-theme-color-grid">{customThemeColorFields.map((field) => <label className="custom-theme-color" key={field.key}><span>{field.label}</span><input type="color" value={customThemeDraft[field.key]} onChange={(event) => setCustomThemeDraft((current) => ({ ...current, [field.key]: event.target.value.toLowerCase() }))} /><code>{customThemeDraft[field.key].toUpperCase()}</code></label>)}</div>
-                  <div className="custom-theme-builder__actions"><Button type="button" onClick={saveCustomThemeToDraft}><Plus size={15} /> {editingCustomThemeKey ? 'Update & preview theme' : 'Add & preview theme'}</Button>{editingCustomThemeKey && <Button type="button" variant="secondary" onClick={() => { setEditingCustomThemeKey(null); setCustomThemeName(defaultCustomTheme.name); setCustomThemeDraft({ ...defaultCustomTheme }); }}><X size={14} /> Cancel edit</Button>}</div>
-                </div>
-                <div className="custom-theme-preview" style={{ backgroundColor: customThemeDraft.background, color: customThemeDraft.text, borderColor: customThemeDraft.border }}>
-                  <div className="custom-theme-preview__top"><span style={{ backgroundColor: customThemeDraft.accent }} /><span /><span /></div>
-                  <div className="custom-theme-preview__body"><small style={{ color: customThemeDraft.muted }}>LIVE PREVIEW · PROJECT OVERVIEW</small><h4>Make good work visible.</h4><p style={{ color: customThemeDraft.muted }}>A small preview of cards, copy, and status accents in your custom palette.</p><div className="custom-theme-preview__chips"><span style={{ backgroundColor: customThemeDraft.accent, color: customThemeDraft.base === 'light' ? '#ffffff' : '#081018' }}>Primary action</span><span style={{ borderColor: customThemeDraft.border, color: customThemeDraft.success }}>Completed</span><span style={{ borderColor: customThemeDraft.border, color: customThemeDraft.warning }}>Review</span><span style={{ borderColor: customThemeDraft.border, color: customThemeDraft.danger }}>Blocked</span></div></div>
-                </div>
-              </div>
-              {Object.keys(customThemes).length > 0 && <div className="custom-theme-saved-list"><div className="custom-theme-saved-list__title"><strong>Your custom themes</strong><span>{Object.keys(customThemes).length} saved in this draft</span></div>{Object.entries(customThemes).map(([key, theme]) => <div className="custom-theme-saved-row" key={key}><span className="custom-theme-saved-row__swatch" style={{ background: `linear-gradient(135deg, ${theme.background} 45%, ${theme.accent} 45%)`, borderColor: theme.border }} /><span className="custom-theme-saved-row__copy"><strong>{theme.name}</strong><small>{theme.base} · {key}</small></span><Button type="button" variant="ghost" onClick={() => editCustomTheme(key, theme)}><Pencil size={13} /> Edit</Button><Button type="button" variant="ghost" onClick={() => deleteCustomTheme(key)}><Trash2 size={13} /> Remove</Button></div>)}</div>}
-            </section>
+            <div className="settings-theme-fixed" aria-label="Active theme">
+              <span className="settings-theme-fixed__preview" aria-hidden="true" />
+              <div><strong>Dark graphite</strong><p>The workspace uses one consistent dark theme. Light and custom themes are disabled.</p></div>
+              <Badge tone="green">Active</Badge>
+            </div>
 
             <ToggleSetting title="Compact density" description="Fit more rows and activity into the same viewport." checked={config.web.compact} onChange={(value) => patchConfig({ web: { ...config.web, compact: value } })} />
             <ToggleSetting title="Collapse sidebar by default" description="Keep more space for content on smaller screens." checked={config.web.sidebar_collapsed} onChange={(value) => patchConfig({ web: { ...config.web, sidebar_collapsed: value } })} />

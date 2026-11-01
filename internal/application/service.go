@@ -20,6 +20,7 @@ type Service struct {
 	*ImportService
 	*DemoService
 	*NotesService
+	*RepositoryHubService
 	*QuotesService
 	*ProfileService
 	*JobsService
@@ -50,6 +51,7 @@ func New(store ports.Store) *Service {
 		ImportService:           &ImportService{store: store},
 		DemoService:             &DemoService{store: store},
 		NotesService:            notes,
+		RepositoryHubService:    NewRepositoryHubService(store),
 		QuotesService:           &QuotesService{store: store},
 		ProfileService:          &ProfileService{store: store},
 		JobsService:             &JobsService{store: store},

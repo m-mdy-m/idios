@@ -21,3 +21,5 @@
 @import './app/layout/AppShell.css';
 @import './features/shelf/styles/shelf-redesign-v3.css';
 @import './features/shelf/styles/shelf-minimal-redesign.css';
+
+@import './styles/classic-workspace.css';

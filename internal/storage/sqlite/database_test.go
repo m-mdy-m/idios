@@ -118,8 +118,8 @@ func TestOpenStoreConfiguresSQLiteAndAppliesMigrations(t *testing.T) {
 		}
 	}
 	row, ok, err := store.p().row(ctx, `PRAGMA user_version`)
-	if err != nil || !ok || i64(row["user_version"]) != 13 {
-		t.Fatalf("schema version after migration = %v, ok=%v err=%v; want 13", row, ok, err)
+	if err != nil || !ok || i64(row["user_version"]) != 17 {
+		t.Fatalf("schema version after migration = %v, ok=%v err=%v; want 17", row, ok, err)
 	}
 }
 
@@ -183,8 +183,8 @@ func TestConcurrentOpenStoreAppliesMigrationsOnce(t *testing.T) {
 	}
 	defer store.Close()
 	row, ok, err := store.p().row(context.Background(), `PRAGMA user_version`)
-	if err != nil || !ok || i64(row["user_version"]) != 13 {
-		t.Fatalf("schema version after concurrent open = %v, ok=%v err=%v; want 13", row, ok, err)
+	if err != nil || !ok || i64(row["user_version"]) != 17 {
+		t.Fatalf("schema version after concurrent open = %v, ok=%v err=%v; want 17", row, ok, err)
 	}
 }
 

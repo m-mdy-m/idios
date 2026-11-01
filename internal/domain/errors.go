@@ -9,4 +9,7 @@ var (
 	ErrBlocked           = errors.New("issue is blocked by incomplete prerequisites")
 	ErrInvalidTransition = errors.New("invalid workflow transition")
 	ErrUnsupported       = errors.New("not supported in this version")
+	ErrUnavailable       = errors.New("temporarily unavailable")
+	ErrPermission        = errors.New("permission denied")
+	ErrRateLimited       = errors.New("rate limited")
 )
