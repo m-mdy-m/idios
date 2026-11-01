@@ -6,6 +6,7 @@ export type TranslationBenchmarkFixture = {
   proposedPersianReference: string;
   terminology: Array<{ source: string; preferred: string }>;
   requiredMeaningChecks: string[];
+  requiredTargetMeaningChecks: string[];
 };
 
 /**
@@ -33,6 +34,7 @@ export const translationBenchmarkFixtures: TranslationBenchmarkFixture[] = [
       { source: 'merely applications', preferred: 'صرفاً کاربردی' },
     ],
     requiredMeaningChecks: ['methodological discussions', 'not mean', 'peripheral', 'merely applications', 'modify in turn'],
+    requiredTargetMeaningChecks: ['به این معنا نیست', 'حاشیه‌ای', 'صرفاً کاربردی', 'به نوبهٔ خود دیدگاه پیشنهادی را اصلاح می‌کنند'],
   },
   {
     id: 'technical-transaction-invariants',
@@ -48,6 +50,7 @@ export const translationBenchmarkFixtures: TranslationBenchmarkFixture[] = [
       { source: 'cache', preferred: 'حافظهٔ نهان' },
     ],
     requiredMeaningChecks: ['must either', 'or leave', 'If validation fails', 'must not partially update'],
+    requiredTargetMeaningChecks: ['یا همهٔ تغییرات خود را ثبت نهایی کند یا سیستم را بدون تغییر باقی بگذارد', 'اگر اعتبارسنجی شکست بخورد', 'نباید', 'به‌طور ناقص به‌روزرسانی کند'],
   },
   {
     id: 'general-qualified-claim',
@@ -57,6 +60,7 @@ export const translationBenchmarkFixtures: TranslationBenchmarkFixture[] = [
     proposedPersianReference: 'هرچند توضیح نخست معقول به نظر می‌رسد، شواهد موجود درستی آن را ثابت نمی‌کنند. تا زمانی که اندازه‌گیری‌هایِ انجام‌نشده گردآوری نشده‌اند، باید احتمال دوم را نیز همچنان در نظر داشت.',
     terminology: [],
     requiredMeaningChecks: ['Although', 'does not establish', 'should remain open', 'until'],
+    requiredTargetMeaningChecks: ['هرچند', 'درستی آن را ثابت نمی‌کنند', 'باید احتمال دوم را نیز همچنان در نظر داشت', 'تا زمانی که']
   },
 ];
 
@@ -68,3 +72,33 @@ export const translationBenchmarkRubric = [
   'Persian readability: natural syntax and idiom without flattening technical or philosophical distinctions.',
   'No additions: do not insert explanations, context or claims into the translated passage.',
 ] as const;
+
+export type TranslationBenchmarkReport = {
+  fixtureCount: number;
+  domainCounts: Record<TranslationBenchmarkFixture['domain'], number>;
+  deterministicChecks: 'structural-and-required-meaning-markers';
+  semanticReview: {
+    status: 'pending-maintainer-review';
+    reviewedFixtures: 0;
+    pendingFixtureIDs: string[];
+    noQualityScoreClaimed: true;
+  };
+};
+
+/** A reproducible report which explicitly keeps automated checks separate from human review. */
+export function createTranslationBenchmarkReport(): TranslationBenchmarkReport {
+  const domainCounts = { philosophy: 0, technical: 0, general: 0 };
+  for (const fixture of translationBenchmarkFixtures) domainCounts[fixture.domain] += 1;
+  return {
+    fixtureCount: translationBenchmarkFixtures.length,
+    domainCounts,
+    deterministicChecks: 'structural-and-required-meaning-markers',
+    semanticReview: {
+      status: 'pending-maintainer-review',
+      reviewedFixtures: 0,
+      pendingFixtureIDs: translationBenchmarkFixtures.map((fixture) => fixture.id),
+      noQualityScoreClaimed: true,
+    },
+  };
+}
+
