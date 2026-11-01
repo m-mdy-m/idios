@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"os"
 	"path/filepath"
 	"strings"
@@ -597,5 +598,98 @@ func TestShelfPDFAnnotationAPIStoresHighlightsAndNotes(t *testing.T) {
 	handler.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/api/shelf/annotations/"+item.ID, nil))
 	if remove.Code != http.StatusNoContent {
 		t.Fatalf("DELETE annotation status=%d body=%s", remove.Code, remove.Body.String())
+	}
+}
+
+func TestLocalGitAPIUsesRealOfflineWorkingCopy(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("Git CLI is not installed in this test environment")
+	}
+	root := t.TempDir()
+	t.Setenv("IDIOS_GIT_WORKSPACES_DIR", filepath.Join(root, "git-workspaces"))
+
+	store, err := sqlite.OpenStore(filepath.Join(root, "local-git-api.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	repository, err := store.CreateRepository(context.Background(), "Local Git API", "Exercises the real local working-copy API")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(application.New(store), Options{
+		Config: config.AppConfig{Server: config.ServerConfig{Host: "127.0.0.1", Port: 43170}},
+	}).routes()
+
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, "http://127.0.0.1:43170"+path, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	base := "/api/repositories/" + repository.ID + "/git"
+	init := request(http.MethodPost, base+"/init", `{"branch":"main"}`)
+	if init.Code != http.StatusCreated {
+		t.Fatalf("initialize local Git status = %d: %s", init.Code, init.Body.String())
+	}
+
+	statusRec := request(http.MethodGet, base+"/status", "")
+	if statusRec.Code != http.StatusOK {
+		t.Fatalf("local Git status = %d: %s", statusRec.Code, statusRec.Body.String())
+	}
+	var status struct {
+		Available   bool   `json:"available"`
+		Initialized bool   `json:"initialized"`
+		Path        string `json:"path"`
+		Branch      string `json:"branch"`
+	}
+	if err := json.Unmarshal(statusRec.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode local Git status: %v", err)
+	}
+	if !status.Available || !status.Initialized || status.Path == "" || status.Branch != "main" {
+		t.Fatalf("unexpected initialized working-copy status: %#v", status)
+	}
+
+	if err := os.WriteFile(filepath.Join(status.Path, "README.md"), []byte("# Local first\n"), 0o600); err != nil {
+		t.Fatalf("write working-copy fixture: %v", err)
+	}
+	stage := request(http.MethodPost, base+"/stage", `{"paths":["README.md"]}`)
+	if stage.Code != http.StatusOK {
+		t.Fatalf("stage local Git file status = %d: %s", stage.Code, stage.Body.String())
+	}
+	diff := request(http.MethodGet, base+"/diff?staged=true", "")
+	if diff.Code != http.StatusOK || !strings.Contains(diff.Body.String(), "Local first") {
+		t.Fatalf("staged local Git diff status/body = %d/%s", diff.Code, diff.Body.String())
+	}
+
+	commit := request(http.MethodPost, base+"/commits", `{"message":"Add local README","author_name":"IDIOS API Test","author_email":"idios-api@example.invalid"}`)
+	if commit.Code != http.StatusCreated {
+		t.Fatalf("create local Git commit status = %d: %s", commit.Code, commit.Body.String())
+	}
+	tag := request(http.MethodPost, base+"/tags", `{"name":"v0.1.0","message":"First local API snapshot"}`)
+	if tag.Code != http.StatusCreated {
+		t.Fatalf("create local Git tag status = %d: %s", tag.Code, tag.Body.String())
+	}
+	tags := request(http.MethodGet, base+"/tags", "")
+	if tags.Code != http.StatusOK || !strings.Contains(tags.Body.String(), `"name":"v0.1.0"`) ||
+		!strings.Contains(tags.Body.String(), `"annotated":true`) {
+		t.Fatalf("list local Git tags status/body = %d/%s", tags.Code, tags.Body.String())
+	}
+
+	branchRec := request(http.MethodPost, base+"/branches", `{"name":"feature/offline","base":"main"}`)
+	if branchRec.Code != http.StatusCreated {
+		t.Fatalf("create offline local branch status = %d: %s", branchRec.Code, branchRec.Body.String())
+	}
+	branches := request(http.MethodGet, base+"/branches", "")
+	if branches.Code != http.StatusOK || !strings.Contains(branches.Body.String(), "feature/offline") {
+		t.Fatalf("list local Git branches status/body = %d/%s", branches.Code, branches.Body.String())
+	}
+	log := request(http.MethodGet, base+"/log?limit=5", "")
+	if log.Code != http.StatusOK || !strings.Contains(log.Body.String(), "idios-api@example.invalid") ||
+		!strings.Contains(log.Body.String(), "Add local README") {
+		t.Fatalf("read local Git commit history status/body = %d/%s", log.Code, log.Body.String())
 	}
 }
