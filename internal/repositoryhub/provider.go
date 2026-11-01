@@ -229,6 +229,7 @@ type TagComparison struct {
 	Files            []TagCompareFile   `json:"files"`
 	CommitsTruncated bool               `json:"commits_truncated"`
 	FilesTruncated   bool               `json:"files_truncated"`
+	CountsAvailable  bool                 `json:"counts_available"`
 	Availability     FeatureAvailability `json:"availability"`
 }
 
