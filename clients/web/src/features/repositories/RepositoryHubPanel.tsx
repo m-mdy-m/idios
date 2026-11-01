@@ -8,7 +8,7 @@ import type {
   HubBranch, HubChangeRequest, HubCollection, HubCommit, HubConnection, HubDiscoveredRepository, HubFile,
   HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
 } from '@/types/idios';
-import { Badge, Button, EmptyState, Field } from '@/design-system';
+import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
 
 type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Settings';
 
@@ -112,6 +112,8 @@ export function RepositoryHubPanel() {
   const [targetRelation, setTargetRelation] = useState('');
   const [relationType, setRelationType] = useState('related_to');
   const [relationDescription, setRelationDescription] = useState('');
+  const [issueCreateOpen, setIssueCreateOpen] = useState(false);
+  const [changeCreateOpen, setChangeCreateOpen] = useState(false);
   const [issueTitle, setIssueTitle] = useState('');
   const [issueBody, setIssueBody] = useState('');
   const [issueLabels, setIssueLabels] = useState('');
@@ -443,6 +445,7 @@ export function RepositoryHubPanel() {
       setIssueAssignee(''); setIssueStatus(''); setIssuePrivate(false);
       setIssueDiscussionDisabled(false); setIssueCustomFieldsJSON('{}');
       setIssues(await api.hubIssues(selected.id));
+      setIssueCreateOpen(false);
     }, 'Issue created on the provider.');
   }
 
@@ -511,6 +514,7 @@ export function RepositoryHubPanel() {
       await api.createHubChange(selected.id, { title: changeTitle.trim(), body: changeBody, source_branch: changeSource, target_branch: changeTarget });
       setChangeTitle(''); setChangeBody('');
       setChanges(await api.hubChanges(selected.id));
+      setChangeCreateOpen(false);
     }, 'Change request created on the provider.');
   }
 
@@ -652,22 +656,11 @@ export function RepositoryHubPanel() {
           </div>}
 
           {tab === 'Issues' && <div className="hub-work-items">
-            <div className="hub-detail-toolbar"><Field label="Search issues"><input value={issueSearch} onChange={(event) => setIssueSearch(event.target.value)} placeholder="title, body, label, author or number" /></Field><Field label="State"><select value={issueStateFilter} onChange={(event) => setIssueStateFilter(event.target.value as 'all' | 'open' | 'closed')}><option value="all">All</option><option value="open">Open</option><option value="closed">Closed</option></select></Field></div>
-            {supports('issues.write') && <form className="hub-inline-create" onSubmit={createIssue}>
-              <Field label="New issue title"><input value={issueTitle} onChange={(event) => setIssueTitle(event.target.value)} required maxLength={256}/></Field>
-              <Field label="Description"><textarea rows={2} value={issueBody} onChange={(event) => setIssueBody(event.target.value)}/></Field>
-              <Field label="Labels (comma-separated)"><input value={issueLabels} onChange={(event) => setIssueLabels(event.target.value)}/></Field>
-              {selected.provider !== 'github' && <label className="hub-checkbox"><input type="checkbox" checked={issuePrivate} onChange={(event) => setIssuePrivate(event.target.checked)}/>{selected.provider === 'gitlab' ? 'Confidential issue' : 'Private ticket'}</label>}
-              {selected.provider === 'sourceforge' && <>
-                <div className="hub-form-grid">
-                  <Field label="Tracker status (optional)"><input value={issueStatus} onChange={(event) => setIssueStatus(event.target.value)} placeholder="Project-defined status"/></Field>
-                  <Field label="Assigned to (optional)"><input value={issueAssignee} onChange={(event) => setIssueAssignee(event.target.value)} placeholder="SourceForge username"/></Field>
-                </div>
-                <label className="hub-checkbox"><input type="checkbox" checked={issueDiscussionDisabled} onChange={(event) => setIssueDiscussionDisabled(event.target.checked)}/> Disable ticket discussion</label>
-                <Field label="Tracker custom fields (JSON)" hint="Use the real Allura field keys, for example {&quot;_milestone&quot;:&quot;v1&quot;}. Values must be strings."><textarea rows={3} value={issueCustomFieldsJSON} onChange={(event) => setIssueCustomFieldsJSON(event.target.value)} spellCheck={false}/></Field>
-              </>}
-              <Button type="submit" disabled={busy || !issueTitle.trim()}><Plus size={13}/> Create remote issue</Button>
-            </form>}
+            <div className="hub-detail-toolbar">
+              <Field label="Search issues"><input value={issueSearch} onChange={(event) => setIssueSearch(event.target.value)} placeholder="title, body, label, author or number" /></Field>
+              <Field label="State"><select value={issueStateFilter} onChange={(event) => setIssueStateFilter(event.target.value as 'all' | 'open' | 'closed')}><option value="all">All</option><option value="open">Open</option><option value="closed">Closed</option></select></Field>
+              {supports('issues.write') && <Button type="button" onClick={() => setIssueCreateOpen(true)} disabled={busy}><Plus size={13}/> New issue</Button>}
+            </div>
             {!supports('issues.read') && <p className="hub-muted">{selected.provider === 'sourceforge' ? 'This SourceForge project has no accessible Tracker tool mounted.' : 'This connection does not have permission to read Issues.'}</p>}
             {filteredIssues.map((item) => <article className="hub-work-item hub-issue-item" key={item.id}>
               <div className="hub-issue-main">
@@ -698,13 +691,57 @@ export function RepositoryHubPanel() {
             </article>)}
             {commentNumber !== null && <form className="hub-inline-create" onSubmit={addComment}><Field label={`Comment on #${commentNumber}`}><textarea rows={3} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} required/></Field><Button type="submit" disabled={busy || !commentBody.trim()}>Send comment</Button><Button type="button" variant="ghost" onClick={() => setCommentNumber(null)}>Cancel</Button></form>}
             {supports('issues.read') && !filteredIssues.length && <p className="hub-muted">{issues.length ? 'No issues match these filters.' : 'No remote Issues were returned for this repository.'}</p>}
+            {supports('issues.write') && <Modal
+              open={issueCreateOpen}
+              title="New issue"
+              description={`Create an issue on ${selected.full_path} through ${selected.provider}.`}
+              onClose={() => setIssueCreateOpen(false)}
+              onSubmit={createIssue}
+              submitLabel="Create issue"
+              busy={busy}
+              wide
+            >
+              <Field label="Title"><input autoFocus value={issueTitle} onChange={(event) => setIssueTitle(event.target.value)} required maxLength={256} placeholder="Describe the issue" /></Field>
+              <Field label="Description"><textarea rows={5} value={issueBody} onChange={(event) => setIssueBody(event.target.value)} placeholder="Add context, expected behavior and reproduction steps." /></Field>
+              <Field label="Labels (comma-separated)"><input value={issueLabels} onChange={(event) => setIssueLabels(event.target.value)} placeholder="bug, enhancement" /></Field>
+              {selected.provider !== 'github' && <label className="hub-checkbox"><input type="checkbox" checked={issuePrivate} onChange={(event) => setIssuePrivate(event.target.checked)}/>{selected.provider === 'gitlab' ? 'Confidential issue' : 'Private ticket'}</label>}
+              {selected.provider === 'sourceforge' && <>
+                <div className="hub-form-grid">
+                  <Field label="Tracker status (optional)"><input value={issueStatus} onChange={(event) => setIssueStatus(event.target.value)} placeholder="Project-defined status"/></Field>
+                  <Field label="Assigned to (optional)"><input value={issueAssignee} onChange={(event) => setIssueAssignee(event.target.value)} placeholder="SourceForge username"/></Field>
+                </div>
+                <label className="hub-checkbox"><input type="checkbox" checked={issueDiscussionDisabled} onChange={(event) => setIssueDiscussionDisabled(event.target.checked)}/> Disable ticket discussion</label>
+                <Field label="Tracker custom fields (JSON)" hint="Allura custom-field values must be strings."><textarea rows={3} value={issueCustomFieldsJSON} onChange={(event) => setIssueCustomFieldsJSON(event.target.value)} spellCheck={false}/></Field>
+              </>}
+            </Modal>}
           </div>}
 
           {tab === 'Change Requests' && <div className="hub-work-items">
-            {supports('changes.write') && <form className="hub-inline-create" onSubmit={createChange}><Field label="Title"><input value={changeTitle} onChange={(event) => setChangeTitle(event.target.value)} required maxLength={256}/></Field><Field label="Description"><textarea rows={2} value={changeBody} onChange={(event) => setChangeBody(event.target.value)}/></Field><div className="hub-form-grid"><Field label="Source branch"><select value={changeSource} onChange={(event) => setChangeSource(event.target.value)}><option value="">Choose source…</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field><Field label="Target branch"><select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value)}><option value="">Choose target…</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field></div><Button type="submit" disabled={busy || !changeSource || !changeTarget}><Plus size={13}/> Create change request</Button></form>}
+            <div className="hub-detail-toolbar">
+              <div><strong>Change requests</strong><p className="hub-muted">Review proposed changes between repository branches.</p></div>
+              {supports('changes.write') && <Button type="button" onClick={() => setChangeCreateOpen(true)} disabled={busy || !branches.length}><Plus size={13}/> New change request</Button>}
+            </div>
             {changes.map((item) => <article className="hub-work-item" key={item.id}><div><strong>#{item.number} · {item.title}</strong><Badge tone={remoteStateTone(item.state)}>{item.draft ? 'Draft' : item.state}</Badge><p>{item.source_branch} → {item.target_branch}</p><small>{item.author || 'Unknown author'} · {item.url ? <a href={item.url} target="_blank" rel="noreferrer">Open review</a> : 'Provider change request'}</small></div><div className="hub-item-actions"><Button variant="ghost" disabled={busy || !supports('changes.write')} onClick={() => void perform(async () => { await api.approveHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Review approved.')}>Approve</Button><Button variant="secondary" disabled={busy || !supports('changes.merge') || !['open','opened'].includes(item.state)} onClick={() => { if (window.confirm(`Merge ${selected.full_path} change #${item.number} on the provider?`)) void perform(async () => { await api.mergeHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Provider merged the change.'); }}>Merge</Button><Button variant="ghost" disabled={busy || !supports('changes.write') || !['open','opened'].includes(item.state)} onClick={() => { if (window.confirm(`Close change request #${item.number} on ${selected.full_path}?`)) void perform(async () => { await api.closeHubChange(selected.id,item.number); setChanges(await api.hubChanges(selected.id)); },'Provider change request closed.'); }}>Close</Button></div></article>)}
             {!supports('changes.read') && <p className="hub-muted">This provider does not expose merge/change requests through the current API. SourceForge Allura supports Tracker and Discussion workflows, not Pull/Merge Requests.</p>}
             {supports('changes.read') && !changes.length && <p className="hub-muted">No remote change requests were returned.</p>}
+            {supports('changes.write') && <Modal
+              open={changeCreateOpen}
+              title="New change request"
+              description={`Propose changes to ${selected.full_path}.`}
+              onClose={() => setChangeCreateOpen(false)}
+              onSubmit={createChange}
+              submitLabel="Create change request"
+              busy={busy}
+              wide
+            >
+              <Field label="Title"><input autoFocus value={changeTitle} onChange={(event) => setChangeTitle(event.target.value)} required maxLength={256} placeholder="Summarize the proposed change" /></Field>
+              <Field label="Description"><textarea rows={5} value={changeBody} onChange={(event) => setChangeBody(event.target.value)} placeholder="Explain the change and its impact." /></Field>
+              <div className="hub-form-grid">
+                <Field label="Source branch"><select value={changeSource} onChange={(event) => setChangeSource(event.target.value)} required><option value="">Choose source…</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field>
+                <Field label="Target branch"><select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value)} required><option value="">Choose target…</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field>
+              </div>
+              {changeSource && changeTarget && changeSource === changeTarget && <p className="notice notice--warning">Choose two different branches for a change request.</p>}
+            </Modal>}
           </div>}
 
           {tab === 'Commits' && <div className="hub-work-items">{supports('commits.read') && commits.map((item) => <article className="hub-commit-row" key={item.sha}><code>{item.sha.slice(0,12)}</code><div><strong>{item.message.split('\n')[0]}</strong><span>{item.author} · {new Date(item.committed_at).toLocaleString()}</span></div>{item.url && <a href={item.url} target="_blank" rel="noreferrer">Open <ArrowUpRight size={12}/></a>}</article>)}{!supports('commits.read') ? <p className="hub-muted">Commit browsing is not available through this provider's REST API. Use the clone URL with Git when provided.</p> : !commits.length && <p className="hub-muted">No commits returned for this repository.</p>}</div>}
