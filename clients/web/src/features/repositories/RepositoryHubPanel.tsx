@@ -1288,8 +1288,9 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                       {tagComparison && <div className="hub-tag-comparison">
                         <div className="hub-tag-comparison__summary">
                           <Badge>{tagComparison.state}</Badge>
-                          <span>{tagComparison.ahead_by} commits ahead</span>
-                          <span>{tagComparison.behind_by} commits behind</span>
+                          {tagComparison.counts_available
+                            ? <><span>{tagComparison.ahead_by} commits ahead</span><span>{tagComparison.behind_by} commits behind</span></>
+                            : <span>Commit interval counts not reported by this provider</span>}
                           {tagComparison.merge_base_sha && <code title={tagComparison.merge_base_sha}>Base {tagComparison.merge_base_sha.slice(0, 12)}</code>}
                         </div>
                         {tagComparison.availability.state === 'partial' && <p className="hub-muted">{tagComparison.availability.reason}</p>}
