@@ -561,13 +561,8 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     }
   }
 
-  async function toggleCommitDetails(item: HubCommit) {
-    if (expandedCommitSHA === item.sha) {
-      setExpandedCommitSHA('');
-      return;
-    }
-    setExpandedCommitSHA(item.sha);
-    if (commitDetails[item.sha] || !selected) return;
+  async function loadCommitDetails(item: HubCommit) {
+    if (!selected) return;
     const repositoryID = selected.id;
     const currentBranch = branch;
     setCommitDetailLoading(item.sha);
@@ -581,6 +576,15 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     } finally {
       setCommitDetailLoading((current) => current === item.sha ? '' : current);
     }
+  }
+
+  async function toggleCommitDetails(item: HubCommit) {
+    if (expandedCommitSHA === item.sha) {
+      setExpandedCommitSHA('');
+      return;
+    }
+    setExpandedCommitSHA(item.sha);
+    if (!commitDetails[item.sha]) await loadCommitDetails(item);
   }
 
   async function openRemoteFile(path: string) {
@@ -1026,7 +1030,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                       <Badge tone={signature === 'verified' ? 'green' : signature === 'unverified' ? 'amber' : 'neutral'}>{signatureLabel}</Badge>
                       {item.checks_available
                         ? <Badge tone={item.checks_state === 'success' ? 'green' : item.checks_state === 'failure' || item.checks_state === 'failed' ? 'red' : 'neutral'}>Checks: {item.checks_state || 'reported'}</Badge>
-                        : <Badge>Checks unavailable</Badge>}
+                        : <Badge>Checks on details</Badge>}
                     </div>
                     <div className="hub-commit-card__actions">
                       <Button type="button" variant="secondary" onClick={() => void toggleCommitDetails(item)} disabled={commitDetailLoading === item.sha}>
@@ -1039,7 +1043,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                     {commitDetailLoading === item.sha && <p className="hub-muted">Loading commit details…</p>}
                     {commitDetailErrors[item.sha] && <div className="notice notice--error" role="alert">{commitDetailErrors[item.sha]} <button type="button" onClick={() => {
                       setCommitDetails((current) => { const next = { ...current }; delete next[item.sha]; return next; });
-                      void toggleCommitDetails(item);
+                      void loadCommitDetails(item);
                     }}>Retry</button></div>}
                     {detail && <>
                       <section className="hub-commit-detail-section">
