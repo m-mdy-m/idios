@@ -126,7 +126,7 @@ fmt-check: ## Fail if any Go source file is not gofmt-formatted.
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/fmt_check.ps1
 else
 fmt-check: ## Fail if any Go source file is not gofmt-formatted.
-	@test -z "$$(gofmt -l $(FMT_DIRS))" || { echo "Unformatted Go files:"; gofmt -l $(FMT_DIRS); exit 1; }
+	@test -z "$(gofmt -l $(FMT_DIRS))" || { echo "Unformatted Go files:"; gofmt -l $(FMT_DIRS); gofmt -d $(FMT_DIRS); exit 1; }
 endif
 
 test: ## Run all tests.
