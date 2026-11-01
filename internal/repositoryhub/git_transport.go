@@ -274,7 +274,7 @@ func sourceForgeCommits(ctx context.Context, token string, repo RemoteRepository
 				return err
 			}
 		}
-		raw, err := runGit(ctx, token, dir, "log", "-n", strconv.Itoa(count), "--format=%H%x1f%an%x1f%ae%x1f%cI%x1f%s", "HEAD")
+		raw, err := runGit(ctx, token, dir, "log", "-n", strconv.Itoa(count), "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%s", "HEAD")
 		if err != nil {
 			return err
 		}
@@ -287,16 +287,153 @@ func sourceForgeCommits(ctx context.Context, token string, repo RemoteRepository
 			if len(out) >= 50 {
 				break
 			}
-			fields := strings.SplitN(line, "\x1f", 5)
-			if len(fields) != 5 {
+			fields := strings.SplitN(line, "\x1f", 8)
+			if len(fields) != 8 {
 				continue
 			}
-			committed, _ := time.Parse(time.RFC3339, fields[3])
-			out = append(out, Commit{SHA: fields[0], Author: fields[1], Email: fields[2], Committed: committed, Message: fields[4]})
+			authored, _ := time.Parse(time.RFC3339, fields[3])
+			committed, _ := time.Parse(time.RFC3339, fields[6])
+			out = append(out, Commit{
+				SHA: fields[0], Author: fields[1], Email: fields[2], AuthoredAt: optionalTime(authored),
+				Committer: fields[4], CommitterEmail: fields[5], Committed: committed, Message: fields[7],
+			})
 		}
 		return nil
 	})
 	return out, err
+}
+
+func sourceForgeCommit(ctx context.Context, token string, repo RemoteRepository, ref, sha string) (Commit, error) {
+	if !validCommitSHA(sha) {
+		return Commit{}, fmt.Errorf("%w: a full commit SHA is required", domain.ErrInvalid)
+	}
+	if ref == "" {
+		ref = repo.DefaultBranch
+	}
+	var result Commit
+	err := withSourceForgeClone(ctx, token, repo, ref, func(dir string) error {
+		if _, err := runGit(ctx, token, dir, "fetch", "--quiet", "--deepen=10000", "origin", ref); err != nil {
+			return err
+		}
+		raw, err := runGit(ctx, token, dir, "show", "-s", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%B", sha)
+		if err != nil {
+			return fmt.Errorf("%w: SourceForge commit %q was not found in the selected branch history", domain.ErrNotFound, sha)
+		}
+		fields := strings.SplitN(strings.TrimSpace(string(raw)), "\x1f", 8)
+		if len(fields) != 8 {
+			return fmt.Errorf("%w: SourceForge returned incomplete commit metadata", domain.ErrUnavailable)
+		}
+		authored, _ := time.Parse(time.RFC3339, fields[3])
+		committed, _ := time.Parse(time.RFC3339, fields[6])
+		result = Commit{
+			SHA: fields[0], Message: strings.TrimSpace(fields[7]),
+			Author: fields[1], Email: fields[2], AuthoredAt: optionalTime(authored),
+			Committer: fields[4], CommitterEmail: fields[5], Committed: committed,
+			SignatureSource: "local", ChecksAvailable: false, ChecksState: "unavailable",
+		}
+
+		object, err := runGit(ctx, token, dir, "cat-file", "-p", sha)
+		if err != nil {
+			return err
+		}
+		signature := gitCommitSignature(object)
+		if signature == "" {
+			result.SignatureStatus = "unsigned"
+			result.SignatureReason = "No cryptographic signature is stored in this Git commit."
+		} else {
+			result.SignatureType = detectCommitSignatureType(signature)
+			if _, verifyErr := runGit(ctx, token, dir, "verify-commit", "--raw", sha); verifyErr == nil {
+				result.SignatureStatus = "verified"
+				result.SignatureReason = "Local Git signature verification succeeded."
+			} else {
+				result.SignatureStatus = "unverified"
+				result.SignatureReason = "Local Git could not verify the commit signature with the configured keyring."
+			}
+		}
+
+		numstat, err := runGit(ctx, token, dir, "show", "--numstat", "--format=", "--find-renames", sha)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(numstat)), "\n") {
+			if line == "" {
+				continue
+			}
+			parts := strings.SplitN(line, "\t", 3)
+			if len(parts) != 3 {
+				continue
+			}
+			additions, _ := strconv.Atoi(parts[0])
+			deletions, _ := strconv.Atoi(parts[1])
+			result.Files = append(result.Files, CommitFile{
+				Path: parts[2], Status: "modified", Additions: additions, Deletions: deletions,
+			})
+			result.Stats.Additions += additions
+			result.Stats.Deletions += deletions
+		}
+		result.Stats.Total = result.Stats.Additions + result.Stats.Deletions
+
+		nameStatus, err := runGit(ctx, token, dir, "diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", sha)
+		if err == nil {
+			statuses := strings.Split(strings.TrimSpace(string(nameStatus)), "\n")
+			for index, line := range statuses {
+				fields := strings.SplitN(line, "\t", 3)
+				if len(fields) < 2 || index >= len(result.Files) {
+					continue
+				}
+				file := &result.Files[index]
+				switch {
+				case strings.HasPrefix(fields[0], "A"):
+					file.Status = "added"
+				case strings.HasPrefix(fields[0], "D"):
+					file.Status = "deleted"
+				case strings.HasPrefix(fields[0], "R") && len(fields) == 3:
+					file.Status = "renamed"
+					file.PreviousPath = fields[1]
+					file.Path = fields[2]
+				default:
+					file.Path = fields[len(fields)-1]
+				}
+			}
+		}
+
+		patch, patchErr := runGit(ctx, token, dir, "show", "--format=", "--find-renames", "--patch", sha)
+		if patchErr != nil {
+			result.DiffUnavailableReason = patchErr.Error()
+		} else if len(patch) > maxResponseBytes {
+			result.DiffUnavailableReason = "Commit diff exceeds the 8 MiB preview limit."
+		} else {
+			result.Diff = string(patch)
+			result.DiffAvailable = true
+		}
+		return nil
+	})
+	return result, err
+}
+
+func gitCommitSignature(object []byte) string {
+	var signature strings.Builder
+	lines := strings.Split(string(object), "\n")
+	inHeaders := true
+	inSignature := false
+	for _, line := range lines {
+		if inHeaders && line == "" {
+			break
+		}
+		if strings.HasPrefix(line, "gpgsig ") || strings.HasPrefix(line, "gpgsig-sha256 ") {
+			inSignature = true
+			signature.WriteString(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "gpgsig "), "gpgsig-sha256 ")))
+			signature.WriteByte('\n')
+			continue
+		}
+		if inSignature && strings.HasPrefix(line, " ") {
+			signature.WriteString(strings.TrimSpace(line))
+			signature.WriteByte('\n')
+			continue
+		}
+		inSignature = false
+	}
+	return signature.String()
 }
 
 func safeGitPath(path string) bool {
