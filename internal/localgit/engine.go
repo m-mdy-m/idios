@@ -401,7 +401,11 @@ func (e *CLIEngine) SwitchBranch(ctx context.Context, directory, name string) er
 
 func safeRelativePath(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.ContainsRune(raw, 0) || filepath.IsAbs(raw) {
+	driveQualified := len(raw) >= 2 &&
+		((raw[0] >= 'a' && raw[0] <= 'z') || (raw[0] >= 'A' && raw[0] <= 'Z')) &&
+		raw[1] == ':'
+	rooted := strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, `\\`)
+	if raw == "" || strings.ContainsRune(raw, 0) || filepath.IsAbs(raw) || rooted || driveQualified {
 		return "", errors.New("stage paths must be non-empty repository-relative paths")
 	}
 	clean := filepath.Clean(raw)
