@@ -1077,6 +1077,14 @@ func (p *ollamaProvider) Stream(ctx context.Context, input GenerateRequest, emit
 			break
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return &Error{Code: "request_cancelled", Message: "The AI request was cancelled"}
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return &Error{Code: "request_timed_out", Message: "The AI provider request timed out"}
+		}
+	}
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return &Error{Code: "request_cancelled", Message: "The AI request was cancelled"}
@@ -1085,14 +1093,6 @@ func (p *ollamaProvider) Stream(ctx context.Context, input GenerateRequest, emit
 			return &Error{Code: "request_timed_out", Message: "The AI provider request timed out"}
 		}
 		return &Error{Code: "provider_request_failed", Message: "Ollama's stream was interrupted before completion"}
-	}
-	if err := ctx.Err(); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return &Error{Code: "request_cancelled", Message: "The AI request was cancelled"}
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return &Error{Code: "request_timed_out", Message: "The AI provider request timed out"}
-		}
 	}
 	if !completed {
 		return &Error{Code: "provider_request_failed", Message: "Ollama closed the stream before sending its final completion event"}
