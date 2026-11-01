@@ -828,7 +828,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     }
     pageTranslationCache.current.delete(currentPageTranslationKey);
     const chunkCachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:`;
-    const chunkCachePrefixes = ['page', 'grammar', 'ielts'].map((kind) => `${chunkCachePrefix}${kind}:${translationSourceIdentity(currentPageText)}:`);
+    const chunkCachePrefixes = ['page', 'word', 'grammar', 'ielts'].map((kind) => `${chunkCachePrefix}${kind}:${translationSourceIdentity(currentPageText)}:`);
     for (const key of translationChunkCache.current.keys()) {
       if (chunkCachePrefixes.some((prefix) => key.startsWith(prefix))) translationChunkCache.current.delete(key);
     }
