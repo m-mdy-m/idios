@@ -17,6 +17,8 @@
 
 ### Added
 
+- Expose separate commit author/committer provenance, provider-backed signature verification, CI/status checks, changed-file statistics and lazy commit details across the Repository Hub.
+
 - Added an installable PWA shell with an app-shell service worker while keeping API requests network-only.
 - Added Capacitor build targets for Android ABI-specific APKs and iOS device/simulator app bundles, plus post-download mobile artifact checks.
 
