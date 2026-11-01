@@ -489,7 +489,6 @@ func TestDiscussionAttemptGetsFreshTimeoutForCorrection(t *testing.T) {
 	}
 }
 
-
 func TestDiscussionAttemptCannotOutliveParentDeadline(t *testing.T) {
 	parentDeadline := time.Now().Add(80 * time.Millisecond)
 	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
