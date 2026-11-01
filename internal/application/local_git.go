@@ -180,7 +180,6 @@ func (s *LocalGitService) Diff(ctx context.Context, repositoryRef string, staged
 	return s.engine.Diff(ctx, path, staged)
 }
 
-
 func (s *LocalGitService) Tags(ctx context.Context, repositoryRef string) ([]localgit.Tag, error) {
 	path, err := s.workspacePath(ctx, repositoryRef)
 	if err != nil {

@@ -130,7 +130,6 @@ func (s *Server) getLocalGitDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"diff": item})
 }
 
-
 func (s *Server) getLocalGitTags(w http.ResponseWriter, r *http.Request) {
 	items, err := s.app.LocalGitService.Tags(requestContext(r), r.PathValue("ref"))
 	if err != nil {
