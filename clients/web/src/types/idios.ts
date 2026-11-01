@@ -594,7 +594,7 @@ export interface HubTag {
   release_name?: string; release_url?: string; url?: string;
 }
 export interface HubTagPage {
-  items: HubTag[]; page: number; has_more: boolean; availability: HubFeatureAvailability;
+  items: HubTag[]; page: number; has_more: boolean; next_cursor?: string; availability: HubFeatureAvailability;
 }
 export interface HubTagCompareCommit {
   sha: string; title?: string; message?: string; author?: string; committer?: string;
