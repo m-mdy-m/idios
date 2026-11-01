@@ -17,12 +17,29 @@ export IDIOS_PROVIDER_ENCRYPTION_KEY='YOUR_PERSISTENT_BASE64_32_BYTE_KEY'
 idios serve
 ```
 
-On Windows PowerShell, set it in the environment used to launch the IDIOS server:
+On Windows PowerShell, first check whether you already have a key in your current session or User environment. Do **not** generate a replacement if a key already protects saved Hub credentials:
 
 ```powershell
-$env:IDIOS_PROVIDER_ENCRYPTION_KEY = 'YOUR_PERSISTENT_BASE64_32_BYTE_KEY'
+$key = $env:IDIOS_PROVIDER_ENCRYPTION_KEY
+if (-not $key) {
+  $key = [Environment]::GetEnvironmentVariable('IDIOS_PROVIDER_ENCRYPTION_KEY', 'User')
+}
+if (-not $key) {
+  $bytes = New-Object byte[] 32
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
+  $key = [Convert]::ToBase64String($bytes)
+  $rng.Dispose()
+  [Environment]::SetEnvironmentVariable('IDIOS_PROVIDER_ENCRYPTION_KEY', $key, 'User')
+}
+$env:IDIOS_PROVIDER_ENCRYPTION_KEY = $key
+if ([Convert]::FromBase64String($key).Length -ne 32) {
+  throw 'IDIOS_PROVIDER_ENCRYPTION_KEY must decode to exactly 32 bytes.'
+}
 idios serve
 ```
+
+This creates and saves a key only when neither the current process nor the Windows User environment has one. It also places the value in the current PowerShell process before starting IDIOS. If IDIOS is already running, stop that process first; the Hub service reads the key once when the Go server is initialized, so changing an environment variable after startup does not unlock the running process. Start the IDIOS server from this PowerShell session (or configure the same variable in the service manager that launches IDIOS).
 
 Do not generate a new key every time IDIOS starts. Keep the same key in a protected service-manager secret or user environment. Back it up separately from the SQLite database. Losing or rotating the key makes saved provider credentials unreadable; reconnect those provider accounts after a key change. The key is never stored in the Web client or returned by the API.
 
