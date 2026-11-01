@@ -607,7 +607,7 @@ export interface HubTagComparison {
   from: string; to: string; state: string; merge_base_sha?: string;
   ahead_by: number; behind_by: number; total_commits: number;
   commits: HubTagCompareCommit[]; files: HubTagCompareFile[];
-  commits_truncated: boolean; files_truncated: boolean; availability: HubFeatureAvailability;
+  commits_truncated: boolean; files_truncated: boolean; counts_available: boolean; availability: HubFeatureAvailability;
 }
 export interface HubIssue {
   id: string; number: number; title: string; body: string; state: string;
