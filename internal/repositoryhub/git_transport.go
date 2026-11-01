@@ -201,34 +201,78 @@ func sourceForgeBranches(ctx context.Context, token string, repo RemoteRepositor
 	return out, nil
 }
 
-func sourceForgeTree(ctx context.Context, token string, repo RemoteRepository, ref string) ([]TreeEntry, error) {
-	var out []TreeEntry
+func sourceForgeTreePage(ctx context.Context, token string, repo RemoteRepository, ref, path string, page int) (TreePage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if page > 10000 {
+		return TreePage{}, fmt.Errorf("%w: tree page is out of range", domain.ErrInvalid)
+	}
+	var result TreePage
 	err := withSourceForgeClone(ctx, token, repo, ref, func(dir string) error {
-		raw, err := runGit(ctx, token, dir, "ls-tree", "-r", "-t", "--long", "--full-tree", "HEAD")
+		treeRef := "HEAD"
+		if path != "" {
+			if !safeGitPath(path) {
+				return fmt.Errorf("%w: safe repository directory path is required", domain.ErrInvalid)
+			}
+			resolved, err := runGit(ctx, token, dir, "rev-parse", "--verify", "HEAD:"+path)
+			if err != nil {
+				return fmt.Errorf("%w: SourceForge directory %q was not found", domain.ErrNotFound, path)
+			}
+			treeRef = strings.TrimSpace(string(resolved))
+		}
+		raw, err := runGit(ctx, token, dir, "ls-tree", "--long", "-z", treeRef)
 		if err != nil {
 			return err
 		}
-		for _, line := range strings.Split(string(raw), "\n") {
-			if line == "" {
-				continue
-			}
-			parts := strings.SplitN(line, "\t", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			meta := strings.Fields(parts[0])
-			if len(meta) < 3 {
-				continue
-			}
-			size := int64(0)
-			if len(meta) >= 4 && meta[3] != "-" {
-				size, _ = strconv.ParseInt(meta[3], 10, 64)
-			}
-			out = append(out, TreeEntry{Path: parts[1], Name: lastPath(parts[1]), Type: meta[1], SHA: meta[2], Size: size})
+		entries := parseSourceForgeTreeOutput(raw, path)
+		const pageSize = 100
+		start := (page - 1) * pageSize
+		if start > len(entries) {
+			start = len(entries)
+		}
+		end := start + pageSize
+		if end > len(entries) {
+			end = len(entries)
+		}
+		result = TreePage{
+			Items: append([]TreeEntry(nil), entries[start:end]...),
+			Page: page, HasMore: end < len(entries),
 		}
 		return nil
 	})
-	return out, err
+	return result, err
+}
+
+func parseSourceForgeTreeOutput(raw []byte, parent string) []TreeEntry {
+	out := make([]TreeEntry, 0)
+	for _, record := range strings.Split(string(raw), "\x00") {
+		if record == "" {
+			continue
+		}
+		parts := strings.SplitN(record, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		meta := strings.Fields(parts[0])
+		if len(meta) < 3 {
+			continue
+		}
+		size := int64(0)
+		if len(meta) >= 4 && meta[3] != "-" {
+			size, _ = strconv.ParseInt(meta[3], 10, 64)
+		}
+		typ := meta[1]
+		if typ != "tree" {
+			typ = "blob"
+		}
+		name := parts[1]
+		out = append(out, TreeEntry{
+			Path: joinTreePath(parent, name), Name: name,
+			Type: typ, SHA: meta[2], Size: size,
+		})
+	}
+	return out
 }
 
 func sourceForgeFile(ctx context.Context, token string, repo RemoteRepository, path, ref string) (File, error) {

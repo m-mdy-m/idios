@@ -69,6 +69,12 @@ type TreeEntry struct {
 	URL  string `json:"url,omitempty"`
 }
 
+type TreePage struct {
+	Items   []TreeEntry `json:"items"`
+	Page    int          `json:"page"`
+	HasMore bool         `json:"has_more"`
+}
+
 type File struct {
 	Path         string `json:"path"`
 	Content      string `json:"content"`
@@ -912,58 +918,131 @@ func (p *Provider) ListBranches(ctx context.Context, token string, repo RemoteRe
 	}
 }
 
-func (p *Provider) ListTree(ctx context.Context, token string, repo RemoteRepository, ref string) ([]TreeEntry, error) {
+func (p *Provider) ListTree(ctx context.Context, token string, repo RemoteRepository, ref, path, treeSHA string, page int) (TreePage, error) {
 	if ref == "" {
 		ref = repo.DefaultBranch
 	}
+	path = strings.Trim(strings.TrimSpace(path), "/")
+	if path != "" && !safeGitPath(path) {
+		return TreePage{}, fmt.Errorf("%w: safe repository directory path is required", domain.ErrInvalid)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > 10000 {
+		return TreePage{}, fmt.Errorf("%w: tree page is out of range", domain.ErrInvalid)
+	}
+
 	switch p.kind {
 	case domain.RepositoryProviderGitHub:
+		if page != 1 {
+			return TreePage{}, fmt.Errorf("%w: GitHub Git tree objects are not page-addressable", domain.ErrInvalid)
+		}
+		treeRef := ref
+		if treeSHA != "" {
+			if !validTreeSHA(treeSHA) {
+				return TreePage{}, fmt.Errorf("%w: invalid Git tree object ID", domain.ErrInvalid)
+			}
+			treeRef = treeSHA
+		} else if path != "" {
+			return TreePage{}, fmt.Errorf("%w: a Git tree object ID is required to expand this GitHub directory", domain.ErrInvalid)
+		}
 		owner, name := splitFullPath(repo.FullPath)
 		var raw struct {
 			Truncated bool `json:"truncated"`
-			Tree      []struct {
+			Tree []struct {
 				Path string `json:"path"`
 				Type string `json:"type"`
-				Size int64  `json:"size"`
-				SHA  string `json:"sha"`
-				URL  string `json:"url"`
+				Size int64 `json:"size"`
+				SHA string `json:"sha"`
+				URL string `json:"url"`
 			} `json:"tree"`
 		}
-		if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/trees/"+url.PathEscape(ref), url.Values{"recursive": {"1"}}, nil, &raw); err != nil {
-			return nil, err
+		if err := p.json(ctx, token, "GET", "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/trees/"+url.PathEscape(treeRef), nil, nil, &raw); err != nil {
+			return TreePage{}, err
+		}
+		if raw.Truncated {
+			return TreePage{}, fmt.Errorf("%w: GitHub truncated this directory listing; open the repository with Git for the complete tree", domain.ErrUnavailable)
 		}
 		out := make([]TreeEntry, 0, len(raw.Tree))
-		for _, e := range raw.Tree {
-			out = append(out, TreeEntry{Path: e.Path, Name: lastPath(e.Path), Type: e.Type, Size: e.Size, SHA: e.SHA, URL: e.URL})
+		for _, entry := range raw.Tree {
+			typ := entry.Type
+			if typ != "tree" {
+				typ = "blob"
+			}
+			out = append(out, TreeEntry{
+				Path: joinTreePath(path, entry.Path), Name: lastPath(entry.Path),
+				Type: typ, Size: entry.Size, SHA: entry.SHA, URL: entry.URL,
+			})
 		}
-		return out, nil
+		return TreePage{Items: out, Page: 1}, nil
+
 	case domain.RepositoryProviderGitLab:
+		query := url.Values{
+			"ref": {ref}, "per_page": {"100"}, "page": {strconv.Itoa(page)},
+		}
+		if path != "" {
+			query.Set("path", path)
+		}
 		var rows []struct {
 			Path string `json:"path"`
 			Name string `json:"name"`
 			Type string `json:"type"`
-			Size int64  `json:"size"`
-			ID   string `json:"id"`
+			Size int64 `json:"size"`
+			ID string `json:"id"`
 		}
-		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/repository/tree", url.Values{"ref": {ref}, "recursive": {"true"}, "per_page": {"100"}}, nil, &rows); err != nil {
-			return nil, err
+		if err := p.json(ctx, token, "GET", "projects/"+url.PathEscape(repo.ExternalID)+"/repository/tree", query, nil, &rows); err != nil {
+			return TreePage{}, err
 		}
 		out := make([]TreeEntry, 0, len(rows))
-		for _, e := range rows {
-			typ := e.Type
-			if typ == "tree" {
+		for _, entry := range rows {
+			typ := "blob"
+			if entry.Type == "tree" {
 				typ = "tree"
-			} else {
-				typ = "blob"
 			}
-			out = append(out, TreeEntry{Path: e.Path, Name: e.Name, Type: typ, Size: e.Size, SHA: e.ID})
+			entryPath := entry.Path
+			if entryPath == "" {
+				entryPath = entry.Name
+			}
+			out = append(out, TreeEntry{
+				Path: joinTreePath(path, entryPath), Name: entry.Name,
+				Type: typ, Size: entry.Size, SHA: entry.ID,
+			})
 		}
-		return out, nil
+		return TreePage{Items: out, Page: page, HasMore: len(rows) == 100}, nil
+
 	case domain.RepositoryProviderSourceForge:
-		return sourceForgeTree(ctx, token, repo, ref)
+		return sourceForgeTreePage(ctx, token, repo, ref, path, page)
 	default:
-		return nil, fmt.Errorf("%w: code tree API is not available for this provider", domain.ErrUnsupported)
+		return TreePage{}, fmt.Errorf("%w: code tree API is not available for this provider", domain.ErrUnsupported)
 	}
+}
+
+func validTreeSHA(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func joinTreePath(parent, child string) string {
+	parent = strings.Trim(parent, "/")
+	child = strings.Trim(child, "/")
+	if parent == "" {
+		return child
+	}
+	if child == "" {
+		return parent
+	}
+	if child == parent || strings.HasPrefix(child, parent+"/") {
+		return child
+	}
+	return parent + "/" + child
 }
 
 func (p *Provider) ReadFile(ctx context.Context, token string, repo RemoteRepository, path, ref string) (File, error) {

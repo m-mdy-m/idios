@@ -554,3 +554,127 @@ func TestProviderEndpointPreservesAbsoluteHTTPAndHTTPSURLs(t *testing.T) {
 		t.Errorf("relative provider endpoint = %q", got)
 	}
 }
+
+
+func TestGitHubTreeLoadsRootAndExpandedDirectoriesSeparately(t *testing.T) {
+	treeSHA := strings.Repeat("a", 40)
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Header.Get("Authorization") != "Bearer ghp_test" {
+			t.Errorf("missing GitHub authorization header")
+		}
+		if r.URL.Query().Has("recursive") {
+			t.Errorf("tree listing must not request the full recursive repository")
+		}
+		switch r.URL.Path {
+		case "/repos/acme/app/git/trees/main":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"src","type":"tree","sha":"` + treeSHA + `"},{"path":"README.md","type":"blob","size":12,"sha":"blob-readme"}]}`))
+		case "/repos/acme/app/git/trees/" + treeSHA:
+			_, _ = w.Write([]byte(`{"tree":[{"path":"main.go","type":"blob","size":42,"sha":"blob-main"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := &Provider{kind: domain.RepositoryProviderGitHub, host: server.URL, base: server.URL, http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app", DefaultBranch: "main"}
+
+	root, err := provider.ListTree(context.Background(), "ghp_test", repo, "main", "", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Page != 1 || root.HasMore || len(root.Items) != 2 || root.Items[0].Path != "src" ||
+		root.Items[0].Type != "tree" || root.Items[0].SHA != treeSHA {
+		t.Fatalf("unexpected root tree page: %#v", root)
+	}
+
+	children, err := provider.ListTree(context.Background(), "ghp_test", repo, "main", "src", treeSHA, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children.Items) != 1 || children.Items[0].Path != "src/main.go" ||
+		children.Items[0].Type != "blob" || children.Items[0].Size != 42 {
+		t.Fatalf("unexpected selected-directory tree: %#v", children)
+	}
+	if requests != 2 {
+		t.Fatalf("provider requests = %d, want one request per expanded tree", requests)
+	}
+
+	if _, err := provider.ListTree(context.Background(), "ghp_test", repo, "main", "src", "not-a-tree-sha", 1); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("invalid tree SHA should be rejected before provider I/O, got %v", err)
+	}
+	if _, err := provider.ListTree(context.Background(), "ghp_test", repo, "main", "", "", 2); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("GitHub tree page 2 should be rejected, got %v", err)
+	}
+}
+
+func TestGitLabTreeSupportsDirectoryAndPageQueries(t *testing.T) {
+	t.Setenv("IDIOS_GITLAB_ALLOW_LOOPBACK", "true")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PRIVATE-TOKEN") != "glpat_test" {
+			t.Errorf("missing GitLab token")
+		}
+		if r.URL.Path != "/api/v4/projects/42/repository/tree" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("path") != "src" || r.URL.Query().Get("ref") != "main" ||
+			r.URL.Query().Get("per_page") != "100" {
+			t.Errorf("unexpected GitLab tree query: %v", r.URL.Query())
+		}
+		switch r.URL.Query().Get("page") {
+		case "1":
+			rows := make([]map[string]any, 100)
+			for index := range rows {
+				rows[index] = map[string]any{
+					"id": "blob-" + strings.Repeat("a", 1), "name": "file", "path": "src/file",
+					"type": "blob", "size": 8,
+				}
+			}
+			_ = json.NewEncoder(w).Encode(rows)
+		case "2":
+			_, _ = w.Write([]byte(`[{"id":"blob-last","name":"last.go","path":"src/last.go","type":"blob","size":16}]`))
+		default:
+			t.Errorf("unexpected page %q", r.URL.Query().Get("page"))
+			http.Error(w, "bad page", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	provider := &Provider{kind: domain.RepositoryProviderGitLab, host: server.URL, base: server.URL + "/api/v4", http: server.Client()}
+	repo := RemoteRepository{Provider: domain.RepositoryProviderGitLab, ExternalID: "42", DefaultBranch: "main"}
+
+	first, err := provider.ListTree(context.Background(), "glpat_test", repo, "main", "src", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Items) != 100 || !first.HasMore || first.Page != 1 || first.Items[0].Path != "src/file" {
+		t.Fatalf("unexpected first GitLab tree page: count=%d page=%#v", len(first.Items), first)
+	}
+	second, err := provider.ListTree(context.Background(), "glpat_test", repo, "main", "src", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Items) != 1 || second.HasMore || second.Page != 2 || second.Items[0].Path != "src/last.go" {
+		t.Fatalf("unexpected second GitLab tree page: %#v", second)
+	}
+}
+
+func TestSourceForgeTreeOutputPreservesNestedPathsAndEntryKinds(t *testing.T) {
+	blobSHA := strings.Repeat("b", 40)
+	treeSHA := strings.Repeat("c", 40)
+	raw := []byte(
+		"100644 blob " + blobSHA + " 24\\tREADME.md\\x00" +
+			"040000 tree " + treeSHA + " -\\tinternal\\x00",
+	)
+	entries := parseSourceForgeTreeOutput(raw, "src")
+	if len(entries) != 2 {
+		t.Fatalf("parsed %d SourceForge entries, want 2: %#v", len(entries), entries)
+	}
+	if entries[0].Path != "src/README.md" || entries[0].Type != "blob" || entries[0].Size != 24 ||
+		entries[1].Path != "src/internal" || entries[1].Type != "tree" || entries[1].SHA != treeSHA {
+		t.Fatalf("SourceForge ls-tree output was not normalized: %#v", entries)
+	}
+}

@@ -303,7 +303,11 @@ func (s *Server) getHubBranches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 func (s *Server) getHubTree(w http.ResponseWriter, r *http.Request) {
-	items, err := s.app.RemoteTree(requestContext(r), r.PathValue("ref"), r.URL.Query().Get("ref"))
+	items, err := s.app.RemoteTree(
+		requestContext(r), r.PathValue("ref"), r.URL.Query().Get("ref"),
+		r.URL.Query().Get("path"), r.URL.Query().Get("tree_sha"),
+		queryInt(r, "page", 1, 10000),
+	)
 	if err != nil {
 		writeError(w, err)
 		return
