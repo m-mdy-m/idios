@@ -102,3 +102,6 @@
 .hub-commit-file pre,.hub-commit-full-diff pre{max-height:300px;overflow:auto;margin:0;padding:9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text-soft);font-size:9px;line-height:1.5;white-space:pre}
 .hub-commit-full-diff summary{color:var(--accent);font-size:10px;cursor:pointer}
 @media(max-width:640px){.hub-commit-card__summary{grid-template-columns:auto minmax(0,1fr)}.hub-commit-card__signals,.hub-commit-card__actions{grid-column:1/-1;justify-content:flex-start}}
+
+.hub-commit-provenance-grid__wide{grid-column:1/-1}
+.hub-commit-provenance-grid__wide code,.hub-commit-provenance-grid__wide pre{max-width:100%;overflow:auto;margin:0;padding:7px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-soft);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
