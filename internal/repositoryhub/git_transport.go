@@ -710,6 +710,7 @@ func sourceForgeCompareTags(ctx context.Context, token string, repo RemoteReposi
 		}
 		result = TagComparison{
 			From: from, To: to, State: state,
+			CountsAvailable: true,
 			MergeBaseSHA: strings.TrimSpace(string(baseSHA)),
 			AheadBy: ahead, BehindBy: behind, TotalCommits: ahead,
 			Commits: make([]TagCompareCommit, 0),
