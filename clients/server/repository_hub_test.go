@@ -35,6 +35,18 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":42,"name":"idios","path_with_namespace":"m-mdy-m/idios","description":"IDIOS","web_url":"https://gitlab.example/m-mdy-m/idios","http_url_to_repo":"https://gitlab.example/m-mdy-m/idios.git","ssh_url_to_repo":"git@gitlab.example:m-mdy-m/idios.git","default_branch":"main","visibility":"private","open_issues_count":2,"namespace":{"full_path":"m-mdy-m"},"permissions":{"project_access":{"access_level":40}}}`))
 		case "GET /api/v4/projects/42/repository/branches":
 			_, _ = w.Write([]byte(`[{"name":"main","default":true,"protected":true,"commit":{"id":"commit-main"}}]`))
+		case "GET /api/v4/projects/42/repository/tree":
+			if r.URL.Query().Get("ref") != "main" || r.URL.Query().Get("per_page") != "100" {
+				t.Errorf("unexpected GitLab tree request: %v", r.URL.Query())
+			}
+			switch r.URL.Query().Get("path") {
+			case "":
+				_, _ = w.Write([]byte(`[{"id":"tree-src","name":"src","path":"src","type":"tree"}]`))
+			case "src":
+				_, _ = w.Write([]byte(`[{"id":"blob-main","name":"main.go","path":"src/main.go","type":"blob","size":42}]`))
+			default:
+				http.NotFound(w, r)
+			}
 		case "POST /api/v4/projects/42/issues":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -156,6 +168,41 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	}
 	if len(branches) != 1 || branches[0].Name != "main" || !branches[0].Default || branches[0].CommitSHA != "commit-main" {
 		t.Fatalf("unexpected remote branches: %#v", branches)
+	}
+
+	treeReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/tree?ref=main&page=1", nil)
+	treeRec := httptest.NewRecorder()
+	handler.ServeHTTP(treeRec, treeReq)
+	var rootPage struct {
+		Items []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+			SHA string `json:"sha"`
+		} `json:"items"`
+		Page int `json:"page"`
+		HasMore bool `json:"has_more"`
+	}
+	if treeRec.Code != http.StatusOK || json.Unmarshal(treeRec.Body.Bytes(), &rootPage) != nil ||
+		len(rootPage.Items) != 1 || rootPage.Items[0].Path != "src" || rootPage.Items[0].Type != "tree" ||
+		rootPage.Items[0].SHA != "tree-src" || rootPage.Page != 1 || rootPage.HasMore {
+		t.Fatalf("remote root tree endpoint returned an unexpected page: status=%d body=%s decoded=%#v", treeRec.Code, treeRec.Body.String(), rootPage)
+	}
+	childReq := httptest.NewRequest(http.MethodGet, "/api/hub/repositories/"+imported.ID+"/tree?ref=main&path=src&page=1", nil)
+	childRec := httptest.NewRecorder()
+	handler.ServeHTTP(childRec, childReq)
+	var childPage struct {
+		Items []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+			Size int64 `json:"size"`
+		} `json:"items"`
+		Page int `json:"page"`
+		HasMore bool `json:"has_more"`
+	}
+	if childRec.Code != http.StatusOK || json.Unmarshal(childRec.Body.Bytes(), &childPage) != nil ||
+		len(childPage.Items) != 1 || childPage.Items[0].Path != "src/main.go" ||
+		childPage.Items[0].Type != "blob" || childPage.Items[0].Size != 42 {
+		t.Fatalf("remote child tree endpoint returned an unexpected page: status=%d body=%s decoded=%#v", childRec.Code, childRec.Body.String(), childPage)
 	}
 
 	noteBody, _ := json.Marshal(map[string]any{

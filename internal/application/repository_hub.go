@@ -720,13 +720,13 @@ func (s *RepositoryHubService) RemoteBranches(ctx context.Context, repositoryID 
 	defer zeroBytes(token)
 	return client.ListBranches(ctx, string(token), repo)
 }
-func (s *RepositoryHubService) RemoteTree(ctx context.Context, repositoryID, ref string) ([]repositoryhub.TreeEntry, error) {
+func (s *RepositoryHubService) RemoteTree(ctx context.Context, repositoryID, ref, path, treeSHA string, page int) (repositoryhub.TreePage, error) {
 	repo, client, token, err := s.remoteContext(ctx, repositoryID)
 	if err != nil {
-		return nil, err
+		return repositoryhub.TreePage{}, err
 	}
 	defer zeroBytes(token)
-	return client.ListTree(ctx, string(token), repo, ref)
+	return client.ListTree(ctx, string(token), repo, ref, path, treeSHA, page)
 }
 func (s *RepositoryHubService) RemoteFile(ctx context.Context, repositoryID, path, ref string) (repositoryhub.File, error) {
 	repo, client, token, err := s.remoteContext(ctx, repositoryID)
