@@ -99,28 +99,60 @@ func TestGitLabListReleasesKeepsUnavailableAssetMetadataEmpty(t *testing.T) {
 
 func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/repos/acme/app/tags":
-			if r.URL.Query().Get("per_page") != "3" || r.URL.Query().Get("page") != "1" {
-				t.Errorf("unexpected GitHub tag pagination: %s", r.URL.RawQuery)
+		if r.Header.Get("Authorization") != "Bearer ghp_test" {
+			t.Errorf("missing GitHub authorization")
+		}
+		switch r.Method + " " + r.URL.Path {
+		case "POST /graphql":
+			var input struct {
+				Query string `json:"query"`
+				Variables struct {
+					Owner string `json:"owner"`
+					Name  string `json:"name"`
+					First int    `json:"first"`
+					After string `json:"after"`
+				} `json:"variables"`
 			}
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"name": "v2.0", "commit": map[string]any{"sha": "commit-two"}},
-				{"name": "v1.0", "commit": map[string]any{"sha": "tag-object-one"}},
-			})
-		case "/repos/acme/app/git/ref/tags/v2.0":
-			_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]any{"sha": "commit-two", "type": "commit"}})
-		case "/repos/acme/app/commits/commit-two":
-			_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"committer": map[string]any{"date": "2026-09-01T10:00:00Z"}}})
-		case "/repos/acme/app/git/ref/tags/v1.0":
-			_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]any{"sha": "tag-object-one", "type": "tag"}})
-		case "/repos/acme/app/git/tags/tag-object-one":
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatal(err)
+			}
+			if input.Variables.Owner != "acme" || input.Variables.Name != "app" ||
+				input.Variables.First != 3 || input.Variables.After != "" ||
+				!strings.Contains(input.Query, "TAG_COMMIT_DATE") ||
+				!strings.Contains(input.Query, "direction: DESC") {
+				t.Errorf("GitHub tags must be requested in latest-commit-first order: %#v", input)
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"message": "Annotated version one",
-				"tagger": map[string]any{"date": "2026-08-01T10:00:00Z"},
-				"object": map[string]any{"sha": "commit-one", "type": "commit"},
+				"data": map[string]any{
+					"repository": map[string]any{
+						"refs": map[string]any{
+							"nodes": []map[string]any{
+								{
+									"name": "v2.0",
+									"target": map[string]any{
+										"__typename": "Commit", "oid": "commit-two",
+										"committedDate": "2026-09-01T10:00:00Z",
+									},
+								},
+								{
+									"name": "v1.0",
+									"target": map[string]any{
+										"__typename": "Tag", "oid": "tag-object-one",
+										"message": "Annotated version one",
+										"tagger": map[string]any{"date": "2026-08-01T10:00:00Z"},
+										"target": map[string]any{
+											"__typename": "Commit", "oid": "commit-one",
+											"committedDate": "2026-07-31T10:00:00Z",
+										},
+									},
+								},
+							},
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						},
+					},
+				},
 			})
-		case "/repos/acme/app/releases":
+		case "GET /repos/acme/app/releases":
 			if r.URL.Query().Get("per_page") != "100" || r.URL.Query().Get("page") != "1" {
 				t.Errorf("unexpected GitHub release association request: %v", r.URL.Query())
 			}
@@ -140,7 +172,7 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 2 || page.HasMore {
+	if len(page.Items) != 2 || page.HasMore || page.NextCursor != "" {
 		t.Fatalf("unexpected GitHub tag page: %#v", page)
 	}
 	lightweight, annotated := page.Items[0], page.Items[1]
