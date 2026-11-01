@@ -130,83 +130,119 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 
 	switch p.kind {
 	case domain.RepositoryProviderGitHub:
+		if page > 1 && cursor == "" {
+			return TagPage{}, fmt.Errorf("%w: GitHub tag pagination requires the cursor from the previous page", domain.ErrInvalid)
+		}
+		if len(cursor) > 2048 || strings.TrimSpace(cursor) != cursor || strings.ContainsAny(cursor, "\r\n") {
+			return TagPage{}, fmt.Errorf("%w: GitHub tag cursor is invalid", domain.ErrInvalid)
+		}
 		owner, name := splitFullPath(repo.FullPath)
-		var rows []struct {
-			ID              int64      `json:"id"`
-			TagName         string     `json:"tag_name"`
-			Name            string     `json:"name"`
-			TargetCommitish string     `json:"target_commitish"`
-			Body            string     `json:"body"`
-			Draft           bool       `json:"draft"`
-			Prerelease      bool       `json:"prerelease"`
-			CreatedAt       *time.Time `json:"created_at"`
-			PublishedAt     *time.Time `json:"published_at"`
-			HTMLURL         string     `json:"html_url"`
-			Assets          []struct {
-				ID                 int64  `json:"id"`
-				Name               string `json:"name"`
-				Label              string `json:"label"`
-				Size               int64  `json:"size"`
-				ContentType        string `json:"content_type"`
-				DownloadCount      int64  `json:"download_count"`
-				Digest             string `json:"digest"`
-				BrowserDownloadURL string `json:"browser_download_url"`
-			} `json:"assets"`
+		var raw struct {
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+			Data struct {
+				Repository *struct {
+					Refs struct {
+						Nodes []struct {
+							Name   string          `json:"name"`
+							Target githubTagObject `json:"target"`
+						} `json:"nodes"`
+						PageInfo struct {
+							HasNextPage bool   `json:"hasNextPage"`
+							EndCursor   string `json:"endCursor"`
+						} `json:"pageInfo"`
+					} `json:"refs"`
+				} `json:"repository"`
+			} `json:"data"`
 		}
-		endpoint := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/releases"
-		if err := p.json(ctx, token, http.MethodGet, endpoint, query, nil, &rows); err != nil {
-			return ReleasePage{}, err
+		tagQuery := strings.Join([]string{
+			"query($owner: String!, $name: String!, $first: Int!, $after: String) {",
+			"  repository(owner: $owner, name: $name) {",
+			"    refs(refPrefix: \"refs/tags/\", first: $first, after: $after, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {",
+			"      nodes {",
+			"        name",
+			"        target {",
+			"          __typename oid",
+			"          ... on Commit { committedDate }",
+			"          ... on Tag {",
+			"            message tagger { date }",
+			"            target {",
+			"              __typename oid",
+			"              ... on Commit { committedDate }",
+			"              ... on Tag {",
+			"                message tagger { date }",
+			"                target { __typename oid ... on Commit { committedDate } }",
+			"              }",
+			"            }",
+			"          }",
+			"        }",
+			"      }",
+			"      pageInfo { hasNextPage endCursor }",
+			"    }",
+			"  }",
+			"}",
+		}, "\n")
+		input := map[string]any{
+			"query": tagQuery,
+			"variables": map[string]any{
+				"owner": owner, "name": name, "first": pageSize, "after": cursor,
+			},
 		}
-		for _, row := range rows {
-			name := row.Name
-			if name == "" {
-				name = row.TagName
+		if err := p.json(ctx, token, http.MethodPost, "https://api.github.com/graphql", nil, input, &raw); err != nil {
+			return TagPage{}, err
+		}
+		if len(raw.Errors) > 0 {
+			messages := make([]string, 0, len(raw.Errors))
+			for _, graphError := range raw.Errors {
+				if strings.TrimSpace(graphError.Message) != "" {
+					messages = append(messages, boundedText(graphError.Message, 240))
+				}
 			}
-			state := "published"
-			if row.Draft {
-				state = "draft"
-			} else if row.Prerelease {
-				state = "prerelease"
+			return TagPage{}, fmt.Errorf("%w: GitHub could not list tags: %s", domain.ErrUnavailable, strings.Join(messages, "; "))
+		}
+		if raw.Data.Repository == nil {
+			return TagPage{}, fmt.Errorf("%w: GitHub repository was not found or is not visible to this account", domain.ErrNotFound)
+		}
+		result.HasMore = raw.Data.Repository.Refs.PageInfo.HasNextPage
+		if result.HasMore {
+			result.NextCursor = raw.Data.Repository.Refs.PageInfo.EndCursor
+		}
+		releaseLinks := make(map[string]githubTagRelease)
+		if len(raw.Data.Repository.Refs.Nodes) > 0 {
+			var releases []struct {
+				Name    string `json:"name"`
+				TagName string `json:"tag_name"`
+				HTMLURL string `json:"html_url"`
 			}
-			item := Release{
-				ID: strconv.FormatInt(row.ID, 10), TagName: row.TagName, Name: name,
-				TargetCommitish: row.TargetCommitish, Body: row.Body,
-				Draft: boolPointer(row.Draft), Prerelease: boolPointer(row.Prerelease),
-				State: state, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt,
-				URL: providerDownloadURL(row.HTMLURL), AssetsAvailable: true,
-				Assets: make([]ReleaseAsset, 0, len(row.Assets)),
+			releaseQuery := url.Values{"per_page": {"100"}, "page": {"1"}}
+			if err := p.json(ctx, token, http.MethodGet, "repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/releases", releaseQuery, nil, &releases); err == nil {
+				for _, release := range releases {
+					releaseLinks[release.TagName] = githubTagRelease{
+						Name: release.Name,
+						URL:  providerDownloadURL(release.HTMLURL),
+					}
+				}
 			}
-			for _, asset := range row.Assets {
-				item.Assets = append(item.Assets, ReleaseAsset{
-					ID: strconv.FormatInt(asset.ID, 10), Name: asset.Name, Label: asset.Label,
-					Platform: releasePlatformFromName(asset.Name), PlatformSource: platformSource(asset.Name),
-					Size: int64Pointer(asset.Size), ContentType: asset.ContentType,
-					DownloadCount: int64Pointer(asset.DownloadCount), Digest: asset.Digest,
-					URL: providerDownloadURL(asset.BrowserDownloadURL),
-				})
+		}
+		for _, node := range raw.Data.Repository.Refs.Nodes {
+			if !validRemoteTagName(node.Name) {
+				return TagPage{}, fmt.Errorf("%w: GitHub returned an invalid Git tag name", domain.ErrUnavailable)
+			}
+			item, err := mapGitHubTagNode(repo, node.Name, node.Target)
+			if err != nil {
+				return TagPage{}, err
+			}
+			if release, ok := releaseLinks[node.Name]; ok {
+				item.ReleaseName = release.Name
+				if item.ReleaseName == "" {
+					item.ReleaseName = node.Name
+				}
+				item.ReleaseURL = release.URL
 			}
 			result.Items = append(result.Items, item)
 		}
-		sort.SliceStable(result.Items, func(i, j int) bool {
-			left := result.Items[i].PublishedAt
-			if left == nil {
-				left = result.Items[i].CreatedAt
-			}
-			right := result.Items[j].PublishedAt
-			if right == nil {
-				right = result.Items[j].CreatedAt
-			}
-			if left == nil {
-				return false
-			}
-			if right == nil {
-				return true
-			}
-			return left.After(*right)
-		})
-		result.HasMore = len(rows) == pageSize
 		return result, nil
-
 	case domain.RepositoryProviderGitLab:
 		var rows []struct {
 			TagName         string     `json:"tag_name"`
@@ -271,7 +307,7 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 
 // ListTags returns a bounded provider-backed tag page. It never uses the
 // local simulated RepositoryTag store.
-func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int) (TagPage, error) {
+func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteRepository, page, pageSize int, cursor string) (TagPage, error) {
 	page, pageSize, err := normalizeHubPage(page, pageSize)
 	if err != nil {
 		return TagPage{}, err
@@ -375,84 +411,61 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 	}
 }
 
+type githubTagObject struct {
+	TypeName      string          \`json:"__typename"\`
+	OID           string          \`json:"oid"\`
+	CommittedDate *time.Time      \`json:"committedDate"\`
+	Message       string          \`json:"message"\`
+	Tagger        struct {
+		Date *time.Time \`json:"date"\`
+	} \`json:"tagger"\`
+	Target *githubTagObject \`json:"target"\`
+}
+
+func mapGitHubTagNode(repo RemoteRepository, name string, target githubTagObject) (Tag, error) {
+	item := Tag{
+		Name:       name,
+		ObjectSHA:  target.OID,
+		ObjectType: target.TypeName,
+		URL:        providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(name)),
+	}
+	current := &target
+	for depth := 0; current != nil; depth++ {
+		if depth >= 5 {
+			return Tag{}, fmt.Errorf("%w: Git tag object nesting exceeds the supported limit", domain.ErrUnavailable)
+		}
+		switch current.TypeName {
+		case "Tag":
+			if depth == 0 {
+				item.Kind = "annotated"
+				item.Annotation = current.Message
+				item.CreatedAt = current.Tagger.Date
+			}
+			current = current.Target
+		case "Commit":
+			if item.Kind == "" {
+				item.Kind = "lightweight"
+				item.ObjectSHA = current.OID
+			}
+			item.TargetSHA = current.OID
+			item.ObjectType = "commit"
+			item.CommitCreatedAt = current.CommittedDate
+			current = nil
+		default:
+			item.Kind = "unknown"
+			if item.TargetSHA == "" {
+				item.TargetSHA = current.OID
+			}
+			item.ObjectType = current.TypeName
+			current = nil
+		}
+	}
+	return item, nil
+}
+
 type githubTagRelease struct {
 	Name string
 	URL  string
-}
-
-func (p *Provider) getGitHubTag(ctx context.Context, token string, repo RemoteRepository, owner, repository, name, fallbackSHA string, releaseLinks map[string]githubTagRelease) (Tag, error) {
-	if !validRemoteTagName(name) {
-		return Tag{}, fmt.Errorf("%w: provider returned an invalid Git tag name", domain.ErrUnavailable)
-	}
-	base := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repository)
-	var ref struct {
-		Object struct {
-			SHA  string `json:"sha"`
-			Type string `json:"type"`
-		} `json:"object"`
-	}
-	if err := p.json(ctx, token, http.MethodGet, base+"/git/ref/tags/"+url.PathEscape(name), nil, nil, &ref); err != nil {
-		return Tag{}, err
-	}
-	item := Tag{
-		Name: name, ObjectSHA: ref.Object.SHA, ObjectType: ref.Object.Type,
-		TargetSHA: fallbackSHA,
-		URL:       providerDownloadURL(strings.TrimRight(repo.WebURL, "/") + "/tree/" + url.PathEscape(name)),
-	}
-	switch ref.Object.Type {
-	case "tag":
-		item.Kind = "annotated"
-		objectSHA, currentSHA := ref.Object.SHA, ref.Object.SHA
-		for depth := 0; depth < 5; depth++ {
-			var tagObject struct {
-				Message string `json:"message"`
-				Tagger  struct {
-					Date *time.Time `json:"date"`
-				} `json:"tagger"`
-				Object struct {
-					SHA  string `json:"sha"`
-					Type string `json:"type"`
-				} `json:"object"`
-			}
-			if err := p.json(ctx, token, http.MethodGet, base+"/git/tags/"+url.PathEscape(currentSHA), nil, nil, &tagObject); err != nil {
-				return Tag{}, err
-			}
-			if depth == 0 {
-				item.Annotation, item.CreatedAt = tagObject.Message, tagObject.Tagger.Date
-			}
-			currentSHA = tagObject.Object.SHA
-			if tagObject.Object.Type != "tag" {
-				item.TargetSHA, item.ObjectSHA, item.ObjectType = currentSHA, objectSHA, tagObject.Object.Type
-				break
-			}
-			if depth == 4 {
-				return Tag{}, fmt.Errorf("%w: Git tag object nesting exceeds the supported limit", domain.ErrUnavailable)
-			}
-		}
-	case "commit":
-		item.Kind, item.TargetSHA = "lightweight", ref.Object.SHA
-		var commit struct {
-			Commit struct {
-				Committer struct {
-					Date *time.Time `json:"date"`
-				} `json:"committer"`
-			} `json:"commit"`
-		}
-		if err := p.json(ctx, token, http.MethodGet, base+"/commits/"+url.PathEscape(item.TargetSHA), nil, nil, &commit); err != nil {
-			return Tag{}, err
-		}
-		item.CommitCreatedAt = commit.Commit.Committer.Date
-	default:
-		item.Kind = "unknown"
-	}
-	if release, ok := releaseLinks[name]; ok {
-		item.ReleaseName = release.Name
-		if item.ReleaseName == "" {
-			item.ReleaseName = name
-		}
-		item.ReleaseURL = release.URL
-	}
-	return item, nil
 }
 
 func (p *Provider) CompareTags(ctx context.Context, token string, repo RemoteRepository, from, to string) (TagComparison, error) {
