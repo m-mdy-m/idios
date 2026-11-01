@@ -376,6 +376,8 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /api/repositories/{ref}/git/stage", s.stageLocalGitPaths)
 	mux.HandleFunc("POST /api/repositories/{ref}/git/commits", s.createLocalGitCommit)
 	mux.HandleFunc("GET /api/repositories/{ref}/git/log", s.getLocalGitLog)
+	mux.HandleFunc("GET /api/repositories/{ref}/git/tags", s.getLocalGitTags)
+	mux.HandleFunc("POST /api/repositories/{ref}/git/tags", s.createLocalGitTag)
 	mux.HandleFunc("GET /api/repositories/{ref}/git/diff", s.getLocalGitDiff)
 	mux.HandleFunc("GET /api/repositories/{ref}", s.getRepository)
 	mux.HandleFunc("GET /api/repositories/{ref}/branches", s.getRepositoryBranches)
