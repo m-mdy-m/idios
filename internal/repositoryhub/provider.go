@@ -159,8 +159,9 @@ type Release struct {
 	Name            string         `json:"name"`
 	TargetCommitish string         `json:"target_commitish,omitempty"`
 	Body            string         `json:"body,omitempty"`
-	Draft           bool           `json:"draft"`
-	Prerelease      bool           `json:"prerelease"`
+	Draft           *bool          `json:"draft,omitempty"`
+	Prerelease      *bool          `json:"prerelease,omitempty"`
+	State           string         `json:"state"`
 	CreatedAt       *time.Time     `json:"created_at,omitempty"`
 	PublishedAt     *time.Time     `json:"published_at,omitempty"`
 	URL             string         `json:"url,omitempty"`
@@ -985,7 +986,7 @@ func (p *Provider) GetRepository(ctx context.Context, token, externalID, fullPat
 		} else if access >= 30 {
 			permission = "write"
 		}
-		capabilities := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read"}
+		capabilities := []string{"code.read", "branches.read", "commits.read", "issues.read", "changes.read", "releases.read", "tags.read", "tags.compare"}
 		if access >= 20 {
 			capabilities = append(capabilities, "issues.write")
 		}
