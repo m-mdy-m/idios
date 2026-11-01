@@ -141,16 +141,16 @@ type FeatureAvailability struct {
 }
 
 type ReleaseAsset struct {
-	ID              string `json:"id,omitempty"`
-	Name            string `json:"name"`
-	Label           string `json:"label,omitempty"`
-	Platform        string `json:"platform,omitempty"`
-	PlatformSource  string `json:"platform_source,omitempty"`
-	Size            *int64 `json:"size,omitempty"`
-	ContentType     string `json:"content_type,omitempty"`
-	DownloadCount   *int64 `json:"download_count,omitempty"`
-	Digest          string `json:"digest,omitempty"`
-	URL             string `json:"url,omitempty"`
+	ID             string `json:"id,omitempty"`
+	Name           string `json:"name"`
+	Label          string `json:"label,omitempty"`
+	Platform       string `json:"platform,omitempty"`
+	PlatformSource string `json:"platform_source,omitempty"`
+	Size           *int64 `json:"size,omitempty"`
+	ContentType    string `json:"content_type,omitempty"`
+	DownloadCount  *int64 `json:"download_count,omitempty"`
+	Digest         string `json:"digest,omitempty"`
+	URL            string `json:"url,omitempty"`
 }
 
 type Release struct {
@@ -170,42 +170,42 @@ type Release struct {
 }
 
 type ReleasePage struct {
-	Items        []Release          `json:"items"`
-	Page         int                `json:"page"`
-	HasMore      bool               `json:"has_more"`
+	Items        []Release           `json:"items"`
+	Page         int                 `json:"page"`
+	HasMore      bool                `json:"has_more"`
 	Availability FeatureAvailability `json:"availability"`
 }
 
 type Tag struct {
-	Name             string     `json:"name"`
-	Kind             string     `json:"kind"`
-	ObjectSHA        string     `json:"object_sha,omitempty"`
-	ObjectType       string     `json:"object_type,omitempty"`
-	TargetSHA        string     `json:"target_sha,omitempty"`
-	Annotation       string     `json:"annotation,omitempty"`
-	CreatedAt        *time.Time `json:"created_at,omitempty"`
-	CommitCreatedAt  *time.Time `json:"commit_created_at,omitempty"`
-	Protected        *bool      `json:"protected,omitempty"`
-	ReleaseName      string     `json:"release_name,omitempty"`
-	ReleaseURL       string     `json:"release_url,omitempty"`
-	URL              string     `json:"url,omitempty"`
+	Name            string     `json:"name"`
+	Kind            string     `json:"kind"`
+	ObjectSHA       string     `json:"object_sha,omitempty"`
+	ObjectType      string     `json:"object_type,omitempty"`
+	TargetSHA       string     `json:"target_sha,omitempty"`
+	Annotation      string     `json:"annotation,omitempty"`
+	CreatedAt       *time.Time `json:"created_at,omitempty"`
+	CommitCreatedAt *time.Time `json:"commit_created_at,omitempty"`
+	Protected       *bool      `json:"protected,omitempty"`
+	ReleaseName     string     `json:"release_name,omitempty"`
+	ReleaseURL      string     `json:"release_url,omitempty"`
+	URL             string     `json:"url,omitempty"`
 }
 
 type TagPage struct {
-	Items        []Tag              `json:"items"`
-	Page         int                `json:"page"`
-	HasMore      bool               `json:"has_more"`
+	Items        []Tag               `json:"items"`
+	Page         int                 `json:"page"`
+	HasMore      bool                `json:"has_more"`
 	Availability FeatureAvailability `json:"availability"`
 }
 
 type TagCompareCommit struct {
-	SHA        string     `json:"sha"`
-	Title      string     `json:"title,omitempty"`
-	Message    string     `json:"message,omitempty"`
-	Author     string     `json:"author,omitempty"`
-	Committer  string     `json:"committer,omitempty"`
+	SHA         string     `json:"sha"`
+	Title       string     `json:"title,omitempty"`
+	Message     string     `json:"message,omitempty"`
+	Author      string     `json:"author,omitempty"`
+	Committer   string     `json:"committer,omitempty"`
 	CommittedAt *time.Time `json:"committed_at,omitempty"`
-	URL        string     `json:"url,omitempty"`
+	URL         string     `json:"url,omitempty"`
 }
 
 type TagCompareFile struct {
@@ -218,18 +218,18 @@ type TagCompareFile struct {
 }
 
 type TagComparison struct {
-	From             string             `json:"from"`
-	To               string             `json:"to"`
-	State            string             `json:"state"`
-	MergeBaseSHA     string             `json:"merge_base_sha,omitempty"`
-	AheadBy          int                `json:"ahead_by"`
-	BehindBy         int                `json:"behind_by"`
-	TotalCommits     int                `json:"total_commits"`
-	Commits          []TagCompareCommit `json:"commits"`
-	Files            []TagCompareFile   `json:"files"`
-	CommitsTruncated bool               `json:"commits_truncated"`
-	FilesTruncated   bool               `json:"files_truncated"`
-	CountsAvailable  bool                 `json:"counts_available"`
+	From             string              `json:"from"`
+	To               string              `json:"to"`
+	State            string              `json:"state"`
+	MergeBaseSHA     string              `json:"merge_base_sha,omitempty"`
+	AheadBy          int                 `json:"ahead_by"`
+	BehindBy         int                 `json:"behind_by"`
+	TotalCommits     int                 `json:"total_commits"`
+	Commits          []TagCompareCommit  `json:"commits"`
+	Files            []TagCompareFile    `json:"files"`
+	CommitsTruncated bool                `json:"commits_truncated"`
+	FilesTruncated   bool                `json:"files_truncated"`
+	CountsAvailable  bool                `json:"counts_available"`
 	Availability     FeatureAvailability `json:"availability"`
 }
 
