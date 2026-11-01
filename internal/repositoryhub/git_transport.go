@@ -237,7 +237,7 @@ func sourceForgeTreePage(ctx context.Context, token string, repo RemoteRepositor
 		}
 		result = TreePage{
 			Items: append([]TreeEntry(nil), entries[start:end]...),
-			Page: page, HasMore: end < len(entries),
+			Page:  page, HasMore: end < len(entries),
 		}
 		return nil
 	})
