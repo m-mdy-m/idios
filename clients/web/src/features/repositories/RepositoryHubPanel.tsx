@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { useNavigate } from 'react-router';
 import {
   ArrowUpRight, Check, FileCode2, GitBranch, GitCommitHorizontal,
-  Link2, LockKeyhole, Pin, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unplug,
+  Link2, LockKeyhole, MoreHorizontal, Pin, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unplug,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type {
@@ -137,6 +137,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [repositoryAlias, setRepositoryAlias] = useState('');
   const [repositoryNote, setRepositoryNote] = useState('');
   const [repositoryPinned, setRepositoryPinned] = useState(false);
+  const [providerSetupOpen, setProviderSetupOpen] = useState(false);
   const [branches, setBranches] = useState<HubBranch[]>([]);
   const [branch, setBranch] = useState('');
   const [tree, setTree] = useState<HubTreeEntry[]>([]);
@@ -345,6 +346,27 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     setFileOriginalContent('');
     setShowDiffPreview(false);
     navigate(`/repositories/remote/${encodeURIComponent(repository.id)}/overview`);
+  }
+
+  async function toggleRepositoryPinned(repository: HubRepository) {
+    await perform(async () => {
+      const preferences = await api.hubRepositoryPreferences(repository.id);
+      await api.saveHubRepositoryPreferences(repository.id, {
+        local_alias: preferences.local_alias || '',
+        private_note: preferences.private_note || '',
+        pinned: !repository.pinned,
+      });
+      await reload();
+    }, repository.pinned ? 'Repository unpinned in this IDIOS workspace.' : 'Repository pinned in this IDIOS workspace.');
+  }
+
+  async function removeRepositoryFromCollection(repository: HubRepository, collectionID: string) {
+    const collection = collections.find((item) => item.id === collectionID);
+    if (!collection) return;
+    await perform(async () => {
+      await api.removeHubCollectionRepository(collectionID, repository.id);
+      await reload();
+    }, `Removed from collection ${collection.name}. The repository remains linked.`);
   }
 
   async function unlinkRepository(repository: HubRepository) {
@@ -641,6 +663,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       </div>
       <div className="hub-heading__actions">
         {standalone && <Button variant="ghost" onClick={() => navigate('/repositories')}>← All repositories</Button>}
+        {!standalone && <Button variant="secondary" onClick={() => setProviderSetupOpen((open) => !open)}>{providerSetupOpen ? 'Hide provider setup' : 'Manage providers'}</Button>}
         <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh</Button>
       </div>
     </div>
@@ -656,7 +679,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
       </div>
     </div>}
 
-    {!selected && !standalone && <div className="hub-setup-grid">
+    {!selected && !standalone && providerSetupOpen && <div className="hub-setup-grid">
       <section className="hub-section">
         <div className="hub-section-heading"><div><h3>Provider connections</h3><p>Use a personal access token or provider bearer token. IDIOS verifies it before saving an encrypted copy.</p></div><Badge>{connections.length} connected</Badge></div>
         <form className="hub-form" onSubmit={connect}>
@@ -709,14 +732,25 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
         {collections.length > 0 && <div className="hub-collection-management">{collections.map((item) => <div key={item.id}><span>{item.name} · {item.repository_count}</span><button type="button" disabled={busy} onClick={() => void deleteCollection(item)} aria-label={`Delete collection ${item.name}`}><Trash2 size={12}/></button></div>)}</div>}
         <div className="hub-provider-groups">
           {providerGroups.map(({ connection, items }) => <section className="hub-provider-group" key={connection.id}>
-            <header><div><strong>{connection.display_name || connection.account_name}</strong><small>{connection.provider.toUpperCase()} · {connection.host}</small></div><Badge tone={connection.status === 'connected' ? 'green' : 'amber'}>{items.length} repos</Badge></header>
+            <header><div><strong>{connection.display_name || connection.account_name}</strong><small>{connection.provider.toUpperCase()} · {connection.host}</small></div><div className="hub-provider-group__badges"><Badge tone={connection.status === 'connected' ? 'green' : 'amber'}>{connection.status}</Badge><Badge>{items.length} repos</Badge></div></header>
             {items.map((item) => <div className="hub-provider-repository" key={item.id}>
               <button type="button" className={selected?.id === item.id ? 'hub-repository-choice is-active' : 'hub-repository-choice'} onClick={() => openRepository(item)}>
                 <span className="hub-repository-provider">{item.pinned ? 'PINNED' : item.visibility || 'REPOSITORY'}</span>
                 <strong>{item.local_alias || item.full_path}</strong>
                 <small>{item.default_branch || 'Default branch unavailable'} · {item.language || item.repository_type}</small>
               </button>
-              <button type="button" className="hub-repository-unlink" disabled={busy} onClick={() => void unlinkRepository(item)} aria-label={`Unlink ${item.full_path} from IDIOS`} title="Unlink from IDIOS"><Unplug size={13}/></button>
+              <details className="hub-repository-menu">
+                <summary aria-label={`Actions for ${item.full_path}`} title="Repository actions"><MoreHorizontal size={15}/></summary>
+                <div className="hub-repository-menu__content">
+                  <button type="button" disabled={busy} onClick={() => void toggleRepositoryPinned(item)}><Pin size={13}/>{item.pinned ? 'Unpin repository' : 'Pin repository'}</button>
+                  {(item.collection_ids ?? []).map((collectionID) => {
+                    const collection = collections.find((entry) => entry.id === collectionID);
+                    if (!collection) return null;
+                    return <button type="button" key={collectionID} disabled={busy} onClick={() => void removeRepositoryFromCollection(item, collectionID)}><Trash2 size={13}/>Remove from {collection.name}</button>;
+                  })}
+                  <button type="button" className="hub-repository-menu__danger" disabled={busy} onClick={() => void unlinkRepository(item)}><Unplug size={13}/>Unlink from IDIOS</button>
+                </div>
+              </details>
             </div>)}
           </section>)}
           {!providerGroups.length && <p className="hub-muted">No linked repositories match these filters.</p>}
