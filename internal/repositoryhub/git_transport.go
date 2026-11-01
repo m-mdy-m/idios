@@ -342,12 +342,18 @@ func sourceForgeCommit(ctx context.Context, token string, repo RemoteRepository,
 			result.SignatureReason = "No cryptographic signature is stored in this Git commit."
 		} else {
 			result.SignatureType = detectCommitSignatureType(signature)
-			if _, verifyErr := runGit(ctx, token, dir, "verify-commit", "--raw", sha); verifyErr == nil {
+			verifyArgs := []string{"verify-commit", "--raw", sha}
+			if result.SignatureType == "SSH" {
+				if allowedSigners := strings.TrimSpace(os.Getenv("IDIOS_SOURCEFORGE_SSH_ALLOWED_SIGNERS_FILE")); allowedSigners != "" {
+					verifyArgs = append([]string{"-c", "gpg.ssh.allowedSignersFile=" + allowedSigners}, verifyArgs...)
+				}
+			}
+			if _, verifyErr := runGit(ctx, token, dir, verifyArgs...); verifyErr == nil {
 				result.SignatureStatus = "verified"
 				result.SignatureReason = "Local Git signature verification succeeded."
 			} else {
 				result.SignatureStatus = "unverified"
-				result.SignatureReason = "Local Git could not verify the commit signature with the configured keyring."
+				result.SignatureReason = "Local Git could not verify the commit signature with the configured keyring or SSH allowed-signers file."
 			}
 		}
 
