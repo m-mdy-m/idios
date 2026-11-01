@@ -18,6 +18,7 @@ import type {
   Repository,
   Branch, CompletionRecord, Concept, Label, Milestone, PullRequest, ProtocolCatalog, ProtocolOption, LogPayload, Quote, RepositorySetting, RepositoryFile, RepositoryTag, RepositoryTagComparison, ScheduledJob, WorkspacePin, UpdateCheck, UpdateStatus, FeatureCatalog, MonitoringSnapshot, ShelfState, ShelfBook, ShelfBookRelation, ShelfAsk, ShelfAnnotation, ShelfAnnotationRect, ShelfReadingSession,
   HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
+  LocalGitStatus, LocalGitBranch, LocalGitCommit,
   HubDiscoveryResult, HubBranch, HubTreeEntry, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
@@ -195,6 +196,17 @@ export const api = {
   installUpdate: () => request<{ status: string }>('/api/update/install', json('POST')),
   dashboard: () => request<DashboardData>('/api/dashboard'),
   repositories: () => request<Repository[]>('/api/repositories'),
+  localGitStatus: (ref: string) => request<LocalGitStatus>(`/api/repositories/${encodeURIComponent(ref)}/git/status`),
+  initializeLocalGit: (ref: string, body: { branch: string }) => request<{ initialized: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/init`, json('POST', body)),
+  cloneLocalGit: (ref: string, body: { remote_url: string; branch?: string }) => request<{ cloned: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/clone`, json('POST', body)),
+  localGitBranches: (ref: string) => request<LocalGitBranch[]>(`/api/repositories/${encodeURIComponent(ref)}/git/branches`),
+  createLocalGitBranch: (ref: string, body: { name: string; base?: string }) => request<{ created: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/branches`, json('POST', body)),
+  switchLocalGitBranch: (ref: string, body: { name: string }) => request<{ switched: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/checkout`, json('POST', body)),
+  stageLocalGit: (ref: string, body: { paths: string[] }) => request<{ staged: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/stage`, json('POST', body)),
+  createLocalGitCommit: (ref: string, body: { message: string; author_name?: string; author_email?: string }) => request<LocalGitCommit>(`/api/repositories/${encodeURIComponent(ref)}/git/commits`, json('POST', body)),
+  localGitLog: (ref: string, limit = 25) => request<LocalGitCommit[]>(`/api/repositories/${encodeURIComponent(ref)}/git/log?${new URLSearchParams({ limit: String(limit) })}`),
+  localGitDiff: (ref: string, staged = false) => request<{ diff: string }>(`/api/repositories/${encodeURIComponent(ref)}/git/diff?${new URLSearchParams({ staged: String(staged) })}`),
+
   hubStatus: () => request<HubStatus>('/api/hub/status'),
   hubConnections: () => request<HubConnection[]>('/api/hub/connections'),
   hubOAuthStart: (provider: HubProvider, host = '') => {
