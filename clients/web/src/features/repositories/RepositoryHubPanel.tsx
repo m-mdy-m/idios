@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import {
   ArrowUpRight, Check, FileCode2, GitBranch, GitCommitHorizontal,
   Link2, LockKeyhole, Pin, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unplug,
@@ -9,6 +10,7 @@ import type {
   HubIssue, HubProjectRepository, HubProvider, HubRepository, HubRepositoryRelation, HubStatus, HubTreeEntry, Project,
 } from '@/types/idios';
 import { Badge, Button, EmptyState, Field, Modal } from '@/design-system';
+import './RepositoryHubPanel.css';
 
 type RemoteTab = 'Overview' | 'Code' | 'Issues' | 'Change Requests' | 'Commits' | 'Settings';
 
@@ -60,7 +62,47 @@ function providerSettingsURL(repository: HubRepository): string {
   }
 }
 
-export function RepositoryHubPanel() {
+type RepositoryHubPanelProps = {
+  repositoryID?: string;
+  repositoryView?: string;
+  standalone?: boolean;
+};
+
+function remoteTabFromView(view?: string): RemoteTab {
+  switch ((view || 'overview').toLowerCase()) {
+    case 'code': return 'Code';
+    case 'issues': return 'Issues';
+    case 'changes':
+    case 'change-requests': return 'Change Requests';
+    case 'commits': return 'Commits';
+    case 'settings': return 'Settings';
+    default: return 'Overview';
+  }
+}
+
+function remoteViewFromTab(tab: RemoteTab): string {
+  switch (tab) {
+    case 'Code': return 'code';
+    case 'Issues': return 'issues';
+    case 'Change Requests': return 'changes';
+    case 'Commits': return 'commits';
+    case 'Settings': return 'settings';
+    default: return 'overview';
+  }
+}
+
+function syncStateLabel(state: string): string {
+  switch (state) {
+    case 'ok': return 'Up to date';
+    case 'stale': return 'Update available';
+    case 'error': return 'Sync failed';
+    case 'never': return 'Not synced';
+    default: return 'Unknown';
+  }
+}
+
+export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = false }: RepositoryHubPanelProps) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<HubStatus | null>(null);
   const [connections, setConnections] = useState<HubConnection[]>([]);
   const [repositories, setRepositories] = useState<HubRepository[]>([]);
@@ -164,6 +206,24 @@ export function RepositoryHubPanel() {
   useEffect(() => { void reload(); }, [reload]);
 
   useEffect(() => {
+    if (!standalone || !repositoryID) {
+      if (!standalone) {
+        setSelected(null);
+        setTab('Overview');
+      }
+      return;
+    }
+    const match = repositories.find((item) => item.id === repositoryID);
+    if (match) {
+      setSelected((current) => current?.id === match.id ? current : match);
+      setTab(remoteTabFromView(repositoryView));
+    } else if (!loading) {
+      setSelected(null);
+      setError('This linked repository is no longer available in this IDIOS workspace.');
+    }
+  }, [standalone, repositoryID, repositoryView, repositories, loading]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connectedProvider = params.get('hub_connected');
     const callbackError = params.get('hub_error');
@@ -255,6 +315,11 @@ export function RepositoryHubPanel() {
         .some((value) => (value ?? '').toLowerCase().includes(query))));
   }, [repositories, collectionFilter, pinnedOnly, repositorySearch, repositoryProviderFilter]);
 
+  const providerGroups = useMemo(() => connections.map((connection) => ({
+    connection,
+    items: filteredRepositories.filter((item) => item.connection_id === connection.id),
+  })).filter((group) => group.items.length > 0), [connections, filteredRepositories]);
+
   const filteredIssues = useMemo(() => {
     const query = issueSearch.trim().toLowerCase();
     return issues.filter((item) => {
@@ -271,6 +336,37 @@ export function RepositoryHubPanel() {
     try { await action(); if (success) setNotice(success); }
     catch (err) { setError(messageFrom(err)); }
     finally { setBusy(false); }
+  }
+
+  function openRepository(repository: HubRepository) {
+    setSelected(repository);
+    setTab('Overview');
+    setFile(null);
+    setFileOriginalContent('');
+    setShowDiffPreview(false);
+    navigate(`/repositories/remote/${encodeURIComponent(repository.id)}/overview`);
+  }
+
+  async function unlinkRepository(repository: HubRepository) {
+    const confirmed = window.confirm(
+      `Unlink ${repository.full_path} from IDIOS? This removes its local Hub link and cached provider metadata. It does not delete the upstream repository or a separate local Git working copy.`,
+    );
+    if (!confirmed) return;
+    await perform(async () => {
+      await api.unlinkHubRepository(repository.id);
+      if (selected?.id === repository.id) setSelected(null);
+      await reload();
+    }, 'Repository unlinked from this IDIOS workspace. The upstream repository was not changed.');
+  }
+
+  async function copyCloneURL(value: string, kind: 'HTTPS' | 'SSH') {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${kind} clone URL copied.`);
+      setError('');
+    } catch {
+      setError('Clipboard access is unavailable. Select and copy the clone URL manually.');
+    }
   }
 
   async function startOAuth() {
@@ -537,10 +633,16 @@ export function RepositoryHubPanel() {
   const otherRepositories = repositories.filter((item) => item.id !== selected?.id);
   const selectedCollectionIDs = selected?.collection_ids ?? [];
 
-  return <div className="hub-workspace">
+  return <div className={standalone ? 'hub-workspace hub-workspace--standalone' : 'hub-workspace'}>
     <div className="hub-heading">
-      <p className="hub-heading__context">REMOTE SOURCES <span>·</span> SELECTIVE LINKING</p>
-      <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh status</Button>
+      <div>
+        <p className="hub-heading__context">{standalone ? selected?.provider.toUpperCase() || 'REMOTE REPOSITORY' : 'REMOTE SOURCES · PROVIDER WORKSPACES'}</p>
+        {standalone && <strong className="hub-heading__title">{selected?.local_alias || selected?.full_path || 'Repository'}</strong>}
+      </div>
+      <div className="hub-heading__actions">
+        {standalone && <Button variant="ghost" onClick={() => navigate('/repositories')}>← All repositories</Button>}
+        <Button variant="secondary" onClick={() => void reload()} loading={loading}><RefreshCw size={14}/> Refresh</Button>
+      </div>
     </div>
 
     {error && <div className="notice notice--error" role="alert">{error}</div>}
@@ -554,7 +656,7 @@ export function RepositoryHubPanel() {
       </div>
     </div>}
 
-    {!selected && <div className="hub-setup-grid">
+    {!selected && !standalone && <div className="hub-setup-grid">
       <section className="hub-section">
         <div className="hub-section-heading"><div><h3>Provider connections</h3><p>Use a personal access token or provider bearer token. IDIOS verifies it before saving an encrypted copy.</p></div><Badge>{connections.length} connected</Badge></div>
         <form className="hub-form" onSubmit={connect}>
@@ -571,7 +673,10 @@ export function RepositoryHubPanel() {
         {connections.length > 0 && <div className="hub-connections-list">{connections.map((item) => <div className="hub-connection-row" key={item.id}>
           <div><strong>{item.display_name || item.account_name}</strong><span>{item.provider} · {item.host} · {item.account_name}</span></div>
           <Badge tone={item.status === 'connected' ? 'green' : 'amber'}>{item.status}</Badge>
-          <Button variant="ghost" disabled={busy} onClick={() => void perform(async () => { await api.deleteHubConnection(item.id); await reload(); }, 'Provider disconnected and its linked repositories removed locally.')}><Unplug size={13}/> Disconnect</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => {
+            const confirmed = window.confirm(`Disconnect ${item.display_name || item.account_name} from IDIOS? Its saved credentials and linked remote references will be removed from this workspace. This does not delete upstream repositories or separate local Git working copies.`);
+            if (confirmed) void perform(async () => { await api.deleteHubConnection(item.id); await reload(); }, 'Provider disconnected. Upstream repositories and local Git working copies were not deleted.');
+          }}><Unplug size={13}/> Disconnect</Button>
         </div>)}</div>}
       </section>
 
@@ -595,20 +700,26 @@ export function RepositoryHubPanel() {
       </section>
     </div>}
 
-    {repositories.length > 0 && <div className="hub-browser">
+    {repositories.length > 0 && (standalone || !loading) && <div className={standalone ? 'hub-browser hub-browser--standalone' : 'hub-browser'}>
       <aside className="hub-sidebar">
-        <div className="hub-section-heading"><div><h3>Linked repositories</h3><p>{repositories.length} remote workspaces</p></div><Badge>{repositories.filter((item) => item.pinned).length} pinned</Badge></div>
-        <div className="hub-work-item hub-search-row"><Field label="Search repositories"><input value={repositorySearch} onChange={(event) => setRepositorySearch(event.target.value)} placeholder="name, namespace, description or host" /></Field><Field label="Provider"><select value={repositoryProviderFilter} onChange={(event) => setRepositoryProviderFilter(event.target.value as HubProvider | 'all')}><option value="all">All providers</option><option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="sourceforge">SourceForge</option></select></Field></div>
+        <div className="hub-section-heading"><div><h3>Providers</h3><p>{connections.length} accounts · {repositories.length} linked repositories</p></div><Badge>{repositories.filter((item) => item.pinned).length} pinned</Badge></div>
+        <div className="hub-work-item hub-search-row"><Field label="Search repositories"><input value={repositorySearch} onChange={(event) => setRepositorySearch(event.target.value)} placeholder="Search name, owner or description" /></Field><Field label="Provider"><select value={repositoryProviderFilter} onChange={(event) => setRepositoryProviderFilter(event.target.value as HubProvider | 'all')}><option value="all">All providers</option><option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="sourceforge">SourceForge</option></select></Field></div>
         <Field label="Collection"><select value={collectionFilter} onChange={(event) => setCollectionFilter(event.target.value)}><option value="">All collections</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.repository_count})</option>)}</select></Field>
         <label className="hub-checkbox"><input type="checkbox" checked={pinnedOnly} onChange={(event) => setPinnedOnly(event.target.checked)}/><Pin size={13}/> Pinned only</label>
         {collections.length > 0 && <div className="hub-collection-management">{collections.map((item) => <div key={item.id}><span>{item.name} · {item.repository_count}</span><button type="button" disabled={busy} onClick={() => void deleteCollection(item)} aria-label={`Delete collection ${item.name}`}><Trash2 size={12}/></button></div>)}</div>}
-        <div className="hub-repository-list">
-          {filteredRepositories.map((item) => <button key={item.id} type="button" className={selected?.id === item.id ? 'hub-repository-choice is-active' : 'hub-repository-choice'} onClick={() => { setSelected(item); setTab('Overview'); setFile(null); setFileOriginalContent(''); setShowDiffPreview(false); }}>
-            <span className="hub-repository-provider">{item.provider.toUpperCase()}{item.pinned ? ' · PINNED' : ''}</span>
-            <strong>{item.local_alias || item.full_path}</strong>
-            <small>{item.host} · {item.default_branch || 'default branch unknown'}</small>
-          </button>)}
-          {!filteredRepositories.length && <p className="hub-muted">No linked remote repositories in this view.</p>}
+        <div className="hub-provider-groups">
+          {providerGroups.map(({ connection, items }) => <section className="hub-provider-group" key={connection.id}>
+            <header><div><strong>{connection.display_name || connection.account_name}</strong><small>{connection.provider.toUpperCase()} · {connection.host}</small></div><Badge tone={connection.status === 'connected' ? 'green' : 'amber'}>{items.length} repos</Badge></header>
+            {items.map((item) => <div className="hub-provider-repository" key={item.id}>
+              <button type="button" className={selected?.id === item.id ? 'hub-repository-choice is-active' : 'hub-repository-choice'} onClick={() => openRepository(item)}>
+                <span className="hub-repository-provider">{item.pinned ? 'PINNED' : item.visibility || 'REPOSITORY'}</span>
+                <strong>{item.local_alias || item.full_path}</strong>
+                <small>{item.default_branch || 'Default branch unavailable'} · {item.language || item.repository_type}</small>
+              </button>
+              <button type="button" className="hub-repository-unlink" disabled={busy} onClick={() => void unlinkRepository(item)} aria-label={`Unlink ${item.full_path} from IDIOS`} title="Unlink from IDIOS"><Unplug size={13}/></button>
+            </div>)}
+          </section>)}
+          {!providerGroups.length && <p className="hub-muted">No linked repositories match these filters.</p>}
         </div>
         <form className="hub-create-collection" onSubmit={createCollection}>
           <label className="hub-field-label">New collection</label>
@@ -626,17 +737,37 @@ export function RepositoryHubPanel() {
           </div>
           <div className="hub-repository-header__actions"><Button variant="secondary" disabled={busy} onClick={() => void perform(async () => { const updated = await api.syncHubRepository(selected.id); await reload(); setSelected(updated); }, 'Repository metadata synchronized.') }><RefreshCw size={13}/> Sync metadata</Button></div>
           <div className="hub-repository-meta"><span>{selected.permission || 'Permission unknown'}</span><span>{selected.default_branch || 'Default branch unknown'}</span><span>{selected.sync_state}</span><span>{selected.open_issue_count} open issues</span></div>
-          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => setTab(item)}>{item}</button>)}</nav>
+          <nav className="hub-tabs" aria-label="Remote repository views">{(['Overview','Code','Issues','Change Requests','Commits','Settings'] as RemoteTab[]).map((item) => <button key={item} type="button" className={tab === item ? 'is-active' : ''} onClick={() => {
+            setTab(item);
+            if (standalone && selected) navigate(`/repositories/remote/${encodeURIComponent(selected.id)}/${remoteViewFromTab(item)}`);
+          }}>{item}</button>)}</nav>
 
           {tab === 'Overview' && <section className="hub-overview">
-            <div className="hub-overview-grid">
-              <article className="hub-work-item"><strong>Repository identity</strong><p><code>{selected.provider} · {selected.host}/{selected.full_path}</code></p><small>{selected.repository_type || 'Remote repository'} · {selected.visibility || 'visibility unavailable'}</small></article>
-              <article className="hub-work-item"><strong>Default branch</strong><p><code>{selected.default_branch || 'Not reported'}</code></p><small>Permission: {selected.permission || 'unknown'}</small></article>
-              <article className="hub-work-item"><strong>Remote work</strong><p>{selected.open_issue_count} open issues · {selected.open_change_request_count} open change requests</p><small>Counts are supplied by the provider when available</small></article>
-              <article className="hub-work-item"><strong>Synchronization</strong><p>{selected.sync_state}</p><small>{selected.last_synced_at ? `Last synced ${new Date(selected.last_synced_at).toLocaleString()}` : 'No successful metadata sync recorded yet'}</small></article>
+            <div className="hub-overview-hero">
+              <div><p className="eyebrow">{selected.provider.toUpperCase()} · {selected.visibility || 'REMOTE REPOSITORY'}</p><h3>{selected.local_alias || selected.full_path}</h3><p>{selected.description || 'No description provided by the provider.'}</p></div>
+              <a href={selected.web_url} target="_blank" rel="noreferrer" className="button button--secondary">Open provider <ArrowUpRight size={13}/></a>
             </div>
-            <div className="hub-work-item"><strong>Description</strong><p>{selected.description || 'No description provided by the provider.'}</p><small>{selected.language ? `Primary language: ${selected.language}` : 'Primary language not reported'}</small></div>
-            <div className="hub-work-item"><strong>Clone</strong><p><code>{selected.clone_url || 'HTTPS clone URL unavailable'}</code></p>{selected.clone_ssh_url && <p><code>{selected.clone_ssh_url}</code></p>}<div className="hub-item-actions"><Button variant="secondary" disabled={!selected.clone_url} onClick={() => void navigator.clipboard.writeText(selected.clone_url || '')}>Copy HTTPS clone URL</Button>{selected.clone_ssh_url && <Button variant="secondary" onClick={() => void navigator.clipboard.writeText(selected.clone_ssh_url || '')}>Copy SSH clone URL</Button>}</div></div>
+            <div className="hub-overview-metrics">
+              <article><span>Default branch</span><strong><GitBranch size={14}/>{selected.default_branch || 'Unavailable'}</strong><small>{selected.permission ? `Permission: ${selected.permission}` : 'Permission not reported'}</small></article>
+              <article><span>Open issues</span><strong>{selected.capabilities.includes('issues.read') ? selected.open_issue_count : '—'}</strong><small>{selected.capabilities.includes('issues.read') ? 'Reported by provider' : 'Not supported by this connection'}</small></article>
+              <article><span>Change requests</span><strong>{selected.capabilities.includes('changes.read') ? selected.open_change_request_count : '—'}</strong><small>{selected.capabilities.includes('changes.read') ? 'Reported by provider' : 'Not supported by this connection'}</small></article>
+              <article><span>Synchronization</span><strong><Badge tone={selected.sync_state === 'ok' ? 'green' : selected.sync_state === 'error' ? 'red' : selected.sync_state === 'stale' ? 'amber' : 'neutral'}>{syncStateLabel(selected.sync_state)}</Badge></strong><small>{selected.last_synced_at ? `Last synced ${new Date(selected.last_synced_at).toLocaleString()}` : 'No successful sync recorded'}</small></article>
+            </div>
+            <section className="hub-overview-description">
+              <div><span>Description</span><p>{selected.description || 'No description provided by the provider.'}</p></div>
+              <div><span>Repository</span><code>{selected.full_path}</code></div>
+              <div><span>Host</span><code>{selected.host}</code></div>
+              <div><span>Primary language</span><strong>{selected.language || 'Not reported'}</strong></div>
+              <div><span>Repository visibility</span><strong>{selected.visibility || 'Not reported'}</strong></div>
+              <div><span>Last metadata update</span><strong>{selected.last_synced_at ? new Date(selected.last_synced_at).toLocaleString() : 'Not synced yet'}</strong></div>
+            </section>
+            <section className="hub-overview-clone">
+              <div><strong>Clone repository</strong><p>Use the URL with a local Git client or copy it for another device.</p></div>
+              <div className="hub-overview-clone__actions">
+                {selected.clone_url ? <Button variant="secondary" onClick={() => void copyCloneURL(selected.clone_url || '', 'HTTPS')}>Copy HTTPS URL</Button> : <span>HTTPS URL unavailable</span>}
+                {selected.clone_ssh_url ? <Button variant="secondary" onClick={() => void copyCloneURL(selected.clone_ssh_url || '', 'SSH')}>Copy SSH URL</Button> : <span>SSH URL unavailable</span>}
+              </div>
+            </section>
           </section>}
 
           {tab === 'Code' && !supports('code.read') && <div className="hub-provider-limitation"><GitBranch size={24}/><h4>Remote code browser unavailable</h4><p>{selected.provider === 'sourceforge' ? 'SourceForge Allura does not expose a REST tree/file API. Use the repository clone endpoint with Git for checkout, branches, commits, and pushes.' : 'This connection does not have permission to read repository code.'}</p>{selected.clone_url && <a href={selected.clone_url}>{selected.clone_url}</a>}</div>}
@@ -796,7 +927,7 @@ export function RepositoryHubPanel() {
         </>}
       </section>
     </div>}
-    {repositories.length === 0 && <div className="hub-empty-workspace">
+    {repositories.length === 0 && !loading && !standalone && <div className="hub-empty-workspace">
       <GitBranch size={19}/>
       <div><strong>No remote repositories linked</strong><p>Connect a provider, search its repositories, then choose Link. Nothing is added until you explicitly select it.</p></div>
     </div>}
