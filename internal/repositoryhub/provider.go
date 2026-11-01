@@ -195,6 +195,7 @@ type TagPage struct {
 	Items        []Tag               `json:"items"`
 	Page         int                 `json:"page"`
 	HasMore      bool                `json:"has_more"`
+	NextCursor   string              `json:"next_cursor,omitempty"`
 	Availability FeatureAvailability `json:"availability"`
 }
 
