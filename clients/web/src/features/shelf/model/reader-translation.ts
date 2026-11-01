@@ -386,3 +386,14 @@ export function parseReaderTranslation(raw: string, sourceText: string): ReaderT
     return partial ? { ...fallback, translation: partial, segments: [{ source: sourceText.trim(), translation: partial }] } : fallback;
   }
 }
+
+export type MixedDirectionPart = {
+  text: string;
+  direction: 'ltr' | 'inherit';
+};
+
+/** Split embedded Latin words and Western numerals from RTL prose for bidi isolation. */
+export function splitMixedDirectionText(value: string): MixedDirectionPart[] {
+  const parts = value.split(/([A-Za-z][A-Za-z0-9_’'–—-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_’'–—-]*)*|[0-9]+(?:[.,:/-][0-9]+)*)/g).filter(Boolean);
+  return parts.map((text) => ({ text, direction: /^[A-Za-z0-9]/.test(text) ? 'ltr' : 'inherit' }));
+}
