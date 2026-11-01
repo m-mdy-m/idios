@@ -17,7 +17,7 @@ func TestGitHubListReleasesMapsPublishedReleaseAndAssetMetadata(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer ghp_test" {
 			t.Errorf("missing GitHub authorization")
 		}
-		if r.URL.Path != "/repos/acme/app/releases" || r.URL.Query().Get("per_page") != "3" || r.URL.Query().Get("page") != "1" {
+		if r.URL.Path != "/repos/acme/app/releases" || r.URL.Query().Get("per_page") != "2" || r.URL.Query().Get("page") != "1" {
 			t.Errorf("unexpected release request: %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
@@ -101,6 +101,9 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/acme/app/tags":
+			if r.URL.Query().Get("per_page") != "3" || r.URL.Query().Get("page") != "1" {
+				t.Errorf("unexpected GitHub tag pagination: %s", r.URL.RawQuery)
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{"name": "v2.0", "commit": map[string]any{"sha": "commit-two"}},
 				{"name": "v1.0", "commit": map[string]any{"sha": "tag-object-one"}},
