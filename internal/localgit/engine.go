@@ -495,7 +495,7 @@ func (e *CLIEngine) Tags(ctx context.Context, directory string) ([]Tag, error) {
 	if !e.isWorktree(ctx, directory) {
 		return []Tag{}, nil
 	}
-	format := "%(refname:short)%x09%(objectname)%x09%(objecttype)%x09%(*objectname)%x09%(contents:subject)"
+	format := "%(refname:short)%09%(objectname)%09%(objecttype)%09%(*objectname)%09%(contents:subject)"
 	output, err := e.run(ctx, directory, "for-each-ref", "--format="+format, "refs/tags")
 	if err != nil {
 		return nil, err
