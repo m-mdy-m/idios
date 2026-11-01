@@ -316,7 +316,8 @@ assert.ok(readerSource.includes('learningAnalysisSequenceRef.current !== request
 assert.ok(readerSource.includes('learningAnalysisSequenceRef.current += 1'), 'refresh must invalidate in-flight learning analysis for the same page key');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
 assert.ok(readerSource.includes('translationJobs.cancel(job.id)'), 'refresh must cancel every stale in-flight page translation');
-assert.ok(readerSource.includes('if (key.startsWith(pageChunkCachePrefix)) translationChunkCache.current.delete(key)'), 'refresh must evict cached chunks for the exact source page');
+assert.ok(readerSource.includes('chunkCachePrefixes.some((prefix) => key.startsWith(prefix))'), 'refresh must evict cached page, grammar and IELTS chunks for the exact source');
+assert.ok(readerSource.includes('`${currentPageTranslationKey}:word:${normalizeTranslationMatch(word)}`'), 'word explanations must be cached against the exact page source');
 assert.ok(readerSource.includes('normalizeReaderSelectionText'));
 assert.ok(companionSource.includes('dir={targetLanguage'));
 assert.ok(companionSource.includes('lang={targetLanguage}'), 'the companion must expose the selected language semantically');
