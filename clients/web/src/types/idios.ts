@@ -555,7 +555,24 @@ export interface HubDiscoveryResult { items: HubDiscoveredRepository[]; page: nu
 export interface HubBranch { name: string; commit_sha: string; protected: boolean; default: boolean }
 export interface HubTreeEntry { path: string; name: string; type: 'tree' | 'blob' | string; size: number; sha?: string; url?: string }
 export interface HubFile { path: string; content: string; sha?: string; last_commit_id?: string; size: number; encoding: string }
-export interface HubCommit { sha: string; message: string; author: string; email?: string; committed_at: string; url?: string }
+export interface HubCommitStats { additions: number; deletions: number; total: number }
+export interface HubCommitFile {
+  path: string; status: string; additions: number; deletions: number;
+  patch?: string; previous_path?: string;
+}
+export interface HubCommitCheck {
+  name: string; status: string; conclusion?: string; description?: string; url?: string;
+  started_at?: string; completed_at?: string;
+}
+export interface HubCommit {
+  sha: string; message: string; author: string; email?: string; authored_at?: string;
+  committer?: string; committer_email?: string; committed_at: string; url?: string;
+  signature_status?: 'verified' | 'unverified' | 'unsigned' | 'unknown' | 'unavailable' | string;
+  signature_reason?: string; signature_type?: string; signature_source?: string; signature_verified_at?: string;
+  checks_available: boolean; checks_state?: string; checks?: HubCommitCheck[];
+  stats?: HubCommitStats; files?: HubCommitFile[]; diff?: string; diff_available: boolean;
+  diff_unavailable_reason?: string;
+}
 export interface HubIssue {
   id: string; number: number; title: string; body: string; state: string;
   author?: string; assignee?: string; labels?: string[]; private?: boolean;
