@@ -136,7 +136,7 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 
 	provider := &Provider{kind: domain.RepositoryProviderGitHub, host: server.URL, base: server.URL, http: server.Client()}
 	repo := RemoteRepository{Provider: domain.RepositoryProviderGitHub, FullPath: "acme/app", WebURL: "https://github.com/acme/app"}
-	page, err := provider.ListTags(context.Background(), "ghp_test", repo, 1, 3)
+	page, err := provider.ListTags(context.Background(), "ghp_test", repo, 1, 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestGitLabListTagsUsesAnnotationMessageAndKeepsObjectSHAUnknown(t *testing.
 
 	provider := &Provider{kind: domain.RepositoryProviderGitLab, host: server.URL, base: server.URL + "/api/v4", http: server.Client()}
 	repo := RemoteRepository{Provider: domain.RepositoryProviderGitLab, ExternalID: "42", WebURL: "https://gitlab.example/group/app"}
-	page, err := provider.ListTags(context.Background(), "glpat_test", repo, 1, 3)
+	page, err := provider.ListTags(context.Background(), "glpat_test", repo, 1, 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}
