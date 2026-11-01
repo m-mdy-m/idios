@@ -430,7 +430,7 @@ func (e *CLIEngine) CreateBranch(ctx context.Context, directory, name, base stri
 	if strings.TrimSpace(base) != "" {
 		args = append(args, base)
 	}
-	_, err := e.run(ctx, directory, args...)
+	_, err = e.run(ctx, directory, args...)
 	return err
 }
 
@@ -446,7 +446,7 @@ func (e *CLIEngine) SwitchBranch(ctx context.Context, directory, name string) er
 	if !e.isWorktree(ctx, directory) {
 		return errors.New("initialize or clone a Git working copy first")
 	}
-	_, err := e.run(ctx, directory, "switch", name)
+	_, err = e.run(ctx, directory, "switch", name)
 	return err
 }
 
@@ -487,7 +487,7 @@ func (e *CLIEngine) Stage(ctx context.Context, directory string, paths []string)
 			args = append(args, path)
 		}
 	}
-	_, err := e.run(ctx, directory, args...)
+	_, err = e.run(ctx, directory, args...)
 	return err
 }
 
@@ -661,7 +661,7 @@ func (e *CLIEngine) CreateTag(ctx context.Context, directory, name, message stri
 	if taggerName == "" || taggerEmail == "" {
 		return errors.New("annotated tags require a Git tagger name and email")
 	}
-	_, err := e.run(ctx, directory, "-c", "user.name="+taggerName, "-c", "user.email="+taggerEmail, "tag", "--annotate", "--message", message, name)
+	_, err = e.run(ctx, directory, "-c", "user.name="+taggerName, "-c", "user.email="+taggerEmail, "tag", "--annotate", "--message", message, name)
 	return err
 }
 
