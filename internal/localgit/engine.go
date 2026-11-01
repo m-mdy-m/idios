@@ -45,14 +45,14 @@ type Branch struct {
 }
 
 type Commit struct {
-	SHA          string `json:"sha"`
-	Author       string `json:"author"`
-	AuthorEmail  string `json:"author_email"`
-	AuthorDate   string `json:"author_date"`
-	Committer    string `json:"committer"`
-	CommitEmail  string `json:"committer_email"`
-	CommitDate   string `json:"commit_date"`
-	Message      string `json:"message"`
+	SHA         string `json:"sha"`
+	Author      string `json:"author"`
+	AuthorEmail string `json:"author_email"`
+	AuthorDate  string `json:"author_date"`
+	Committer   string `json:"committer"`
+	CommitEmail string `json:"committer_email"`
+	CommitDate  string `json:"commit_date"`
+	Message     string `json:"message"`
 }
 
 // Engine is deliberately independent of remote provider adapters. A platform can
@@ -97,9 +97,12 @@ func (e *CLIEngine) run(ctx context.Context, dir string, args ...string) ([]byte
 	// Keep the user's Git identity and credential helpers, but never allow an
 	// inherited repository/index override to redirect a local operation elsewhere.
 	blocked := map[string]bool{
-		"GIT_DIR": true, "GIT_WORK_TREE": true, "GIT_INDEX_FILE": true,
-		"GIT_OBJECT_DIRECTORY": true, "GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
-		"GIT_COMMON_DIR": true,
+		"GIT_DIR":                          true,
+		"GIT_WORK_TREE":                    true,
+		"GIT_INDEX_FILE":                   true,
+		"GIT_OBJECT_DIRECTORY":             true,
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
+		"GIT_COMMON_DIR":                   true,
 	}
 	env := make([]string, 0, len(os.Environ())+2)
 	for _, item := range os.Environ() {
@@ -141,8 +144,9 @@ func absoluteDirectory(path string) (string, error) {
 }
 
 func validateBranchName(ctx context.Context, e *CLIEngine, name string) error {
+	raw := name
 	name = strings.TrimSpace(name)
-	if name == "" || name != strings.TrimSpace(name) || len(name) > 240 {
+	if name == "" || raw != name || len(name) > 240 {
 		return errors.New("a valid branch name is required")
 	}
 	if _, err := e.run(ctx, "", "check-ref-format", "--branch", name); err != nil {
@@ -186,7 +190,7 @@ func (e *CLIEngine) Init(ctx context.Context, directory, branch string) error {
 	return err
 }
 
-var scpRemotePattern = regexp.MustCompile(`^[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+:[^\\s]+$`)
+var scpRemotePattern = regexp.MustCompile(`^[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+:[^[:space:]]+$`)
 
 func validateRemoteURL(raw string) error {
 	raw = strings.TrimSpace(raw)
@@ -285,6 +289,7 @@ func (e *CLIEngine) Status(ctx context.Context, directory string) (Status, error
 		if before, _, ok := strings.Cut(status.Branch, "..."); ok {
 			status.Branch = before
 		}
+		status.Branch = strings.TrimPrefix(status.Branch, "No commits yet on ")
 		if status.Branch == "HEAD (no branch)" {
 			status.Branch = ""
 		}

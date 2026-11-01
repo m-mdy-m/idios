@@ -3,7 +3,8 @@ package application
 import (
 	"context"
 	"fmt"
-	"idios/internal/domain"\n\t"idios/internal/localgit"
+	"idios/internal/domain"
+	"idios/internal/localgit"
 	"idios/internal/ports"
 )
 
@@ -21,6 +22,7 @@ type Service struct {
 	*DemoService
 	*NotesService
 	*RepositoryHubService
+	*LocalGitService
 	*QuotesService
 	*ProfileService
 	*JobsService
@@ -52,6 +54,7 @@ func New(store ports.Store) *Service {
 		DemoService:             &DemoService{store: store},
 		NotesService:            notes,
 		RepositoryHubService:    NewRepositoryHubService(store),
+		LocalGitService:         NewLocalGitService(store, localgit.NewCLIEngine(), DefaultLocalGitWorkspaceRoot()),
 		QuotesService:           &QuotesService{store: store},
 		ProfileService:          &ProfileService{store: store},
 		JobsService:             &JobsService{store: store},
