@@ -1047,6 +1047,13 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                     }}>Retry</button></div>}
                     {detail && <>
                       <section className="hub-commit-detail-section">
+                        <h4>Commit identity</h4>
+                        <div className="hub-commit-provenance-grid">
+                          <div className="hub-commit-provenance-grid__wide"><span>Full SHA</span><code>{detail.sha}</code></div>
+                          <div className="hub-commit-provenance-grid__wide"><span>Full message</span><pre>{detail.message}</pre></div>
+                        </div>
+                      </section>
+                      <section className="hub-commit-detail-section">
                         <h4>Cryptographic signature</h4>
                         <div className="hub-commit-provenance-grid">
                           <div><span>Status</span><strong>{detail.signature_status || 'unknown'}</strong></div>
