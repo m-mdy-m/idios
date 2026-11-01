@@ -70,7 +70,6 @@ func TestOllamaTranslationPayloadDisablesOnlyAdvertisedThinking(t *testing.T) {
 	}
 }
 
-
 type ollamaStreamRoundTripper func(*http.Request) (*http.Response, error)
 
 func (roundTrip ollamaStreamRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
