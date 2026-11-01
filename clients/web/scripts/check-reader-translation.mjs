@@ -238,7 +238,7 @@ assert.ok(architectureContext.includes('interpretation only'));
 assert.ok(buildFaithfulTranslationInstructions('fa').includes('negation'));
 assert.ok(buildFaithfulTranslationInstructions('fa').includes('paragraph boundary'));
 assert.equal(validateTranslationIntegrity(source, valid).valid, true);
-assert.equal(validateTranslationIntegrity(source, { ...valid, segments: [valid.segments[0]!, valid.segments[0]!] }).reason, 'duplicate-segment', 'cached/legacy duplicate source anchors must also fail closed');
+assert.equal(validateTranslationIntegrity(source, { ...valid, segments: [valid.segments[0], valid.segments[0]] }).reason, 'duplicate-segment', 'cached/legacy duplicate source anchors must also fail closed');
 const rawValid = validateRawTranslationAlignment(JSON.stringify({ translation: valid.translation, segments: valid.segments }), source);
 assert.equal(rawValid.valid, true);
 assert.equal(rawValid.verified, true);
