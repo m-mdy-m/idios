@@ -404,6 +404,7 @@ export interface MonitoringSnapshot {
 
 export interface LocalGitStatus {
   available: boolean;
+  path?: string;
   initialized: boolean;
   backend: string;
   branch?: string;

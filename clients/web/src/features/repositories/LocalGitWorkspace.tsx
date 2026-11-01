@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GitBranch, GitCommitHorizontal, GitPullRequest, Plus, RefreshCw, Terminal } from 'lucide-react';
+import { Copy, GitBranch, GitCommitHorizontal, GitPullRequest, Plus, RefreshCw, Terminal } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { LocalGitBranch, LocalGitCommit, LocalGitStatus, Repository } from '@/types/idios';
 import { Badge, Button, EmptyState, Field } from '@/design-system';
@@ -127,6 +127,17 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
     }
   }
 
+  async function copyWorkingDirectory() {
+    if (!status?.path) return;
+    try {
+      await navigator.clipboard.writeText(status.path);
+      setNotice('Working-copy path copied.');
+      setError('');
+    } catch {
+      setError('Clipboard access is unavailable. Select and copy the working-copy path manually.');
+    }
+  }
+
   async function loadDiff(staged: boolean) {
     setError('');
     setDiffStaged(staged);
@@ -167,6 +178,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       </div>
       {error && <div className="notice notice--error" role="alert">{error}</div>}
       {notice && <div className="notice notice--success" role="status">{notice}</div>}
+      {status.path && <div className="local-git-workspace__path"><div><span>Managed working-copy directory</span><code>{status.path}</code></div><Button variant="ghost" onClick={() => void copyWorkingDirectory()}><Copy size={13}/> Copy path</Button></div>}
       <div className="local-git-workspace__setup">
         <section>
           <GitBranch size={19}/>
@@ -205,6 +217,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
     </header>
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {notice && <div className="notice notice--success" role="status">{notice}</div>}
+    {status.path && <div className="local-git-workspace__path"><div><span>Managed working-copy directory</span><code>{status.path}</code></div><Button variant="ghost" onClick={() => void copyWorkingDirectory()}><Copy size={13}/> Copy path</Button></div>}
     <div className="local-git-workspace__summary">
       <div><span>Current branch</span><strong><GitBranch size={14}/>{status.branch || 'Detached HEAD'}</strong></div>
       <div><span>Working tree</span><strong><Badge tone={status.clean ? 'green' : 'amber'}>{status.clean ? 'Clean' : 'Changes present'}</Badge></strong></div>
