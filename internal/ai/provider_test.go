@@ -194,12 +194,11 @@ func TestOllamaStreamRejectsProviderErrorEvent(t *testing.T) {
 	requireOllamaStreamErrorCode(t, err, "provider_request_failed")
 }
 
-
 func TestOllamaStreamCancellationTakesPrecedenceOverGenericReadError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	body := &ollamaStreamErrorBody{
-		data: []byte("{\"message\":{\"content\":\"partial\"}}\n"),
-		err:  io.ErrUnexpectedEOF,
+		data:    []byte("{\"message\":{\"content\":\"partial\"}}\n"),
+		err:     io.ErrUnexpectedEOF,
 		onError: cancel,
 	}
 	provider := newOllamaStreamTestProvider(body)
