@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GitBranch, GitCommitHorizontal, GitCompare, GitPullRequest, Plus, RefreshCw, Terminal } from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, GitPullRequest, Plus, RefreshCw, Terminal } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { LocalGitBranch, LocalGitCommit, LocalGitStatus, Repository } from '@/types/idios';
 import { Badge, Button, EmptyState, Field } from '@/design-system';
