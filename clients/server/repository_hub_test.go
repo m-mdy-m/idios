@@ -198,17 +198,19 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	handler.ServeHTTP(releaseRec, releaseReq)
 	var releasePage struct {
 		Items []struct {
-			TagName string `json:"tag_name"`
-			Name string `json:"name"`
-			State string `json:"state"`
+			TagName     string `json:"tag_name"`
+			Name        string `json:"name"`
+			State       string `json:"state"`
 			PublishedAt string `json:"published_at"`
-			Assets []struct {
-				Name string `json:"name"`
+			Assets      []struct {
+				Name     string `json:"name"`
 				Platform string `json:"platform"`
-				URL string `json:"url"`
+				URL      string `json:"url"`
 			} `json:"assets"`
 		} `json:"items"`
-		Availability struct { Available bool `json:"available"` } `json:"availability"`
+		Availability struct {
+			Available bool `json:"available"`
+		} `json:"availability"`
 	}
 	if releaseRec.Code != http.StatusOK || json.Unmarshal(releaseRec.Body.Bytes(), &releasePage) != nil ||
 		!releasePage.Availability.Available || len(releasePage.Items) != 1 ||
@@ -222,10 +224,10 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	handler.ServeHTTP(tagRec, tagReq)
 	var tagPage struct {
 		Items []struct {
-			Name string `json:"name"`
-			Kind string `json:"kind"`
-			TargetSHA string `json:"target_sha"`
-			Annotation string `json:"annotation"`
+			Name        string `json:"name"`
+			Kind        string `json:"kind"`
+			TargetSHA   string `json:"target_sha"`
+			Annotation  string `json:"annotation"`
 			ReleaseName string `json:"release_name"`
 		} `json:"items"`
 	}
@@ -240,11 +242,18 @@ func TestRepositoryHubConnectDiscoverImportAndReadRemoteBranch(t *testing.T) {
 	compareRec := httptest.NewRecorder()
 	handler.ServeHTTP(compareRec, compareReq)
 	var comparison struct {
-		From string `json:"from"`
-		To string `json:"to"`
-		CountsAvailable bool `json:"counts_available"`
-		Commits []struct { SHA string `json:"sha"`; Committer string `json:"committer"` } `json:"commits"`
-		Files []struct { Path string `json:"path"`; PreviousPath string `json:"previous_path"`; Status string `json:"status"` } `json:"files"`
+		From            string `json:"from"`
+		To              string `json:"to"`
+		CountsAvailable bool   `json:"counts_available"`
+		Commits         []struct {
+			SHA       string `json:"sha"`
+			Committer string `json:"committer"`
+		} `json:"commits"`
+		Files []struct {
+			Path         string `json:"path"`
+			PreviousPath string `json:"previous_path"`
+			Status       string `json:"status"`
+		} `json:"files"`
 	}
 	if compareRec.Code != http.StatusOK || json.Unmarshal(compareRec.Body.Bytes(), &comparison) != nil ||
 		comparison.From != "v1.0" || comparison.To != "v2.0" || comparison.CountsAvailable ||
