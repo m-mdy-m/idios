@@ -168,6 +168,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   const [commitDetailLoading, setCommitDetailLoading] = useState('');
   const [commitDetailErrors, setCommitDetailErrors] = useState<Record<string, string>>({});
   const [latestRelease, setLatestRelease] = useState<HubRelease | null>(null);
+  const [latestReleaseLoading, setLatestReleaseLoading] = useState(false);
   const [latestReleaseAvailability, setLatestReleaseAvailability] = useState<{ available: boolean; state: string; reason?: string } | null>(null);
   const [releases, setReleases] = useState<HubRelease[]>([]);
   const [releasePage, setReleasePage] = useState(1);
@@ -276,19 +277,24 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     if (!selected) {
       setLatestRelease(null);
       setLatestReleaseAvailability(null);
+      setLatestReleaseLoading(false);
       return;
     }
     let active = true;
     setLatestRelease(null);
     setLatestReleaseAvailability(null);
-    if (!selected.capabilities.includes('releases.read')) return () => { active = false; };
+    if (!selected.capabilities.includes('releases.read')) {
+      setLatestReleaseLoading(false);
+      return () => { active = false; };
+    }
+    setLatestReleaseLoading(true);
     void api.hubReleases(selected.id, 1, 1).then((page) => {
       if (!active) return;
-      setLatestRelease(page.items[0] ?? null);
+      setLatestRelease(page.items.find((item) => item.draft !== true) ?? null);
       setLatestReleaseAvailability(page.availability);
     }).catch((err) => {
       if (active) setLatestReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
-    });
+    }).finally(() => { if (active) setLatestReleaseLoading(false); });
     return () => { active = false; };
   }, [selected?.id, selected?.capabilities]);
 
@@ -1039,7 +1045,9 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
                     ? <p className="hub-muted">{latestReleaseAvailability.reason}</p>
                     : latestReleaseAvailability?.state === 'error'
                       ? <p className="hub-muted">{latestReleaseAvailability.reason || 'Latest release could not be loaded.'}</p>
-                      : <p className="hub-muted">No published releases were returned.</p>}
+                      : latestReleaseLoading
+                        ? <p className="hub-muted">Loading latest release…</p>
+                        : <p className="hub-muted">No published releases were returned.</p>}
             </section>
             <section className="hub-overview-description">
               <div><span>Description</span><p>{selected.description || 'No description provided by the provider.'}</p></div>
