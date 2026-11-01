@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ArrowUpRight, Check, ChevronDown, Copy, FileCode2, GitBranch, GitCommitHorizontal,
@@ -109,6 +109,7 @@ function syncStateLabel(state: string): string {
 
 export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = false }: RepositoryHubPanelProps) {
   const navigate = useNavigate();
+  const selectedRepositoryIDRef = useRef<string | null>(null);
   const [status, setStatus] = useState<HubStatus | null>(null);
   const [connections, setConnections] = useState<HubConnection[]>([]);
   const [repositories, setRepositories] = useState<HubRepository[]>([]);
@@ -274,6 +275,10 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
   }, [reload]);
 
   useEffect(() => {
+    selectedRepositoryIDRef.current = selected?.id ?? null;
+  }, [selected?.id]);
+
+  useEffect(() => {
     if (!selected) {
       setLatestRelease(null);
       setLatestReleaseAvailability(null);
@@ -290,7 +295,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     setLatestReleaseLoading(true);
     void api.hubReleases(selected.id, 1, 1).then((page) => {
       if (!active) return;
-      setLatestRelease(page.items.find((item) => item.draft !== true) ?? null);
+      setLatestRelease(page.items[0] ?? null);
       setLatestReleaseAvailability(page.availability);
     }).catch((err) => {
       if (active) setLatestReleaseAvailability({ available: false, state: 'error', reason: messageFrom(err) });
@@ -678,7 +683,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     setReleaseLoading(true);
     try {
       const result = await api.hubReleases(repositoryID, nextPage, 20);
-      if (selected?.id !== repositoryID) return;
+      if (selectedRepositoryIDRef.current !== repositoryID) return;
       setReleases((current) => [...current, ...result.items]);
       setReleasePage(result.page);
       setReleaseHasMore(result.has_more);
@@ -717,7 +722,7 @@ export function RepositoryHubPanel({ repositoryID, repositoryView, standalone = 
     setTagComparison(null);
     try {
       const comparison = await api.hubCompareTags(comparisonRepositoryID, compareFrom, compareTo);
-      if (selected?.id === comparisonRepositoryID) setTagComparison(comparison);
+      if (selectedRepositoryIDRef.current === comparisonRepositoryID) setTagComparison(comparison);
     } catch (err) {
       setTagCompareError(messageFrom(err));
     } finally {
