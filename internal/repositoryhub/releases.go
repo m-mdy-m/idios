@@ -183,10 +183,14 @@ func (p *Provider) ListReleases(ctx context.Context, token string, repo RemoteRe
 			"  }",
 			"}",
 		}, "\n")
+		var after any
+		if cursor != "" {
+			after = cursor
+		}
 		input := map[string]any{
 			"query": tagQuery,
 			"variables": map[string]any{
-				"owner": owner, "name": name, "first": pageSize, "after": cursor,
+				"owner": owner, "name": name, "first": pageSize, "after": after,
 			},
 		}
 		if err := p.json(ctx, token, http.MethodPost, "https://api.github.com/graphql", nil, input, &raw); err != nil {
