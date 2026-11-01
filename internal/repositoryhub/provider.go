@@ -1176,7 +1176,7 @@ func (p *Provider) ListCommits(ctx context.Context, token string, repo RemoteRep
 	}
 }
 
-func (p *Provider) GetCommit(ctx context.Context, token string, repo RemoteRepository, sha string) (Commit, error) {
+func (p *Provider) GetCommit(ctx context.Context, token string, repo RemoteRepository, ref, sha string) (Commit, error) {
 	sha = strings.TrimSpace(sha)
 	if !validCommitSHA(sha) {
 		return Commit{}, fmt.Errorf("%w: a full commit SHA is required", domain.ErrInvalid)
@@ -1187,7 +1187,7 @@ func (p *Provider) GetCommit(ctx context.Context, token string, repo RemoteRepos
 	case domain.RepositoryProviderGitLab:
 		return p.getGitLabCommit(ctx, token, repo, sha)
 	case domain.RepositoryProviderSourceForge:
-		return sourceForgeCommit(ctx, token, repo, repo.DefaultBranch, sha)
+		return sourceForgeCommit(ctx, token, repo, ref, sha)
 	default:
 		return Commit{}, fmt.Errorf("%w: commit details are not available for this provider", domain.ErrUnsupported)
 	}
