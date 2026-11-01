@@ -489,6 +489,31 @@ func TestDiscussionAttemptGetsFreshTimeoutForCorrection(t *testing.T) {
 	}
 }
 
+
+func TestDiscussionAttemptCannotOutliveParentDeadline(t *testing.T) {
+	parentDeadline := time.Now().Add(80 * time.Millisecond)
+	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer cancel()
+	called := false
+	_, err := generateDiscussionAttempt(parent, 2*time.Hour, func(ctx context.Context) (GenerateResponse, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("attempt must retain a bounded deadline")
+		}
+		if deadline.After(parentDeadline) {
+			t.Fatalf("attempt exceeded its caller deadline: got %v, parent %v", deadline, parentDeadline)
+		}
+		called = true
+		return GenerateResponse{Content: "complete"}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("attempt generation was not called")
+	}
+}
+
 func TestDiscussionAgentContextUsesProviderAwareDeadline(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
