@@ -816,4 +816,3 @@ func TestGetCommitRejectsAbbreviatedOrMalformedSHA(t *testing.T) {
 		}
 	}
 }
-
