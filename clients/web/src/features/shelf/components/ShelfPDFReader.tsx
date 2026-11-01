@@ -827,6 +827,10 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
       if (job.bookID === bookID && job.pageNumber === pageNumber && job.status === 'running') translationJobs.cancel(job.id);
     }
     pageTranslationCache.current.delete(currentPageTranslationKey);
+    const pageChunkCachePrefix = `${bookID}:${pageNumber}:${translationTargetLanguage}:${translationModel}:page:${translationSourceIdentity(currentPageText)}:`;
+    for (const key of translationChunkCache.current.keys()) {
+      if (key.startsWith(pageChunkCachePrefix)) translationChunkCache.current.delete(key);
+    }
     pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`);
     pageLearningCache.current.delete(`${currentPageTranslationKey}:ielts`);
     setPageTranslation(null);
