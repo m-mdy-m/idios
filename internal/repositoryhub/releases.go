@@ -453,10 +453,10 @@ func (p *Provider) ListTags(ctx context.Context, token string, repo RemoteReposi
 }
 
 type githubTagObject struct {
-	TypeName      string          `json:"__typename"`
-	OID           string          `json:"oid"`
-	CommittedDate *time.Time      `json:"committedDate"`
-	Message       string          `json:"message"`
+	TypeName      string     `json:"__typename"`
+	OID           string     `json:"oid"`
+	CommittedDate *time.Time `json:"committedDate"`
+	Message       string     `json:"message"`
 	Tagger        struct {
 		Date *time.Time `json:"date"`
 	} `json:"tagger"`
