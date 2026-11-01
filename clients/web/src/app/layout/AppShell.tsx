@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { api } from '@/lib/api';
+import { applyWebTheme } from '@/lib/web-theme';
 import type { AppConfig, DashboardMetrics, FeatureDefinition, ProtocolCommand } from '@/types/idios';
 import { CommandRunner } from '@/features/commands';
 import { activateNotificationAudio, notificationSoundEnabled, playNotificationChime, playPlanReminderSequence, stopPlanReminderSequence } from '@/lib/notification-sound';
@@ -110,7 +111,7 @@ export function AppShell() {
     appConfigRef.current = config;
     setAppConfig(config);
     setCollapsed(config.web.sidebar_collapsed);
-    setTheme('dark');
+    setTheme(applyWebTheme(config));
   }, []);
   useEffect(() => {
     let active = true;
