@@ -289,6 +289,10 @@ const readerSource = await readFile(new URL('../src/features/shelf/components/Sh
 const companionSource = await readFile(new URL('../src/features/shelf/components/ShelfTranslationPanel.tsx', import.meta.url), 'utf8');
 assert.ok(readerSource.includes('translationJobs.subscribe(setTranslationJobSnapshots)'));
 assert.ok(readerSource.includes("requestTranslation(currentPageText, 'page', signal, jobID)"));
+const pageTranslationEffect = readerSource.match(/useEffect\(\(\) => \{\s*if \(!translationOpen \|\| !currentPageText\.trim\(\) \|\| !pdf \|\| !translationModel\) return;[\s\S]*?\n\s*\}, \[([^\]]+)\]\);/);
+assert.ok(pageTranslationEffect, 'the page translation effect must remain discoverable as a focused lifecycle block');
+assert.match(pageTranslationEffect[1], /\btranslationOpen\b/, 'opening the companion after mount must re-run the page effect');
+assert.match(pageTranslationEffect[1], /\bcurrentPageTranslationKey\b/, 'page changes and exact-source changes must re-run the page effect');
 assert.ok(readerSource.includes('translationSourceIdentity(currentPageText)'));
 assert.ok(readerSource.includes('const pageKey = currentPageTranslationKey'), 'learning-analysis cache must share the exact page/source identity');
 assert.ok(readerSource.includes('pageLearningCache.current.delete(`${currentPageTranslationKey}:grammar`)'), 'refresh must invalidate grammar analysis for the current source');
