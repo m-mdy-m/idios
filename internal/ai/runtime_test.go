@@ -917,6 +917,16 @@ func TestDiscussionRepairInstructionDoesNotRequireOpeningSpeakerToAddressPeer(t 
 	if !strings.Contains(peer, "Address one actually completed peer") {
 		t.Fatal("repair should address an actual peer after one completed turn")
 	}
+	chairPeers := []AgentContribution{
+		{AgentID: "reader", AgentName: "Orion · Reader", Status: "completed", Content: "The chapters test the theory across many questions. [source:rawls-page-21]"},
+		{AgentID: "steelman", AgentName: "Atlas · Steelman", Status: "completed", Content: "The conclusions modify the proposed view. [source:rawls-page-21]"},
+	}
+	chairRepair := discussionRepairInstructionWithPeers("missing citation", markers, false, true, true, chairPeers, "discussion-chair")
+	for _, expected := range []string{"ROUND CHAIR CHECKPOINT", "Orion · Reader", "Atlas · Steelman", "The chapters test the theory", "The conclusions modify the proposed view"} {
+		if !strings.Contains(chairRepair, expected) {
+			t.Errorf("round-chair repair prompt omitted %q: %s", expected, chairRepair)
+		}
+	}
 }
 
 func TestDiscussionReviewExcludesFailedEmptyTurns(t *testing.T) {
@@ -925,7 +935,7 @@ func TestDiscussionReviewExcludesFailedEmptyTurns(t *testing.T) {
 		{AgentID: "tutor", AgentName: "Tutor", Status: "failed", Error: &Error{Code: "rejected", Message: "empty"}},
 		{AgentID: "reader", AgentName: "Reader", Status: "completed", Content: "The passage makes a narrow claim.", Warnings: []string{"This contribution lacks an exact source marker; treat its textual claim as unverified."}},
 	}
-	got := discussionReviewMessages(messages, AgentDefinition{Name: "Reviewer"}, 1, turns, false)
+	got := discussionReviewMessages(messages, AgentDefinition{Name: "Reviewer"}, 1, false, false, turns)
 	joined := strings.Join([]string{got[len(got)-1].Content}, "\n")
 	if strings.Contains(joined, "Agent Tutor") || !strings.Contains(joined, "Agent Reader") {
 		t.Fatalf("review context should include valid peer only, got: %s", joined)
@@ -1125,7 +1135,7 @@ func TestDiscussionReviewMessagesRetainEarlyClaimsInCompactLedger(t *testing.T) 
 	previous[0].Content = "ORIGINAL_CLAIM_CANARY: the passage distinguishes institutional rules from personal motives."
 	previous[11].Content = "LATEST_TURN_CANARY: the reviewer challenges the scope of the inference."
 	messages := []Message{{Role: "user", Content: "Review the live discussion."}}
-	got := discussionReviewMessages(messages, AgentDefinition{ID: "tutor", Name: "Sage · Tutor"}, 3, previous, false)
+	got := discussionReviewMessages(messages, AgentDefinition{ID: "tutor", Name: "Sage · Tutor"}, 3, false, false, previous)
 	if len(got) != 2 {
 		t.Fatalf("message count = %d, want original source plus separate bounded review context", len(got))
 	}
@@ -2028,6 +2038,15 @@ func TestDiscussionLogicalForceProblemPreservesTheImportancePreferenceDistinctio
 	actualDowngrade := "Chapters IV–VIII are not central to the theory and can be skipped. [source:rawls-page-21]"
 	if problem := discussionLogicalForceProblem(actualDowngrade, passages); problem == "" {
 		t.Fatal("a direct downgrade of the chapters' importance was accepted")
+	}
+	for _, directDowngrade := range []string{
+		"Chapter VII is not central. [source:rawls-page-21]",
+		"Chapters IV–VIII are not central. [source:rawls-page-21]",
+		"The material appears not central to the book. [source:rawls-page-21]",
+	} {
+		if problem := discussionLogicalForceProblem(directDowngrade, passages); problem == "" {
+			t.Errorf("a direct not-central downgrade was accepted: %q", directDowngrade)
+		}
 	}
 	unrelated := []ContextPassage{{ID: "page-1", Text: "The reader may follow personal preferences when choosing which examples to examine."}}
 	if problem := discussionLogicalForceProblem(bad, unrelated); problem != "" {
