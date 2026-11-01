@@ -1,26 +1,25 @@
-/* IDIOS classic workstation: quiet, text-first, dark-only surfaces. */
-:root,
-:root[data-theme='light'] {
+/* IDIOS classic workstation: quiet, text-first, graphite surfaces. */
+:root {
   color-scheme: dark;
-  --bg: #111214;
-  --bg-elevated: #151618;
-  --surface: #191b1e;
-  --surface-raised: #202226;
-  --surface-hover: #292c30;
-  --surface-subtle: #151719;
-  --text: #e8e2d6;
-  --text-soft: #c8c1b5;
-  --muted: #a19b90;
-  --muted-2: #77736c;
-  --border: #34363a;
-  --border-strong: #4b4d50;
-  --accent: #d8c9a7;
-  --accent-strong: #e7d8b5;
-  --accent-soft: rgb(216 201 167 / 10%);
-  --green: #a9b69c;
-  --amber: #c7ad79;
-  --red: #c78d86;
-  --violet: #b5a8c7;
+  --bg: #101316;
+  --bg-elevated: #151a1e;
+  --surface: #1a2025;
+  --surface-raised: #222a30;
+  --surface-hover: #2a343b;
+  --surface-subtle: #171d22;
+  --text: #e2e8e8;
+  --text-soft: #c0cbca;
+  --muted: #8d9b9a;
+  --muted-2: #657472;
+  --border: #2d3839;
+  --border-strong: #435252;
+  --accent: #91aa9d;
+  --accent-strong: #a9c2b4;
+  --accent-soft: rgb(145 170 157 / 11%);
+  --green: #91b59e;
+  --amber: #9c987d;
+  --red: #c98787;
+  --violet: #a99ebc;
   --radius-sm: 2px;
   --radius: 3px;
   --radius-lg: 4px;
