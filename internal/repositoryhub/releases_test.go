@@ -105,7 +105,7 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "POST /graphql":
 			var input struct {
-				Query string `json:"query"`
+				Query     string `json:"query"`
 				Variables struct {
 					Owner string `json:"owner"`
 					Name  string `json:"name"`
@@ -139,7 +139,7 @@ func TestGitHubListTagsDistinguishesAnnotatedAndLightweightTags(t *testing.T) {
 									"target": map[string]any{
 										"__typename": "Tag", "oid": "tag-object-one",
 										"message": "Annotated version one",
-										"tagger": map[string]any{"date": "2026-08-01T10:00:00Z"},
+										"tagger":  map[string]any{"date": "2026-08-01T10:00:00Z"},
 										"target": map[string]any{
 											"__typename": "Commit", "oid": "commit-one",
 											"committedDate": "2026-07-31T10:00:00Z",
@@ -199,8 +199,8 @@ func TestGitHubCompareTagsMapsCommitIntervalAndChangedFiles(t *testing.T) {
 			"commits": []map[string]any{{
 				"sha": "commit-two", "html_url": "https://github.com/acme/app/commit/commit-two",
 				"commit": map[string]any{
-					"message": "feat: new version",
-					"author": map[string]any{"name": "Alice", "date": "2026-10-01T10:00:00Z"},
+					"message":   "feat: new version",
+					"author":    map[string]any{"name": "Alice", "date": "2026-10-01T10:00:00Z"},
 					"committer": map[string]any{"name": "Bob", "date": "2026-10-01T10:30:00Z"},
 				},
 			}},
@@ -256,7 +256,6 @@ func TestNormalizeHubPageBoundsPagination(t *testing.T) {
 		t.Fatal("universal macOS platform hint was not detected")
 	}
 }
-
 
 func TestGitHubListTagsUsesProviderCursorForOlderPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -320,12 +319,12 @@ func TestGitLabListTagsUsesAnnotationMessageAndKeepsObjectSHAUnknown(t *testing.
 			{
 				"name": "v2.0", "message": "", "target": "commit-two",
 				"created_at": "2026-10-02T10:00:00Z",
-				"commit": map[string]any{"id": "commit-two", "created_at": "2026-10-02T09:00:00Z"},
+				"commit":     map[string]any{"id": "commit-two", "created_at": "2026-10-02T09:00:00Z"},
 			},
 			{
 				"name": "v1.0", "message": "annotated version one", "target": "commit-one",
 				"created_at": "2026-10-01T10:00:00Z",
-				"commit": map[string]any{"id": "commit-one", "created_at": "2026-10-01T09:00:00Z"},
+				"commit":     map[string]any{"id": "commit-one", "created_at": "2026-10-01T09:00:00Z"},
 			},
 		})
 	}))
