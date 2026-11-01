@@ -416,3 +416,68 @@ body { font-size: 13px; }
   .hub-heading { align-items: flex-start; flex-direction: column; }
   .hub-section { padding: 12px; }
 }
+
+
+/* Global workstation finish: square geometry, no glow, no ornamental motion. */
+:root { --transition: 110ms linear; }
+.unix-main-column { background-image: none !important; }
+.unix-topbar { backdrop-filter: none !important; }
+.unix-status.is-online {
+  background: var(--green);
+  box-shadow: none;
+}
+.unix-new-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 2px !important;
+  color: var(--text) !important;
+  background: var(--surface-raised) !important;
+  box-shadow: none !important;
+  font: 10px var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.unix-new-button:hover {
+  border-color: var(--accent) !important;
+  color: var(--text) !important;
+  background: var(--surface-hover) !important;
+}
+.unix-icon-button, .unix-search-trigger, .unix-profile-button,
+.unix-workspace kbd, .unix-count, .unix-engine-tile,
+.unix-create-item-icon, .unix-search-result-icon {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+.unix-nav-link, .unix-module-tree, .unix-group-toggle,
+.unix-profile-menu a, .unix-create-item, .unix-search-result {
+  border-radius: 2px !important;
+}
+.unix-dialog, .unix-profile-menu {
+  border-radius: 3px;
+  box-shadow: none;
+}
+.unix-overlay {
+  background: rgb(0 0 0 / 72%);
+  backdrop-filter: none;
+}
+.page-stack { animation: none; }
+.metric-card::after { display: none; }
+.metric-icon, .brand-mark, .workspace-avatar, .profile-avatar,
+.command-card__icon, .concept-symbol, .planning-card__icon,
+.entity-record-icon, .quote-feature-mark {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+.button, .badge, .inline-search, .filter-select, .planning-tabs,
+.planning-tab, .theme-option {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+.command-card, .entity-record-card, .concept-card, .quote-card, .planning-card {
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.command-card:hover { transform: none !important; }
+.progress-track, .legend-dot, .status-light { border-radius: 1px; }
