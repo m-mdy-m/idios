@@ -504,7 +504,7 @@ func (e *CLIEngine) Tags(ctx context.Context, directory string) ([]Tag, error) {
 		if len(fields) > 3 && annotated && fields[3] != "" {
 			target = fields[3]
 		}
-		if len(fields) > 4 {
+		if annotated && len(fields) > 4 {
 			message = fields[4]
 		}
 		result = append(result, Tag{Name: fields[0], TargetSHA: target, Annotated: annotated, Message: message})
@@ -527,7 +527,32 @@ func (e *CLIEngine) CreateTag(ctx context.Context, directory, name, message stri
 		_, err := e.run(ctx, directory, "tag", name)
 		return err
 	}
-	_, err := e.run(ctx, directory, "tag", "--annotate", "--message", message, name)
+
+	// An annotated tag needs a tagger identity. Prefer this repository's configured
+	// identity, then fall back to the author recorded on HEAD without mutating Git config.
+	nameOutput, _ := e.run(ctx, directory, "config", "--get", "user.name")
+	emailOutput, _ := e.run(ctx, directory, "config", "--get", "user.email")
+	taggerName := strings.TrimSpace(string(nameOutput))
+	taggerEmail := strings.TrimSpace(string(emailOutput))
+	if taggerName == "" || taggerEmail == "" {
+		headIdentity, identityErr := e.run(ctx, directory, "show", "-s", "--format=%an%x09%ae", "HEAD")
+		if identityErr != nil {
+			return errors.New("annotated tags require a commit with an author identity or a configured Git user.name and user.email")
+		}
+		fields := strings.SplitN(strings.TrimSpace(string(headIdentity)), "\t", 2)
+		if len(fields) == 2 {
+			if taggerName == "" {
+				taggerName = strings.TrimSpace(fields[0])
+			}
+			if taggerEmail == "" {
+				taggerEmail = strings.TrimSpace(fields[1])
+			}
+		}
+	}
+	if taggerName == "" || taggerEmail == "" {
+		return errors.New("annotated tags require a Git tagger name and email")
+	}
+	_, err := e.run(ctx, directory, "-c", "user.name="+taggerName, "-c", "user.email="+taggerEmail, "tag", "--annotate", "--message", message, name)
 	return err
 }
 
