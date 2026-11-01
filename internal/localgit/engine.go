@@ -46,6 +46,13 @@ type Branch struct {
 	Current   bool   `json:"current"`
 }
 
+type Tag struct {
+	Name      string `json:"name"`
+	TargetSHA string `json:"target_sha"`
+	Annotated bool   `json:"annotated"`
+	Message   string `json:"message,omitempty"`
+}
+
 type Commit struct {
 	SHA         string `json:"sha"`
 	Author      string `json:"author"`
@@ -70,6 +77,8 @@ type Engine interface {
 	Stage(context.Context, string, []string) error
 	Commit(context.Context, string, string, string, string) (Commit, error)
 	Log(context.Context, string, int) ([]Commit, error)
+	Tags(context.Context, string) ([]Tag, error)
+	CreateTag(context.Context, string, string, string) error
 	Diff(context.Context, string, bool) (string, error)
 }
 
@@ -457,6 +466,69 @@ func (e *CLIEngine) Log(ctx context.Context, directory string, limit int) ([]Com
 		})
 	}
 	return result, nil
+}
+
+func validateTagName(ctx context.Context, e *CLIEngine, name string) error {
+	raw := name
+	name = strings.TrimSpace(name)
+	if name == "" || raw != name || len(name) > 240 {
+		return errors.New("a valid tag name is required")
+	}
+	if _, err := e.run(ctx, "", "check-ref-format", "refs/tags/"+name); err != nil {
+		return fmt.Errorf("invalid tag name: %w", err)
+	}
+	return nil
+}
+
+func (e *CLIEngine) Tags(ctx context.Context, directory string) ([]Tag, error) {
+	if !e.isWorktree(ctx, directory) {
+		return []Tag{}, nil
+	}
+	format := "%(refname:short)%x09%(objectname)%x09%(objecttype)%x09%(*objectname)%x09%(contents:subject)"
+	output, err := e.run(ctx, directory, "for-each-ref", "--format="+format, "refs/tags")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Tag, 0)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 5)
+		if len(fields) < 3 {
+			continue
+		}
+		annotated := fields[2] == "tag"
+		target := fields[1]
+		message := ""
+		if len(fields) > 3 && annotated && fields[3] != "" {
+			target = fields[3]
+		}
+		if len(fields) > 4 {
+			message = fields[4]
+		}
+		result = append(result, Tag{Name: fields[0], TargetSHA: target, Annotated: annotated, Message: message})
+	}
+	return result, nil
+}
+
+func (e *CLIEngine) CreateTag(ctx context.Context, directory, name, message string) error {
+	if err := validateTagName(ctx, e, name); err != nil {
+		return err
+	}
+	if !e.isWorktree(ctx, directory) {
+		return errors.New("initialize or clone a Git working copy first")
+	}
+	message = strings.TrimSpace(message)
+	if len(message) > 10000 {
+		return errors.New("tag annotation must be 10000 characters or fewer")
+	}
+	if message == "" {
+		_, err := e.run(ctx, directory, "tag", name)
+		return err
+	}
+	_, err := e.run(ctx, directory, "tag", "--annotate", "--message", message, name)
+	return err
 }
 
 func (e *CLIEngine) Diff(ctx context.Context, directory string, staged bool) (string, error) {

@@ -38,6 +38,31 @@ func TestCLIEngineOfflineWorkflow(t *testing.T) {
 	if commit.SHA == "" || commit.AuthorEmail != "idios-test@example.invalid" {
 		t.Fatalf("commit provenance was not recorded: %+v", commit)
 	}
+	if err := engine.CreateTag(ctx, repository, "v0.1.0", "First local Git snapshot"); err != nil {
+		t.Fatalf("create annotated tag: %v", err)
+	}
+	if err := engine.CreateTag(ctx, repository, "snapshot", ""); err != nil {
+		t.Fatalf("create lightweight tag: %v", err)
+	}
+	tags, err := engine.Tags(ctx, repository)
+	if err != nil {
+		t.Fatalf("list local tags: %v", err)
+	}
+	if len(tags) != 2 {
+		t.Fatalf("expected two local tags, got %+v", tags)
+	}
+	var annotated, lightweight bool
+	for _, tag := range tags {
+		switch tag.Name {
+		case "v0.1.0":
+			annotated = tag.Annotated && tag.TargetSHA == commit.SHA && tag.Message == "First local Git snapshot"
+		case "snapshot":
+			lightweight = !tag.Annotated && tag.TargetSHA == commit.SHA
+		}
+	}
+	if !annotated || !lightweight {
+		t.Fatalf("annotated and lightweight tags should point to the real commit: %+v", tags)
+	}
 	if err := engine.CreateBranch(ctx, repository, "feature/offline-work", "main"); err != nil {
 		t.Fatalf("create branch: %v", err)
 	}
