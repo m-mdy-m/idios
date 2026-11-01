@@ -25,7 +25,9 @@ export function validateRawTranslationAlignment(raw: string, sourceText: string)
   if (!source) return { valid: false, verified: false, reason: 'empty-source', coverage: 0 };
 
   const cleaned = stripFence(raw);
+  const structuredPrefix = /\{\s*"(?:translation|segments|terms|grammar|ielts)"\s*:/i.test(cleaned);
   if (!cleaned.startsWith('{')) {
+    if (structuredPrefix) return { valid: false, verified: false, reason: 'malformed-structured-response', coverage: 0 };
     return { valid: Boolean(cleaned), verified: false, ...(cleaned ? {} : { reason: 'empty-translation' as const }), coverage: 0 };
   }
 
