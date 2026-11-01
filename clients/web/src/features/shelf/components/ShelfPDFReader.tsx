@@ -818,7 +818,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     } finally {
       if (learningAnalysisSequenceRef.current === requestSequence) setLearningAnalysisBusy(false);
     }
-  }, [currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationPageKey]);
+  }, [currentPageText, currentPageTranslationKey, pageTranslation, pageTranslationBusy, requestTranslation, translationModel, translationPageKey]);
 
   const refreshPageTranslation = useCallback(() => {
     learningAnalysisSequenceRef.current += 1;
@@ -840,7 +840,7 @@ export function ShelfPDFReader({ bookID, bookTitle, initialPage, pdfURL, onClose
     setTranslationRevision((revision) => revision + 1);
     setSelectionTranslation(null);
     setTranslationError('');
-  }, [bookID, currentPageTranslationKey, pageNumber]);
+  }, [bookID, currentPageText, currentPageTranslationKey, pageNumber, translationModel, translationTargetLanguage]);
 
   const translateSelection = useCallback(async () => {
     const selected = selectedTextForAI.trim();
