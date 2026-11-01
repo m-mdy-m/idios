@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, GitBranch, GitCommitHorizontal, GitPullRequest, Plus, RefreshCw, Terminal } from 'lucide-react';
+import { Copy, GitBranch, GitCommitHorizontal, GitPullRequest, Plus, RefreshCw, Tag, Terminal } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { LocalGitBranch, LocalGitCommit, LocalGitStatus, Repository } from '@/types/idios';
+import type { LocalGitBranch, LocalGitCommit, LocalGitStatus, LocalGitTag, Repository } from '@/types/idios';
 import { Badge, Button, EmptyState, Field } from '@/design-system';
 import { Modal } from '@/design-system';
 import './local-git-workspace.css';
@@ -14,6 +14,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
   const [status, setStatus] = useState<LocalGitStatus | null>(null);
   const [branches, setBranches] = useState<LocalGitBranch[]>([]);
   const [commits, setCommits] = useState<LocalGitCommit[]>([]);
+  const [tags, setTags] = useState<LocalGitTag[]>([]);
   const [diff, setDiff] = useState('');
   const [diffStaged, setDiffStaged] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,7 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
   const [cloneOpen, setCloneOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [commitOpen, setCommitOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
   const [initialBranch, setInitialBranch] = useState('main');
   const [remoteURL, setRemoteURL] = useState('');
   const [cloneBranch, setCloneBranch] = useState('');
@@ -32,6 +34,8 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
   const [commitMessage, setCommitMessage] = useState('');
   const [authorName, setAuthorName] = useState('');
   const [authorEmail, setAuthorEmail] = useState('');
+  const [tagName, setTagName] = useState('');
+  const [tagMessage, setTagMessage] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -40,15 +44,18 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
       const nextStatus = await api.localGitStatus(repository.id);
       setStatus(nextStatus);
       if (nextStatus.initialized) {
-        const [nextBranches, nextCommits] = await Promise.all([
+        const [nextBranches, nextCommits, nextTags] = await Promise.all([
           api.localGitBranches(repository.id),
           api.localGitLog(repository.id, 25),
+          api.localGitTags(repository.id),
         ]);
         setBranches(nextBranches);
         setCommits(nextCommits);
+        setTags(nextTags);
       } else {
         setBranches([]);
         setCommits([]);
+        setTags([]);
         setDiff('');
       }
     } catch (err) {
@@ -124,6 +131,17 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
     )) {
       setCommitMessage('');
       setCommitOpen(false);
+    }
+  }
+
+  async function createTag() {
+    if (await perform(
+      () => api.createLocalGitTag(repository.id, { name: tagName.trim(), message: tagMessage.trim() }),
+      'Local Git tag created.',
+    )) {
+      setTagName('');
+      setTagMessage('');
+      setTagOpen(false);
     }
   }
 
@@ -247,6 +265,17 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
     </section>
     <section className="local-git-workspace__section">
       <div className="local-git-workspace__section-heading">
+        <div><strong>Local tags</strong><span>{tags.length} real Git tags · local to this working copy</span></div>
+        <Button variant="secondary" disabled={!commits.length || busy} onClick={() => { setError(''); setTagOpen(true); }}><Plus size={14}/> New tag</Button>
+      </div>
+      {tags.length ? <div className="local-git-workspace__tags">{tags.map((item) => <article key={item.name}>
+        <div><Tag size={14}/><strong>{item.name}</strong><Badge tone={item.annotated ? 'blue' : 'neutral'}>{item.annotated ? 'Annotated' : 'Lightweight'}</Badge></div>
+        <code>{item.target_sha.slice(0, 12)}</code>
+        {item.message && <small>{item.message}</small>}
+      </article>)}</div> : <EmptyState title="No local tags yet" body={commits.length ? 'Create a tag to mark this local Git history.' : 'Create a commit before tagging this working copy.'} icon={<Tag size={20}/>}/>}
+    </section>
+    <section className="local-git-workspace__section">
+      <div className="local-git-workspace__section-heading">
         <div><strong>Local commit history</strong><span>{commits.length} recent commits · actual Git objects</span></div>
       </div>
       {commits.length ? <div className="local-git-workspace__commits">{commits.map((item) => <article key={item.sha}>
@@ -258,6 +287,11 @@ export function LocalGitWorkspace({ repository }: { repository: Repository }) {
         {error && <div className="notice notice--error" role="alert">{error}</div>}
       <Field label="Branch name"><input autoFocus required value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="feature/my-change"/></Field>
       <Field label="Start from"><select value={branchBase} onChange={(event) => setBranchBase(event.target.value)}><option value="">Current HEAD</option>{branches.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></Field>
+    </Modal>
+    <Modal open={tagOpen} title="Create local tag" description="Create a real Git tag pointing to the current HEAD. No provider API is called." onClose={() => setTagOpen(false)} onSubmit={createTag} submitLabel="Create tag" busy={busy}>
+      {error && <div className="notice notice--error" role="alert">{error}</div>}
+      <Field label="Tag name"><input autoFocus required value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={240} placeholder="v0.1.0"/></Field>
+      <Field label="Annotation (optional)" hint="Leave empty for a lightweight tag. Add a message to create an annotated tag."><textarea rows={3} value={tagMessage} onChange={(event) => setTagMessage(event.target.value)} maxLength={10000} placeholder="Mark the first local milestone"/></Field>
     </Modal>
     <Modal open={commitOpen} title="Commit staged changes" description="This writes a real Git commit to the local object database. It does not push anything." onClose={() => setCommitOpen(false)} onSubmit={commit} submitLabel="Create commit" busy={busy} wide>
         {error && <div className="notice notice--error" role="alert">{error}</div>}

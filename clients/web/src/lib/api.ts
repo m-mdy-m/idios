@@ -18,7 +18,7 @@ import type {
   Repository,
   Branch, CompletionRecord, Concept, Label, Milestone, PullRequest, ProtocolCatalog, ProtocolOption, LogPayload, Quote, RepositorySetting, RepositoryFile, RepositoryTag, RepositoryTagComparison, ScheduledJob, WorkspacePin, UpdateCheck, UpdateStatus, FeatureCatalog, MonitoringSnapshot, ShelfState, ShelfBook, ShelfBookRelation, ShelfAsk, ShelfAnnotation, ShelfAnnotationRect, ShelfReadingSession,
   HubStatus, HubConnection, HubRepository, HubCollection, HubRepositoryPreferences, HubRepositoryRelation,
-  LocalGitStatus, LocalGitBranch, LocalGitCommit,
+  LocalGitStatus, LocalGitBranch, LocalGitCommit, LocalGitTag,
   HubDiscoveryResult, HubBranch, HubTreeEntry, HubFile, HubCommit, HubIssue, HubChangeRequest, HubProvider, HubProjectRepository,
 } from '@/types/idios';
 import { redactLocalPaths } from '@/lib/privacy';
@@ -205,6 +205,8 @@ export const api = {
   stageLocalGit: (ref: string, body: { paths: string[] }) => request<{ staged: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/stage`, json('POST', body)),
   createLocalGitCommit: (ref: string, body: { message: string; author_name?: string; author_email?: string }) => request<LocalGitCommit>(`/api/repositories/${encodeURIComponent(ref)}/git/commits`, json('POST', body)),
   localGitLog: (ref: string, limit = 25) => request<LocalGitCommit[]>(`/api/repositories/${encodeURIComponent(ref)}/git/log?${new URLSearchParams({ limit: String(limit) })}`),
+  localGitTags: (ref: string) => request<LocalGitTag[]>(`/api/repositories/${encodeURIComponent(ref)}/git/tags`),
+  createLocalGitTag: (ref: string, body: { name: string; message?: string }) => request<{ created: boolean }>(`/api/repositories/${encodeURIComponent(ref)}/git/tags`, json('POST', body)),
   localGitDiff: (ref: string, staged = false) => request<{ diff: string }>(`/api/repositories/${encodeURIComponent(ref)}/git/diff?${new URLSearchParams({ staged: String(staged) })}`),
 
   hubStatus: () => request<HubStatus>('/api/hub/status'),

@@ -42,3 +42,12 @@
 .local-git-workspace__path span{color:var(--muted);font-size:9px}
 .local-git-workspace__path code{color:var(--text-soft);font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
 @media(max-width:560px){.local-git-workspace__path{align-items:flex-start;flex-direction:column}}
+
+.local-git-workspace__tags{display:flex;flex-direction:column}
+.local-git-workspace__tags article{display:grid;grid-template-columns:minmax(150px,1fr) 110px minmax(100px,1fr);align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--border)}
+.local-git-workspace__tags article>div{display:flex;align-items:center;gap:7px;min-width:0}
+.local-git-workspace__tags article>div svg{color:var(--muted);flex:0 0 auto}
+.local-git-workspace__tags strong{font-size:11px;overflow-wrap:anywhere}
+.local-git-workspace__tags code{font-size:10px;color:var(--muted)}
+.local-git-workspace__tags small{color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+@media(max-width:640px){.local-git-workspace__tags article{grid-template-columns:minmax(0,1fr) auto}.local-git-workspace__tags small{grid-column:1/-1}}
