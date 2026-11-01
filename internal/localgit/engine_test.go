@@ -97,7 +97,16 @@ func TestCLIEngineOfflineWorkflow(t *testing.T) {
 }
 
 func TestSafeRelativePathRejectsTraversal(t *testing.T) {
-	for _, value := range []string{"../secret", "folder/../../secret", "/etc/passwd", ""} {
+	for _, value := range []string{
+		"../secret",
+		"folder/../../secret",
+		"/etc/passwd",
+		`\\etc\passwd`,
+		`C:\Windows\system.ini`,
+		"C:relative-to-drive",
+		`\\server\share\secret`,
+		"",
+	} {
 		if _, err := safeRelativePath(value); err == nil {
 			t.Errorf("expected %q to be rejected", value)
 		}
