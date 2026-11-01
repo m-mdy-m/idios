@@ -253,6 +253,7 @@ assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', 
 assert.equal(validateRawTranslationAlignment('{"translation":"broken", "segments":[', source).reason, 'malformed-structured-response');
 assert.equal(validateRawTranslationAlignment('Model response: {\"translation\":\"partial\", \"segments\":[', source).reason, 'malformed-structured-response', 'a preamble must not downgrade malformed structured output to plain text');
 assert.equal(validateRawTranslationAlignment('Here is JSON: ' + JSON.stringify({ translation: valid.translation, segments: valid.segments }), source).reason, 'malformed-structured-response', 'structured output with an unexpected preamble must fail closed');
+assert.equal(validateRawTranslationAlignment('Model answer: ' + JSON.stringify({ metadata: {}, translation: valid.translation, segments: valid.segments }), source).reason, 'malformed-structured-response', 'a preamble before metadata-first JSON must not downgrade structured output to plain text');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [] }), source).reason, 'missing-segments');
 assert.equal(validateRawTranslationAlignment(JSON.stringify({ translation: 'x', segments: [{ source: 'A careful reader follows the argument.', translation: 'x' }, { source: 'A careful reader follows the argument.', translation: 'x' }] }), source).reason, 'duplicate-segment', 'duplicate source anchors must fail closed');
 const plain = validateRawTranslationAlignment('یک ترجمهٔ متنی ساده', source);
