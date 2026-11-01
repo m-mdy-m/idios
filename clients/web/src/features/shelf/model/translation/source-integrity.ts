@@ -1,4 +1,4 @@
-import { normalizeTranslationMatch, type ReaderTranslationData } from '../reader-translation.ts';
+import type { ReaderTranslationData } from '../reader-translation.ts';
 
 export type TranslationIntegrity = {
   valid: boolean;
@@ -15,13 +15,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function normalizeSourceAnchor(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Validate model-provided source anchors before parseReaderTranslation can fall back
  * to a single whole-passage segment. Plain-text model responses remain usable but
  * are explicitly marked unverified because they contain no source alignment metadata.
  */
 export function validateRawTranslationAlignment(raw: string, sourceText: string): TranslationIntegrity {
-  const source = normalizeTranslationMatch(sourceText);
+  const source = normalizeSourceAnchor(sourceText);
   if (!source) return { valid: false, verified: false, reason: 'empty-source', coverage: 0 };
 
   const cleaned = stripFence(raw);
@@ -54,7 +58,7 @@ export function validateRawTranslationAlignment(raw: string, sourceText: string)
     if (!isRecord(entry) || typeof entry.source !== 'string' || typeof entry.translation !== 'string' || !entry.translation.trim()) {
       return { valid: false, verified: true, reason: 'source-mismatch', coverage: covered / Math.max(1, source.length) };
     }
-    const fragment = normalizeTranslationMatch(entry.source);
+    const fragment = normalizeSourceAnchor(entry.source);
     if (!fragment) return { valid: false, verified: true, reason: 'source-mismatch', coverage: covered / Math.max(1, source.length) };
     if (seenSegments.has(fragment)) return { valid: false, verified: true, reason: 'duplicate-segment', coverage: covered / Math.max(1, source.length) };
     seenSegments.add(fragment);
@@ -79,7 +83,7 @@ export function validateRawTranslationAlignment(raw: string, sourceText: string)
 
 /** Validate parsed translation data as a secondary guard for cached/legacy values. */
 export function validateTranslationIntegrity(sourceText: string, data: ReaderTranslationData): TranslationIntegrity {
-  const source = normalizeTranslationMatch(sourceText);
+  const source = normalizeSourceAnchor(sourceText);
   const translation = data.translation.trim();
   if (!source) return { valid: false, verified: false, reason: 'empty-source', coverage: 0 };
   if (!translation) return { valid: false, verified: false, reason: 'empty-translation', coverage: 0 };
@@ -91,7 +95,7 @@ export function validateTranslationIntegrity(sourceText: string, data: ReaderTra
   let covered = 0;
   const seenSegments = new Set<string>();
   for (const segment of segments) {
-    const fragment = normalizeTranslationMatch(segment.source);
+    const fragment = normalizeSourceAnchor(segment.source);
     if (seenSegments.has(fragment)) return { valid: false, verified: true, reason: 'duplicate-segment', coverage: covered / Math.max(1, source.length) };
     seenSegments.add(fragment);
     const position = source.indexOf(fragment, cursor);
