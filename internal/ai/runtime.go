@@ -2079,7 +2079,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 				}
 			}
 			if len(priorTurns) > 0 {
-				messages = discussionReviewMessages(messages, agent, round, priorTurns, finalTurn)
+				messages = discussionReviewMessages(messages, agent, round, priorTurns, chairTurn, finalTurn)
 			}
 			// Small reasoning models may spend the entire prediction budget on hidden
 			// thinking unless Ollama is explicitly told to disable it. Keep visible
@@ -2132,7 +2132,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 					repairMessages := append([]Message(nil), messages...)
 					repairMessages = append(repairMessages,
 						Message{Role: "assistant", Content: response.Content},
-						Message{Role: "user", Content: discussionRepairInstructionWithPeers(repairReason, allowedSources, finalTurn, hasPeer, priorTurns, agent.ID)},
+						Message{Role: "user", Content: discussionRepairInstructionWithPeers(repairReason, allowedSources, finalTurn, chairTurn, hasPeer, priorTurns, agent.ID)},
 					)
 					repaired, repairErr := generateAttempt(repairMessages)
 					if repairErr == nil {
@@ -2327,7 +2327,7 @@ func (m *Manager) runDiscussion(ctx context.Context, req DiscussionRequest, task
 	return result, nil
 }
 
-func discussionReviewMessages(messages []Message, agent AgentDefinition, round int, previous []AgentContribution, finalTurn bool) []Message {
+func discussionReviewMessages(messages []Message, agent AgentDefinition, round int, previous []AgentContribution, chairTurn, finalTurn bool) []Message {
 	if len(messages) == 0 {
 		return messages
 	}
@@ -2344,7 +2344,6 @@ func discussionReviewMessages(messages []Message, agent AgentDefinition, round i
 	}
 	previous = usable
 	var review strings.Builder
-	chairTurn := agent.ID == "discussion-chair"
 	if finalTurn {
 		fmt.Fprintf(&review, "\n\nFINAL CHAIR TURN, round %d. You are the final moderator, not another independent summarizer. Name the participants whose positions matter. State the strongest supported reading, who disagrees and on what exact point, whether the objection is resolved or remains open, and one specific refinement. Compare actual statements only; never invent positions or force consensus. If the reader's answer would materially change the interpretation, finish with exactly one final line `Question for you: ...`; otherwise ask nothing. Under 150 words, 3–5 short sentences plus at most one question. Cite only supplied source IDs.\n", round)
 	} else if chairTurn {
@@ -2559,13 +2558,22 @@ var futureChapterReference = regexp.MustCompile(`(?i)\b(?:later|subsequent|follo
 // explicitly rejects a downgrade in importance while separately granting reader
 // preference; a model must not turn that preference into optionality. This is a
 // source-triggered guard, not a general semantic truth classifier.
-var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|to\s+read|chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?)|(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)\s+(?:are|remain|become|seem)\s+(?:optional|peripheral|dispensable|unimportant|not\s+important|less\s+important|not\s+central\s+to\s+(?:the\s+)?(?:theory|book|argument))|(?:peripheral|dispensable|unimportant)\s+(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)|(?:merely|only)\s+applications?|(?:can|may|could)\s+be\s+skipped)\b`)
+var discussionDowngradeClaim = regexp.MustCompile(`(?i)\b(?:optional\s+(?:reading|to\s+read|chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?)|(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)\s+(?:is|are|remain|remains|become|becomes|seem|seems|appear|appears)\s+(?:optional|peripheral|dispensable|unimportant|not\s+important|less\s+important|not\s+central(?:\s+to\s+(?:the\s+)?(?:theory|book|argument))?)|(?:peripheral|dispensable|unimportant)\s+(?:chapters?(?:\s+[ivxlcdm0-9]+(?:\s*[-–—]\s*[ivxlcdm0-9]+)?)?|topics?|sections?|material)|(?:merely|only)\s+applications?|(?:can|may|could)\s+be\s+skipped)\b`)
 
 func discussionDowngradeIsNegated(content string, claimStart int) bool {
 	clauseStart := 0
 	for index, char := range content[:claimStart] {
 		if char == '.' || char == '!' || char == '?' || char == ';' {
 			clauseStart = index + 1
+		}
+	}
+	centralityOffset := strings.Index(content[claimStart:], "not central")
+	if centralityOffset >= 0 {
+		afterCentrality := strings.TrimSpace(content[claimStart+centralityOffset+len("not central"):])
+		for _, qualifier := range []string{"in every ", "in all ", "in each ", "for every ", "for all ", "for each "} {
+			if strings.HasPrefix(afterCentrality, qualifier) {
+				return true
+			}
 		}
 	}
 	prefix := strings.ToLower(content[clauseStart:claimStart])
@@ -2692,11 +2700,7 @@ func ensureChairPeerAttributions(content string, previous []AgentContribution, a
 	if !strings.Contains(problem, "Chair does not identify enough role-relevant peer positions") {
 		return content
 	}
-	limit := 2
-	if len(discussionTargetPeers(previous, agentID, 2)) == 1 {
-		limit = 1
-	}
-	targets := discussionTargetPeers(previous, agentID, limit)
+	targets := discussionTargetPeers(previous, agentID, 2)
 	if len(targets) == 0 {
 		return content
 	}
@@ -3036,13 +3040,13 @@ func discussionTargetPeers(previous []AgentContribution, agentID string, limit i
 	return selected
 }
 
-func discussionRepairInstructionWithPeers(reason string, allowedSources map[string]bool, finalTurn, hasPeer bool, previous []AgentContribution, agentID string) string {
+func discussionRepairInstructionWithPeers(reason string, allowedSources map[string]bool, finalTurn, chairTurn, hasPeer bool, previous []AgentContribution, agentID string) string {
 	instruction := discussionRepairInstruction(reason, allowedSources, finalTurn, hasPeer)
 	if !hasPeer {
 		return instruction
 	}
 	limit := 1
-	if finalTurn || agentID == "discussion-chair" {
+	if finalTurn || chairTurn {
 		limit = 2
 	}
 	targets := discussionTargetPeers(previous, agentID, limit)
@@ -3063,8 +3067,8 @@ func discussionRepairInstructionWithPeers(reason string, allowedSources map[stri
 	if agentID == "discussion-chair" && finalTurn {
 		return instruction + "\n\nREQUIRED FINAL CHAIR POSITIONS — mention both distinct participant names exactly, compare their actual claims, and state agreement/disagreement:" + peers.String() + "\nYour first sentence must name both positions; do not write an anonymous consensus."
 	}
-	if agentID == "discussion-chair" {
-		return instruction + "\n\nREQUIRED ROUND CHAIR CHECKPOINT — compare the actual opening positions by the displayed names above. This is provisional, not the final answer; do not ask the reader a question and identify the next substantive issue for the specialists to test."
+	if chairTurn {
+		return instruction + "\n\nREQUIRED ROUND CHAIR CHECKPOINT — compare the actual opening positions by the displayed names above. This is provisional, not the final answer; do not ask the reader a question and identify the next substantive issue for the specialists to test." + peers.String()
 	}
 	name := strings.TrimSpace(targets[0].AgentName)
 	return instruction + "\n\nREQUIRED PEER TARGET — address this exact participant and claim; do not choose another speaker:" + peers.String() + fmt.Sprintf("\nYour first sentence MUST begin with %q, then assess this claim. Do not start with a generic summary.", "Regarding "+name+"'s point,")
