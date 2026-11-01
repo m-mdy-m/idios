@@ -2,7 +2,6 @@ package repositoryhub
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
